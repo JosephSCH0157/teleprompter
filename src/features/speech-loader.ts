@@ -626,7 +626,7 @@ function attachAsrScrollDriver(): void {
     const text = typeof detail.text === 'string' ? detail.text : '';
     if (!text) return;
     const isFinal = Boolean(detail.isFinal ?? detail.final);
-    asrScrollDriver?.ingest(text, isFinal);
+    asrScrollDriver?.ingest(text, isFinal, detail);
   };
   window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
 }

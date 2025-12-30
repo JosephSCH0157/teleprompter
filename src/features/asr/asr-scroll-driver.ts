@@ -1,5 +1,5 @@
 import { matchBatch } from '../../speech/orchestrator';
-import { normTokens } from '../../speech/matcher';
+import { normTokens, type MatchResult } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
 import { ensureAsrTuningProfile, getActiveAsrTuningProfile, onAsrTuning, type AsrTuningProfile } from '../../asr/tuning-store';
@@ -21,6 +21,13 @@ type DriverOptions = {
   interimConfidenceScale?: number;
 };
 
+type TranscriptDetail = {
+  matchId?: string;
+  match?: MatchResult;
+  source?: string;
+  meta?: boolean;
+};
+
 type PendingMatch = {
   line: number;
   conf: number;
@@ -36,6 +43,7 @@ type PendingMatch = {
   relockSpan?: number;
   relockOverlapRatio?: number;
   relockRepeat?: number;
+  matchId?: string;
 };
 
 type AsrEventSnapshot = {
@@ -46,6 +54,7 @@ type AsrEventSnapshot = {
   sim: number;
   isFinal: boolean;
   snippet: string;
+  matchId?: string;
 };
 
 type EvidenceEntry = {
@@ -59,6 +68,7 @@ type LagSample = {
   delta: number;
   sim: number;
   nearMarker: boolean;
+  inBand: boolean;
 };
 
 type ConsistencyEntry = {
@@ -82,7 +92,7 @@ type ConsistencyResult = {
 };
 
 export interface AsrScrollDriver {
-  ingest(text: string, isFinal: boolean): void;
+  ingest(text: string, isFinal: boolean, detail?: TranscriptDetail): void;
   dispose(): void;
   setLastLineIndex(index: number): void;
   getLastLineIndex(): number;
@@ -136,10 +146,10 @@ const DEFAULT_LAG_RELOCK_MULTI_MIN_LINES = 2;
 const DEFAULT_LAG_RELOCK_MULTI_MAX_LINES = 4;
 const DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR = 0.3;
 const DEFAULT_RELOCK_SIM_FLOOR = 0.45;
-const DEFAULT_RELOCK_OVERLAP_RATIO = 0.3;
+const DEFAULT_RELOCK_OVERLAP_RATIO = 0.22;
 const DEFAULT_RELOCK_SPAN_MIN_LINES = 2;
 const DEFAULT_RELOCK_REPEAT_WINDOW_MS = 2200;
-const DEFAULT_RELOCK_REPEAT_MIN = 3;
+const DEFAULT_RELOCK_REPEAT_MIN = 2;
 const DEFAULT_RESYNC_WINDOW_MS = 1600;
 const DEFAULT_RESYNC_LOOKAHEAD_BONUS = 20;
 const DEFAULT_RESYNC_COOLDOWN_MS = 2500;
@@ -190,9 +200,12 @@ const DEFAULT_DISTANCE_PENALTY_PER_LINE = 0.004;
 const DEFAULT_GENERIC_SIM_DELTA = 0.03;
 const DEFAULT_GENERIC_MIN_CANDIDATES = 3;
 const DEFAULT_GENERIC_MAX_TOKENS = 8;
+const DEFAULT_META_OVERLAP_RATIO = 0.25;
 const DEFAULT_LAG_DELTA_LINES = 12;
 const DEFAULT_LAG_WINDOW_MATCHES = 5;
 const DEFAULT_LAG_MIN_FORWARD_HITS = 3;
+const DEFAULT_LAG_FORCE_DELTA_LINES = 25;
+const DEFAULT_LAG_FORCE_HITS = 2;
 const DEFAULT_CATCHUP_MODE_MAX_JUMP = 25;
 const DEFAULT_CATCHUP_MODE_MIN_SIM = 0.55;
 const DEFAULT_CATCHUP_MODE_DURATION_MS = 2500;
@@ -785,7 +798,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!allowCatchup) return false;
     const window = lagSamples.slice(-DEFAULT_LAG_WINDOW_MATCHES);
     if (!window.length) return false;
-    const forwardHits = window.filter((entry) => entry.delta >= DEFAULT_LAG_DELTA_LINES && entry.nearMarker);
+    const forwardHits = window.filter(
+      (entry) => entry.delta >= DEFAULT_LAG_DELTA_LINES && entry.nearMarker && entry.inBand,
+    );
+    const forceWindow = window.slice(-DEFAULT_LAG_FORCE_HITS);
+    const forceHits =
+      forceWindow.length >= DEFAULT_LAG_FORCE_HITS &&
+      forceWindow.every((entry) =>
+        entry.delta >= DEFAULT_LAG_FORCE_DELTA_LINES &&
+        entry.nearMarker &&
+        entry.inBand &&
+        entry.sim < DEFAULT_CATCHUP_MODE_MIN_SIM);
+    if (forceHits) return true;
     if (forwardHits.length < DEFAULT_LAG_MIN_FORWARD_HITS) return false;
     const hasConfident = forwardHits.some((entry) => entry.sim >= DEFAULT_CATCHUP_MODE_MIN_SIM);
     return hasConfident;
@@ -1149,6 +1173,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockSpan,
         relockOverlapRatio,
         relockRepeat,
+        matchId,
       } = pending;
       const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
       const effectiveThreshold = Number.isFinite(minThreshold)
@@ -1157,6 +1182,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const strongMatch = conf >= effectiveThreshold;
       if (!strongMatch) {
         warnGuard('low_sim', [
+          matchId ? `matchId=${matchId}` : '',
           `current=${lastLineIndex}`,
           `best=${line}`,
           `delta=${line - lastLineIndex}`,
@@ -1386,6 +1412,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       noteCommit(prevLineIndex, targetLine, now);
       try { (window as any).currentIndex = lastLineIndex; } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
+        matchId,
         prevIndex: prevLineIndex,
         nextIndex: targetLine,
         delta: targetLine - prevLineIndex,
@@ -1419,6 +1446,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `marker=${markerIdx}`,
           `scrollTop=${Math.round(scroller.scrollTop || 0)}`,
           `lineH=${lineHeight}`,
+          matchId ? `matchId=${matchId}` : '',
           `forced=${forced ? 1 : 0}`,
           forced ? `forceReason=${forceReason || 1}` : '',
           relockOverride ? `relock=1` : '',
@@ -1446,15 +1474,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     });
   };
 
-  const ingest = (text: string, isFinal: boolean) => {
+  const ingest = (text: string, isFinal: boolean, detail?: TranscriptDetail) => {
     if (disposed) return;
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    const matchId = typeof detail?.matchId === 'string' ? detail.matchId : undefined;
+    const metaTranscript = detail?.source === 'meta' || detail?.meta === true;
+    const incomingMatch = detail?.match;
     const prevBufferChars = lastBufferChars;
-    const bufferedText = updateEvidenceBuffer(compacted, isFinal, now);
-    const bufferGrowing = bufferMs > 0 && bufferedText.length > prevBufferChars;
+    const bufferedText = metaTranscript ? compacted : updateEvidenceBuffer(compacted, isFinal, now);
+    const bufferGrowing = !metaTranscript && bufferMs > 0 && bufferedText.length > prevBufferChars;
     const snippet = formatLogSnippet(bufferedText, 60);
     const fragmentTokenCount = normTokens(compacted).length;
     const tokenCount = normTokens(bufferedText).length;
@@ -1548,12 +1579,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : Math.max(0, Math.floor(anchorIdx));
     try { (window as any).currentIndex = effectiveAnchor; } catch {}
 
-    const windowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
-    const windowAhead = resolveLookahead(resyncActive);
-    const match = matchBatch(bufferedText, !!isFinal, {
+    const driverWindowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
+    const driverWindowAhead = resolveLookahead(resyncActive);
+    const match = incomingMatch ?? matchBatch(bufferedText, !!isFinal, {
       currentIndex: effectiveAnchor,
-      windowBack,
-      windowAhead,
+      windowBack: driverWindowBack,
+      windowAhead: driverWindowAhead,
       minTokenOverlap: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_OVERLAP : undefined,
       minTokenLen: lagRelockActive ? DEFAULT_LAG_RELOCK_MIN_TOKEN_LEN : undefined,
       multiLineMinLines: lagRelockActive ? DEFAULT_LAG_RELOCK_MULTI_MIN_LINES : undefined,
@@ -1567,6 +1598,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
       return;
     }
+    const matchWindowBackRaw = Number((match as any)?.windowBack);
+    const matchWindowAheadRaw = Number((match as any)?.windowAhead);
+    const matchWindowBack = Number.isFinite(matchWindowBackRaw)
+      ? Math.max(0, Math.floor(matchWindowBackRaw))
+      : driverWindowBack;
+    const matchWindowAhead = Number.isFinite(matchWindowAheadRaw)
+      ? Math.max(0, Math.floor(matchWindowAheadRaw))
+      : driverWindowAhead;
     let rawIdx = Number(match.bestIdx);
     let conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
     const baseThreshold = isFinal ? threshold : threshold * interimScale;
@@ -1599,12 +1638,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const totalLines = getTotalLines();
     const bandStart = Number.isFinite((match as any)?.bandStart)
       ? Math.max(0, Math.floor((match as any).bandStart))
-      : Math.max(0, cursorLine - windowBack);
+      : Math.max(0, cursorLine - matchWindowBack);
     const bandEnd = Number.isFinite((match as any)?.bandEnd)
       ? Math.max(bandStart, Math.floor((match as any).bandEnd))
       : (totalLines > 0
-        ? Math.min(totalLines - 1, cursorLine + windowAhead)
-        : cursorLine + windowAhead);
+        ? Math.min(totalLines - 1, cursorLine + matchWindowAhead)
+        : cursorLine + matchWindowAhead);
     const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
     if (!inBand) {
       warnGuard('match_out_of_band', [
@@ -1654,6 +1693,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
     const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
+    if (metaTranscript) {
+      const overlapOk = Number.isFinite(bestOverlapRatio) && bestOverlapRatio >= DEFAULT_META_OVERLAP_RATIO;
+      if (!overlapOk) {
+        warnGuard('meta_skip', [
+          matchId ? `matchId=${matchId}` : '',
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `delta=${rawIdx - cursorLine}`,
+          Number.isFinite(bestOverlapRatio) ? `overlap=${formatLogScore(bestOverlapRatio)}` : '',
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        emitHudStatus('meta_skip', 'Ignored: meta transcript');
+        return;
+      }
+    }
     if (lagRelockActive && Number.isFinite(bestSpan) && bestSpan > 1) {
       const parts = [
         `Relock best=${rawIdx}`,
@@ -1680,7 +1734,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const catchUpModeWasActive = catchUpModeUntil > now;
     const lowSimFloor = lagRelockActive ? DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR : DEFAULT_LOW_SIM_FLOOR;
     const behindByLowSim =
-      rawIdx < cursorLine - windowBack ||
+      rawIdx < cursorLine - matchWindowBack ||
       (rawIdx < cursorLine && effectiveRawSim < lowSimFloor);
     if (behindByLowSim) {
       warnGuard('behind_noise', [
@@ -1726,13 +1780,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     resetLagRelock('in-band');
     logThrottled('ASR_MATCH', 'log', 'ASR_MATCH', {
+      matchId,
       currentIndex: cursorLine,
       bestIndex: rawIdx,
       delta: rawIdx - cursorLine,
       sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
       scrollTop: Math.round(scrollTopForMatch),
-      winBack: windowBack,
-      winAhead: windowAhead,
+      winBack: matchWindowBack,
+      winAhead: matchWindowAhead,
       final: isFinal ? 1 : 0,
     });
     if (
@@ -1994,6 +2049,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         delta: rawIdx - cursorLine,
         sim: conf,
         nearMarker,
+        inBand,
       };
       recordLagSample(lagSample);
       if (shouldTriggerCatchUp()) {
@@ -2003,8 +2059,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const catchUpModeActive = catchUpModeUntil > now;
     const stuckResyncActive = resyncActive && resyncReason === 'stuck';
     const relockModeActive = lagRelockActive || catchUpModeActive || stuckResyncActive;
-    const relockForward = relockModeActive && inBand && rawIdx >= cursorLine + minLineAdvance;
-    if (relockForward) {
+    const forwardMatch = inBand && rawIdx >= cursorLine + minLineAdvance;
+    const relockForward = relockModeActive && forwardMatch;
+    if (forwardMatch) {
       if (!relockRepeatWindowStart || now - relockRepeatWindowStart > DEFAULT_RELOCK_REPEAT_WINDOW_MS) {
         relockRepeatWindowStart = now;
         relockRepeatIdx = rawIdx;
@@ -2019,6 +2076,58 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       relockRepeatIdx = -1;
       relockRepeatCount = 0;
       relockRepeatWindowStart = 0;
+    }
+    const overlapOk = Number.isFinite(bestOverlapRatio) && bestOverlapRatio >= DEFAULT_RELOCK_OVERLAP_RATIO;
+    const spanOk = Number.isFinite(bestSpan) && bestSpan >= DEFAULT_RELOCK_SPAN_MIN_LINES;
+    const repeatOk = relockRepeatCount >= DEFAULT_RELOCK_REPEAT_MIN;
+    const finalOk = isFinal && rawIdx > cursorLine && inBand;
+    const relockEvidenceOk = relockForward && (overlapOk || spanOk || repeatOk || finalOk);
+    if (relockEvidenceOk && conf < effectiveThreshold) {
+      effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_RELOCK_SIM_FLOOR);
+      relockOverride = true;
+      relockReason = overlapOk ? 'overlap' : spanOk ? 'span' : repeatOk ? 'repeat' : 'final';
+      emitHudStatus(
+        'relock_override',
+        `Relock override: ${relockReason} (sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_RELOCK_SIM_FLOOR)})`,
+      );
+      logDev('relock override', {
+        reason: relockReason,
+        sim: conf,
+        span: bestSpan,
+        overlapPct: bestOverlapRatio,
+        repeat: relockRepeatCount,
+        delta: rawIdx - cursorLine,
+      });
+    }
+    const forwardEvidence = inBand && rawIdx > cursorLine;
+    const lowSimForwardEvidence = forwardEvidence && (isFinal || repeatOk || spanOk || overlapOk);
+    if (lowSimForwardEvidence && conf < effectiveThreshold) {
+      effectiveThreshold = Math.min(effectiveThreshold, conf);
+      if (!relockOverride) {
+        relockOverride = true;
+        relockReason = isFinal ? 'final' : repeatOk ? 'repeat' : spanOk ? 'span' : 'overlap';
+      }
+    }
+    if (effectiveThreshold > 0 && conf < effectiveThreshold) {
+      warnGuard('low_sim', [
+        matchId ? `matchId=${matchId}` : '',
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `sim=${formatLogScore(conf)}`,
+        `need=${formatLogScore(effectiveThreshold)}`,
+        relockModeActive ? 'relock=1' : '',
+        relockReason ? `relockReason=${relockReason}` : '',
+        Number.isFinite(bestSpan) ? `span=${bestSpan}` : '',
+        Number.isFinite(bestOverlapRatio) ? `overlap=${formatLogScore(bestOverlapRatio)}` : '',
+        relockRepeatCount ? `repeat=${relockRepeatCount}` : '',
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      emitHudStatus(
+        'low_sim_ingest',
+        `Ignored: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
+      );
+      return;
     }
     recordConsistencyEntry({
       ts: now,
@@ -2169,6 +2278,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       sim: conf,
       isFinal,
       snippet,
+      matchId,
     });
     if (topScores.length >= 2) {
       let near: { idx: number; score: number; dist: number } | null = null;
@@ -2318,48 +2428,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
 
-    const overlapOk = Number.isFinite(bestOverlapRatio) && bestOverlapRatio >= DEFAULT_RELOCK_OVERLAP_RATIO;
-    const spanOk = Number.isFinite(bestSpan) && bestSpan >= DEFAULT_RELOCK_SPAN_MIN_LINES;
-    const repeatOk = relockRepeatCount >= DEFAULT_RELOCK_REPEAT_MIN;
-    const finalOk = isFinal && rawIdx > cursorLine;
-    const relockEvidenceOk = relockForward && (overlapOk || spanOk || repeatOk || finalOk);
-    if (relockEvidenceOk && conf < effectiveThreshold && conf >= DEFAULT_RELOCK_SIM_FLOOR) {
-      effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_RELOCK_SIM_FLOOR);
-      relockOverride = true;
-      relockReason = overlapOk ? 'overlap' : spanOk ? 'span' : repeatOk ? 'repeat' : 'final';
-      emitHudStatus(
-        'relock_override',
-        `Relock override: ${relockReason} (sim=${formatLogScore(conf)} >= ${formatLogScore(DEFAULT_RELOCK_SIM_FLOOR)})`,
-      );
-      logDev('relock override', {
-        reason: relockReason,
-        sim: conf,
-        span: bestSpan,
-        overlapPct: bestOverlapRatio,
-        repeat: relockRepeatCount,
-        delta: rawIdx - cursorLine,
-      });
-    }
-    if (effectiveThreshold > 0 && conf < effectiveThreshold) {
-      warnGuard('low_sim', [
-        `current=${cursorLine}`,
-        `best=${rawIdx}`,
-        `delta=${rawIdx - cursorLine}`,
-        `sim=${formatLogScore(conf)}`,
-        `need=${formatLogScore(effectiveThreshold)}`,
-        relockModeActive ? 'relock=1' : '',
-        relockReason ? `relockReason=${relockReason}` : '',
-        Number.isFinite(bestSpan) ? `span=${bestSpan}` : '',
-        Number.isFinite(bestOverlapRatio) ? `overlap=${formatLogScore(bestOverlapRatio)}` : '',
-        relockRepeatCount ? `repeat=${relockRepeatCount}` : '',
-        snippet ? `clue="${snippet}"` : '',
-      ]);
-      emitHudStatus(
-        'low_sim_ingest',
-        `Blocked: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
-      );
-      return;
-    }
     if (tokenCount === 0) {
       warnGuard('min_evidence', [
         `current=${cursorLine}`,
@@ -2391,7 +2459,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     const consistencyOk = allowShortEvidence && consistencyState.ok;
-    const hasEvidence = outrunCommit || catchupCommit
+    const hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence
       ? true
       : (isFinal
         ? (hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines)
@@ -2411,6 +2479,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       relockSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
       relockOverlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
       relockRepeat: relockRepeatCount || undefined,
+      matchId,
     };
     schedulePending();
   };

@@ -100,7 +100,32 @@ const META_PHRASES: RegExp[] = [
   /\byou know\b/gi,
   /\bi think\b/gi,
   /\blet(?:'s| us) see\b/gi,
+  /\bi(?:'m| am) going to\b/gi,
+  /\bim going to\b/gi,
+  /\bgoing to have to\b/gi,
+  /\bsend (?:you|u)\b/gi,
+  /\bscreenshots?\b/gi,
+  /\bchatgpt\b/gi,
+  /\bdev\b/gi,
+  /\blogs?\b/gi,
+  /\bdebug\b/gi,
 ];
+
+let matchIdSeq = 0;
+const nextMatchId = () => {
+  matchIdSeq += 1;
+  return `m${Date.now().toString(36)}-${matchIdSeq}`;
+};
+
+function isMetaTranscript(text: string): boolean {
+  const input = String(text || '');
+  if (!input) return false;
+  for (const rx of META_PHRASES) {
+    rx.lastIndex = 0;
+    if (rx.test(input)) return true;
+  }
+  return false;
+}
 
 // Lightweight cosine similarity for HUD transcript enrichment (dev only usage)
 function simCosine(a: string, b: string): number {
@@ -126,6 +151,8 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
+    const matchId = nextMatchId();
+    const meta = isMetaTranscript(text);
     const detail = {
       text,
       final,
@@ -133,9 +160,16 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
       sim: match?.bestSim ?? sim,
       line: match?.bestIdx,
       candidates: match?.topScores,
-      source: 'orchestrator' as const,
+      matchId,
+      match,
+      meta,
+      source: meta ? 'meta' : 'orchestrator',
     };
-    try { if (match) { console.log('[ASR] dispatchMatch', { line: match.bestIdx, sim: match.bestSim }); } } catch {}
+    try {
+      if (match) {
+        console.log('[ASR] dispatchMatch', { matchId, line: match.bestIdx, sim: match.bestSim });
+      }
+    } catch {}
     try { console.log('[ASR] dispatchTranscript', detail); } catch {}
     window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
   } catch {}
@@ -190,6 +224,7 @@ function compactClue(tokens: string[], maxTokens: number): string {
 function stripMetaPhrases(text: string): string {
   let out = String(text || '');
   for (const rx of META_PHRASES) {
+    rx.lastIndex = 0;
     out = out.replace(rx, ' ');
   }
   return out;
@@ -283,6 +318,8 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       (res as any).bandStart = bandStart;
       (res as any).bandEnd = bandEnd;
       (res as any).inBand = inBand;
+      (res as any).windowBack = cfg.MATCH_WINDOW_BACK;
+      (res as any).windowAhead = cfg.MATCH_WINDOW_AHEAD;
       if (!inBand) {
         res.bestIdx = -1;
         res.bestSim = 0;

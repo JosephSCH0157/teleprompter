@@ -20,6 +20,8 @@ export type MatchResult = {
   bestSpan?: number;
   bestOverlap?: number;
   bestOverlapRatio?: number;
+  windowBack?: number;
+  windowAhead?: number;
 };
 
 // Minimal similarity helpers (kept pure for unit testing)
