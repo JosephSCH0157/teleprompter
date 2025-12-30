@@ -14,4 +14,5 @@ export interface AppBootOptions {
 
 export type CoreInit = () => Promise<void>;
 
-export * from "../types/speaker-profile";
+// Shared types anchor lives in src/state during migration; keep type exports centralized here.
+export type * from "../types/speaker-profile";
