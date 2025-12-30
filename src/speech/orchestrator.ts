@@ -163,46 +163,61 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
-    const noMatch =
-      !match ||
-      !Number.isFinite(match.bestIdx) ||
-      Number(match.bestIdx) < 0;
-    const matchId = noMatch ? null : nextMatchId();
+    const hasMatch =
+      !!match &&
+      Number.isFinite(match.bestIdx) &&
+      Number(match.bestIdx) >= 0;
+    const noMatch = !hasMatch;
+    const matchId = hasMatch ? nextMatchId() : null;
     const meta = isMetaTranscript(text);
-    const detail = {
+    const payload = {
       text,
       final,
       timestamp: Date.now(),
-      sim: match?.bestSim ?? sim,
-      line: match?.bestIdx,
-      candidates: match?.topScores,
+      sim: hasMatch
+        ? (Number.isFinite(match?.bestSim) ? match?.bestSim : (typeof sim === 'number' ? sim : null))
+        : null,
+      line: hasMatch ? match?.bestIdx : null,
+      candidates: hasMatch ? match?.topScores : [],
       matchId,
-      match,
+      match: hasMatch ? match : null,
       noMatch,
       meta,
       source: meta ? 'meta' : 'orchestrator',
     };
-    if (isLogEnabled() && !noMatch) {
+    if (isLogEnabled()) {
       try {
-        console.assert(
-          typeof detail.matchId === 'string' && detail.matchId.length > 0,
-          '[ASR] dispatchTranscript missing matchId for match payload',
-          detail,
-        );
-        console.assert(
-          typeof detail.sim === 'number' && Number.isFinite(detail.sim),
-          '[ASR] dispatchTranscript sim not numeric for match payload',
-          detail,
+        console.debug(
+          '[ASR] dispatchTranscript keys=',
+          Object.keys(payload),
+          'matchId=',
+          payload.matchId,
+          'noMatch=',
+          payload.noMatch,
         );
       } catch {}
+      if (!payload.noMatch) {
+        try {
+          console.assert(
+            typeof payload.matchId === 'string' && payload.matchId.length > 0,
+            '[ASR] dispatchTranscript missing matchId for match payload',
+            payload,
+          );
+          console.assert(
+            typeof payload.sim === 'number' && Number.isFinite(payload.sim),
+            '[ASR] dispatchTranscript sim not numeric for match payload',
+            payload,
+          );
+        } catch {}
+      }
     }
     try {
-      if (match && !noMatch) {
-        console.log('[ASR] dispatchMatch', { matchId, line: match.bestIdx, sim: match.bestSim });
+      if (hasMatch) {
+        console.log('[ASR] dispatchMatch', { matchId: payload.matchId, line: match?.bestIdx, sim: match?.bestSim });
       }
     } catch {}
-    try { console.log('[ASR] dispatchTranscript', detail); } catch {}
-    window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail }));
+    try { console.log('[ASR] dispatchTranscript', payload); } catch {}
+    window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload }));
   } catch {}
 }
 

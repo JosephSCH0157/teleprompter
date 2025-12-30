@@ -270,33 +270,42 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
       typeof isFinal === 'boolean'
         ? isFinal
         : Boolean(incoming?.isFinal ?? incoming?.final);
-    const payload: TranscriptPayload = {
+    const payload: TranscriptPayload = incoming ? { ...(incoming as TranscriptPayload) } : {
       text,
       final: !!finalFlag,
       isFinal: !!finalFlag,
-      timestamp: typeof incoming?.timestamp === 'number' ? incoming.timestamp : performance.now(),
-      source: typeof incoming?.source === 'string' ? incoming.source : 'speech-loader',
-      mode: typeof incoming?.mode === 'string' ? incoming.mode : (lastScrollMode || getScrollMode()),
-      matchId: incoming?.matchId === null ? null : (typeof incoming?.matchId === 'string' ? incoming.matchId : undefined),
-      match: incoming?.match,
-      meta: incoming?.meta === true ? true : undefined,
-      line: typeof incoming?.line === 'number' ? incoming.line : undefined,
-      candidates: incoming?.candidates,
-      sim: typeof incoming?.sim === 'number' ? incoming.sim : undefined,
-      noMatch: incoming?.noMatch === true ? true : undefined,
+      timestamp: performance.now(),
+      source: 'speech-loader',
+      mode: lastScrollMode || getScrollMode(),
     };
-    
+    if (payload.text == null) payload.text = text;
+    if (payload.final == null) payload.final = !!finalFlag;
+    if (payload.isFinal == null) payload.isFinal = !!finalFlag;
+    if (payload.timestamp == null) payload.timestamp = performance.now();
+    if (payload.source == null) payload.source = 'speech-loader';
+    if (payload.mode == null) payload.mode = lastScrollMode || getScrollMode();
+    try {
+      console.debug(
+        '[ASR_ROUTE] keys=',
+        Object.keys(payload as Record<string, unknown>),
+        'matchId=',
+        (payload as any).matchId,
+        'noMatch=',
+        (payload as any).noMatch,
+      );
+    } catch {}
+
     // Always emit to HUD bus (unconditional for debugging/monitoring)
-    try { window.HUD?.bus?.emit?.(isFinal ? 'speech:final' : 'speech:partial', payload); } catch {}
-    
-    // In rehearsal, never steer — only HUD logging
+    try { window.HUD?.bus?.emit?.(finalFlag ? 'speech:final' : 'speech:partial', payload); } catch {}
+
+    // In rehearsal, never steer; only HUD logging
     if (inRehearsal()) return;
-    
+
     // Legacy monolith path
     if (typeof window.advanceByTranscript === 'function') {
-      try { window.advanceByTranscript(text, !!isFinal); } catch {}
+      try { window.advanceByTranscript(text, !!finalFlag); } catch {}
     }
-    
+
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
       try { console.log('[speech-loader] emit tp:speech:transcript', payload); } catch {}
@@ -1229,4 +1238,5 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
+
 

@@ -335,16 +335,6 @@ function isDevMode(): boolean {
   return false;
 }
 
-function isOrchestratorLoggingEnabled(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const w = window as any;
-    return typeof w.__tpSpeech?.matchBatch === 'function';
-  } catch {
-    return false;
-  }
-}
-
 function logDev(...args: any[]) {
   if (!isDevMode()) return;
   try {
@@ -1598,9 +1588,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
-    const matchId = typeof detail?.matchId === 'string' ? detail.matchId : undefined;
+    const rawMatchId = (detail as any)?.matchId;
     const noMatch = detail?.noMatch === true;
-    if (!matchId) {
+    const hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
+    const explicitNoMatch = rawMatchId === null && noMatch;
+    if (!hasMatchId && !explicitNoMatch) {
       if (isDevMode() && !missingMatchIdKeysLogged) {
         missingMatchIdKeysLogged = true;
         try {
@@ -1608,26 +1600,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           console.debug('[ASR_PIPELINE] missing matchId keys=[' + keys.join(',') + ']');
         } catch {}
       }
-      if (noMatch) {
-        emitHudStatus('no_match', 'No match');
-        return;
-      }
       const snippet = formatLogSnippet(compacted, 60);
       try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing matchId'); } catch {}
       warnGuard('no_match_pipeline', [
         `final=${isFinal ? 1 : 0}`,
         snippet ? `clue="${snippet}"` : '',
       ]);
-      if (isDevMode() && isOrchestratorLoggingEnabled()) {
-        try { console.assert(false, 'driver saw matchId undefined while orchestrator logging is enabled'); } catch {}
-      }
       emitHudStatus('no_match', 'No match (pipeline)');
       return;
     }
-    if (noMatch) {
+    if (explicitNoMatch) {
       emitHudStatus('no_match', 'No match');
       return;
     }
+    const matchId = rawMatchId as string;
     lastMatchId = matchId;
     const metaTranscript = detail?.source === 'meta' || detail?.meta === true;
     const incomingMatch = detail?.match;
