@@ -159,7 +159,21 @@ function isLogEnabled(): boolean {
   return false;
 }
 
-function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchResult) {
+type AsrEnvelope = {
+  text: string;
+  final: boolean;
+  timestamp: number;
+  source: string;
+  matchId: string | null;
+  noMatch: boolean;
+  meta?: boolean;
+  match?: matcher.MatchResult | null;
+  sim?: number | null;
+  line?: number | null;
+  candidates?: Array<{ idx: number; score: number }> | [];
+} & Partial<matcher.MatchResult>;
+
+function buildTranscriptEnvelope(text: string, final: boolean, match?: matcher.MatchResult): AsrEnvelope {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
@@ -174,7 +188,7 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
       timestamp: Date.now(),
       source: meta ? 'meta' : 'orchestrator',
     };
-    const payload = hasMatch
+    const payload: AsrEnvelope = hasMatch
       ? {
         ...match,
         ...base,
@@ -183,49 +197,58 @@ function dispatchTranscript(text: string, final: boolean, match?: matcher.MatchR
         sim: Number.isFinite(match?.bestSim) ? match?.bestSim : (typeof sim === 'number' ? sim : null),
         meta,
         match,
+        line: match?.bestIdx ?? null,
+        candidates: Array.isArray(match?.topScores) ? match?.topScores : [],
       }
       : {
         matchId: null,
         noMatch: true,
         ...base,
       };
-    if (payload.matchId === undefined) {
-      console.error('DISPATCH_MISSING_MATCHID', Object.keys(payload));
+    return payload;
+  } catch {}
+  return {
+    text,
+    final,
+    timestamp: Date.now(),
+    source: 'orchestrator',
+    matchId: null,
+    noMatch: true,
+  };
+}
+
+function dispatchTranscript(env: AsrEnvelope) {
+  try {
+    if (env.matchId === undefined) {
+      console.error('DISPATCH_MISSING_MATCHID', Object.keys(env));
+    }
+    if (env.noMatch === undefined) {
+      console.error('DISPATCH_MISSING_NOMATCH', Object.keys(env));
     }
     if (isLogEnabled()) {
-      const payloadAny = payload as any;
       try {
         console.debug(
           '[ASR] dispatchTranscript keys=',
-          Object.keys(payload),
+          Object.keys(env),
           'matchId=',
-          payload.matchId,
+          env.matchId,
           'noMatch=',
-          payload.noMatch,
+          env.noMatch,
         );
       } catch {}
-      if (hasMatch) {
-        try {
-          console.assert(
-            typeof payloadAny.matchId === 'string' && payloadAny.matchId.length > 0,
-            '[ASR] dispatchTranscript missing matchId for match payload',
-            payload,
-          );
-          console.assert(
-            typeof payloadAny.sim === 'number' && Number.isFinite(payloadAny.sim),
-            '[ASR] dispatchTranscript sim not numeric for match payload',
-            payload,
-          );
-        } catch {}
-      }
     }
     try {
-      if (hasMatch) {
-        console.log('[ASR] dispatchMatch', { matchId: payload.matchId, line: match?.bestIdx, sim: match?.bestSim });
+      if (!env.noMatch && env.matchId) {
+        const anyEnv = env as any;
+        console.log('[ASR] dispatchMatch', {
+          matchId: env.matchId,
+          line: Number.isFinite(anyEnv.bestIdx) ? anyEnv.bestIdx : anyEnv.line,
+          sim: Number.isFinite(anyEnv.bestSim) ? anyEnv.bestSim : anyEnv.sim,
+        });
       }
     } catch {}
-    try { console.log('[ASR] dispatchTranscript', payload); } catch {}
-    window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload }));
+    try { console.log('[ASR] dispatchTranscript', env); } catch {}
+    window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: env }));
   } catch {}
 }
 
@@ -439,7 +462,8 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
         try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
       const text = transcript || '';
       const match = matchBatch(text, isFinal);
-      dispatchTranscript(text, isFinal, match);
+      const payload = buildTranscriptEnvelope(text, isFinal, match);
+      dispatchTranscript(payload);
       });
       try { console.log('[ASR] recognizer.start() returned without throwing'); } catch {}
     } catch (err) {
