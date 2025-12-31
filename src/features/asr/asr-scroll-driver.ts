@@ -123,6 +123,8 @@ const DEFAULT_CATCHUP_MED_MIN_PX = 80;
 const DEFAULT_CATCHUP_FAST_MIN_PX = 250;
 const DEFAULT_MAX_TARGET_JUMP_PX = 120;
 const DEFAULT_MAX_TARGET_JUMP_HYBRID_PX = 80;
+const DEFAULT_PURSUE_KP = 3.2;
+const DEFAULT_PURSUE_MANUAL_CANCEL_PX = 48;
 const DEFAULT_NO_TARGET_RETRY_SIM = 0.9;
 const DEFAULT_NO_TARGET_RETRY_MAX_DELTA = 6;
 const DEFAULT_NO_TARGET_RETRY_FRAMES = 2;
@@ -268,6 +270,8 @@ const guardStatusLastAt = new Map<string, number>();
 let activeGuardCounts: Map<string, number> | null = null;
 const LOG_THROTTLE_MS = 500;
 const HUD_STATUS_THROTTLE_MS = 500;
+const HUD_PURSUE_THROTTLE_MS = 200;
+let lastPursueHudAt = 0;
 
 function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: string, payload?: any) {
   const now = Date.now();
@@ -308,6 +312,24 @@ function emitHudStatus(key: string, text: string, detail?: Record<string, unknow
   const payload = { text, ts: now, ...detail };
   try { window.dispatchEvent(new CustomEvent('tp:asr:guard', { detail: payload })); } catch {}
   try { (window as any).__tpHud?.bus?.emit?.('asr:guard', payload); } catch {}
+}
+
+function emitPursuitHud(err: number, vel: number, target: number | null, top: number) {
+  if (!isDevMode()) return;
+  const now = Date.now();
+  if (now - lastPursueHudAt < HUD_PURSUE_THROTTLE_MS) return;
+  lastPursueHudAt = now;
+  const payload = {
+    err: Number.isFinite(err) ? Math.round(err) : err,
+    vel: Number.isFinite(vel) ? Number(vel.toFixed(1)) : vel,
+    target: Number.isFinite(target as number) ? Math.round(target as number) : target,
+    top: Math.round(top),
+  };
+  try { (window as any).__tpHud?.log?.('ASR_PURSUE', payload); } catch {}
+  try { (window as any).HUD?.log?.('ASR_PURSUE', payload); } catch {}
+  try {
+    console.debug(`ASR_PURSUE err=${payload.err} vel=${payload.vel} target=${payload.target} top=${payload.top}`);
+  } catch {}
 }
 
 function resolveThreshold(): number {
@@ -541,11 +563,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
   let resyncBacktrackOverride = DEFAULT_MATCH_BACKTRACK_LINES;
   let matchAnchorIdx = -1;
-  let targetTopPx: number | null = null;
-  let appliedTopPx = 0;
-  let velPxPerSec = 0;
-  let lastTickAt = 0;
-  let controllerActive = false;
+    let pursuitTargetTop: number | null = null;
+    let appliedTopPx = 0;
+    let pursuitVel = 0;
+    let pursuitLastTs = 0;
+    let pursuitActive = false;
   let lastEvidenceAt = 0;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
@@ -790,7 +812,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         pendingEvidenceCount: strongHits.length,
         cursorLineIndex: lastLineIndex,
         matchAnchorIdx,
-        targetTopPx,
+        pursuitTargetTop,
         appliedTopPx,
         lastMoveAt,
         tuningProfileId: activeTuningProfileId,
@@ -940,6 +962,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const activateCatchUpMode = (now: number, sample: LagSample) => {
+    if (pursuitActive) {
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      pursuitVel = 0;
+      logDev('pursuit canceled (catchup mode)');
+    }
     const nextUntil = now + DEFAULT_CATCHUP_MODE_DURATION_MS;
     if (nextUntil <= catchUpModeUntil) return;
     catchUpModeUntil = nextUntil;
@@ -1259,44 +1287,60 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const tickController = () => {
-    if (!controllerActive || disposed) return;
+    if (!pursuitActive || disposed) return;
     const scroller = getScroller();
     if (!scroller) {
-      controllerActive = false;
+      pursuitActive = false;
       return;
     }
 
     const now = performance.now();
-    const dt = Math.max(0.001, (now - (lastTickAt || now)) / 1000);
-    lastTickAt = now;
+    const dt = Math.max(0.001, (now - (pursuitLastTs || now)) / 1000);
+    pursuitLastTs = now;
 
     const current = scroller.scrollTop || 0;
     appliedTopPx = current;
-    if (targetTopPx == null) {
-      velPxPerSec = 0;
-      controllerActive = false;
+
+    const manualDelta = Math.abs(current - lastKnownScrollTop);
+    if (pursuitActive && lastMoveAt && manualDelta > DEFAULT_PURSUE_MANUAL_CANCEL_PX) {
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      pursuitVel = 0;
+      lastKnownScrollTop = current;
+      logDev('pursuit canceled (manual scroll)', { delta: Math.round(manualDelta) });
       return;
     }
 
-    if (targetTopPx < current) {
-      targetTopPx = current;
+    if (pursuitTargetTop == null) {
+      pursuitVel = 0;
+      pursuitActive = false;
+      return;
     }
 
-    const err = targetTopPx - current;
+    if (pursuitTargetTop < current) {
+      pursuitTargetTop = current;
+    }
+
+    const err = pursuitTargetTop - current;
     if (err <= deadbandPx) {
-      velPxPerSec = 0;
-      window.requestAnimationFrame(tickController);
+      const target = pursuitTargetTop;
+      pursuitVel = 0;
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      emitPursuitHud(err, pursuitVel, target, current);
       return;
     }
 
     const maxVelForErr = resolveMaxVel(err);
-    if (velPxPerSec > maxVelForErr) {
-      velPxPerSec = maxVelForErr;
-    }
-    velPxPerSec = Math.min(maxVelForErr, velPxPerSec + maxAccelPxPerSec2 * dt);
-    let move = velPxPerSec * dt;
-    move = Math.max(minStepPx, move);
-    move = Math.min(err, move, maxStepPx);
+    const desiredVel = Math.min(maxVelForErr, Math.max(0, err * DEFAULT_PURSUE_KP));
+    const accelCap = maxAccelPxPerSec2 * dt;
+    const velDelta = clamp(desiredVel - pursuitVel, -accelCap, accelCap);
+    pursuitVel = clamp(pursuitVel + velDelta, 0, maxVelForErr);
+
+    let move = pursuitVel * dt;
+    move = Math.min(move, maxStepPx);
+    if (move < minStepPx) move = Math.min(err, minStepPx);
+    move = Math.min(err, move);
 
     if (move > 0) {
       const applied = applyCanonicalScrollTop(current + move, { scroller, reason: 'asr-tick' });
@@ -1304,13 +1348,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastKnownScrollTop = applied;
       lastMoveAt = Date.now();
     }
+    emitPursuitHud(err, pursuitVel, pursuitTargetTop, current);
     window.requestAnimationFrame(tickController);
   };
 
-  const ensureControllerActive = () => {
-    if (controllerActive) return;
-    controllerActive = true;
-    lastTickAt = performance.now();
+  const ensurePursuitActive = () => {
+    if (pursuitActive) return;
+    pursuitActive = true;
+    pursuitLastTs = performance.now();
     window.requestAnimationFrame(tickController);
   };
 
@@ -1459,13 +1504,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const approxTop = estimateTargetTopFromLines(scroller, lastLineIndex, targetLine);
             if (approxTop != null) {
               const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-              const base = targetTopPx == null ? currentTop : targetTopPx;
+              const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
               const desired = clamp(approxTop, 0, max);
               const limitedTarget = Math.min(desired, base + jumpCap);
               if (limitedTarget > base) {
-                targetTopPx = limitedTarget;
+                pursuitTargetTop = limitedTarget;
                 lastEvidenceAt = now;
-                ensureControllerActive();
+                ensurePursuitActive();
                 logDev('no_target_nudge', { line: targetLine, px: Math.round(limitedTarget - base), conf });
               }
             }
@@ -1513,20 +1558,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             ]);
             return;
           }
-          if (deltaPx > creepNearPx) {
-            const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-            const base = targetTopPx == null ? currentTop : targetTopPx;
-            const desired = clamp(targetTop, 0, max);
-            const limitedTarget = Math.min(desired, base + jumpCap);
-            if (limitedTarget > base) {
-              targetTopPx = limitedTarget;
-              lastSameLineNudgeTs = now;
-              lastEvidenceAt = now;
-              ensureControllerActive();
-              logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
-              updateDebugState('same-line-recenter');
-              return;
-            }
+            if (deltaPx > creepNearPx) {
+              const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+              const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
+              const desired = clamp(targetTop, 0, max);
+              const limitedTarget = Math.min(desired, base + jumpCap);
+              if (limitedTarget > base) {
+                pursuitTargetTop = limitedTarget;
+                lastSameLineNudgeTs = now;
+                lastEvidenceAt = now;
+                ensurePursuitActive();
+                logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
+                updateDebugState('same-line-recenter');
+                return;
+              }
             warnGuard('same_line_noop', [
               `current=${lastLineIndex}`,
               `best=${targetLine}`,
@@ -1536,12 +1581,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             ]);
             return;
           }
-          if (now - lastSameLineNudgeTs >= sameLineThrottleMs) {
-            if (creepBudgetLine !== targetLine) {
-              creepBudgetLine = targetLine;
-              creepBudgetUsed = 0;
-            }
-            if (creepBudgetUsed >= creepBudgetPx) {
+            if (now - lastSameLineNudgeTs >= sameLineThrottleMs) {
+              if (creepBudgetLine !== targetLine) {
+                creepBudgetLine = targetLine;
+                creepBudgetUsed = 0;
+              }
+              if (creepBudgetUsed >= creepBudgetPx) {
               warnGuard('creep_budget', [
                 `line=${targetLine}`,
                 `used=${Math.round(creepBudgetUsed)}`,
@@ -1549,21 +1594,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               ]);
               return;
             }
-            const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-            const base = targetTopPx == null ? currentTop : targetTopPx;
-            const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed);
-            const creepTarget = clamp(base + creepStep, 0, max);
-            const limitedTarget = Math.min(creepTarget, base + jumpCap);
-            if (limitedTarget > base) {
-              targetTopPx = limitedTarget;
-              lastSameLineNudgeTs = now;
-              lastEvidenceAt = now;
-              creepBudgetUsed += Math.max(0, limitedTarget - base);
-              ensureControllerActive();
-              logDev('same-line creep', { line: targetLine, px: creepStep, conf });
-              updateDebugState('same-line-creep');
+              const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+              const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
+              const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed);
+              const creepTarget = clamp(base + creepStep, 0, max);
+              const limitedTarget = Math.min(creepTarget, base + jumpCap);
+              if (limitedTarget > base) {
+                pursuitTargetTop = limitedTarget;
+                lastSameLineNudgeTs = now;
+                lastEvidenceAt = now;
+                creepBudgetUsed += Math.max(0, limitedTarget - base);
+                ensurePursuitActive();
+                logDev('same-line creep', { line: targetLine, px: creepStep, conf });
+                updateDebugState('same-line-creep');
+              }
             }
-          }
           return;
         }
 
@@ -1648,10 +1693,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       const prevLineIndex = lastLineIndex;
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const base = targetTopPx == null ? currentTop : targetTopPx;
+      const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
       const candidate = clamp(targetTop, 0, max);
       const limitedTarget = forced ? candidate : Math.min(candidate, base + jumpCap);
-      targetTopPx = Math.max(base, limitedTarget);
+      pursuitTargetTop = Math.max(base, limitedTarget);
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
       creepBudgetUsed = 0;
@@ -1676,13 +1721,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         delta: targetLine - prevLineIndex,
         sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
         scrollTopBefore: Math.round(currentTop),
-        scrollTopAfter: Math.round(targetTopPx ?? currentTop),
+        scrollTopAfter: Math.round(pursuitTargetTop ?? currentTop),
         forced: !!forced,
         mode: getScrollMode() || 'unknown',
         relock: !!relockOverride,
         relockReason: relockReason || undefined,
       });
-      ensureControllerActive();
+      ensurePursuitActive();
       try {
         const forcedCount = getForcedCount(now);
         const forcedCooldown = getForcedCooldownRemaining(now);
@@ -1727,7 +1772,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         emitHudStatus('catchup_commit', `Catch-up commit +${targetLine - prevLineIndex}`);
       }
       clearEvidenceBuffer('commit');
-      logDev('target update', { line: targetLine, conf, pxDelta: deltaPx, targetTop: targetTopPx });
+      logDev('target update', { line: targetLine, conf, pxDelta: deltaPx, targetTop: pursuitTargetTop });
       updateDebugState('target-update');
     });
   };
@@ -2852,9 +2897,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastCommitAt = Date.now();
     lastStallLogAt = 0;
     matchAnchorIdx = lastLineIndex;
-    targetTopPx = null;
-    velPxPerSec = 0;
-    controllerActive = false;
+    pursuitTargetTop = null;
+    pursuitVel = 0;
+    pursuitActive = false;
     lastEvidenceAt = 0;
     lastBackRecoverAt = 0;
     lastBackRecoverIdx = -1;
