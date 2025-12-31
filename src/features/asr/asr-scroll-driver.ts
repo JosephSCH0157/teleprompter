@@ -188,6 +188,13 @@ const DEFAULT_FORCED_RATE_MAX = 2;
 const DEFAULT_FORCED_COOLDOWN_MS = 5000;
 const DEFAULT_FORCED_MIN_TOKENS = 4;
 const DEFAULT_FORCED_MIN_CHARS = 24;
+const DEFAULT_SLAM_DUNK_SIM = 0.95;
+const DEFAULT_SLAM_DUNK_MAX_DELTA = 2;
+const DEFAULT_CONFIRMATION_RELAXED_SIM = 0.9;
+const DEFAULT_CONFIRMATION_RELAXED_MAX_DELTA = 2;
+const DEFAULT_NO_MATCH_WINDOW_MS = 1200;
+const DEFAULT_NO_MATCH_BUMP_HITS = 3;
+const DEFAULT_NO_MATCH_RELOCK_HITS = 6;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
@@ -394,9 +401,7 @@ function getScroller(): HTMLElement | null {
 function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
   if (!scroller) return null;
   const idx = Math.max(0, Math.floor(lineIndex));
-  const line =
-    scroller.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.line[data-index="${idx}"]`);
+  const line = getLineElementByIndex(scroller, idx);
   if (!line) return null;
   const offset = Math.max(0, (scroller.clientHeight - line.offsetHeight) / 2);
   const raw = (line.offsetTop || 0) - offset;
@@ -410,7 +415,12 @@ function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number):
   return (
     scroller.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
     scroller.querySelector<HTMLElement>(`.line[data-index="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.line[data-line-idx="${idx}"]`)
+    scroller.querySelector<HTMLElement>(`.line[data-line="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.line[data-line-idx="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.tp-line[data-i="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.tp-line[data-index="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.tp-line[data-line="${idx}"]`) ||
+    scroller.querySelector<HTMLElement>(`.tp-line[data-line-idx="${idx}"]`)
   );
 }
 
@@ -601,6 +611,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let noTargetRetryCount = 0;
     let noTargetRetryAt = 0;
     let noTargetRetryMatchId: string | null = null;
+    let noMatchWindowStart = 0;
+    let noMatchHits = 0;
+    let lastNoMatchAt = 0;
     let lastStuckDumpAt = 0;
   let lastMatchId: string | undefined;
   let lastScriptHash = '';
@@ -649,6 +662,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const behindRecoveryMinSim = DEFAULT_BEHIND_RECOVERY_MIN_SIM;
   const behindRecoveryCooldownMs = DEFAULT_BEHIND_RECOVERY_COOLDOWN_MS;
   const forwardTieEps = DEFAULT_FORWARD_TIE_EPS;
+  const slamDunkCompetitorDelta = DEFAULT_FORWARD_TIE_EPS;
   const forwardBiasRecentLines = DEFAULT_FORWARD_BIAS_RECENT_LINES;
   const forwardBiasWindowMs = DEFAULT_FORWARD_BIAS_WINDOW_MS;
   const forwardBiasLookaheadLines = DEFAULT_FORWARD_BIAS_LOOKAHEAD_LINES;
@@ -666,6 +680,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const forcedCooldownMs = DEFAULT_FORCED_COOLDOWN_MS;
   const forcedMinTokens = DEFAULT_FORCED_MIN_TOKENS;
   const forcedMinChars = DEFAULT_FORCED_MIN_CHARS;
+  const slamDunkSim = DEFAULT_SLAM_DUNK_SIM;
+  const slamDunkMaxDelta = DEFAULT_SLAM_DUNK_MAX_DELTA;
+  const confirmationRelaxedSim = DEFAULT_CONFIRMATION_RELAXED_SIM;
+  const confirmationRelaxedMaxDelta = DEFAULT_CONFIRMATION_RELAXED_MAX_DELTA;
+  const noMatchWindowMs = DEFAULT_NO_MATCH_WINDOW_MS;
+  const noMatchBumpHits = DEFAULT_NO_MATCH_BUMP_HITS;
+  const noMatchRelockHits = DEFAULT_NO_MATCH_RELOCK_HITS;
   let minTokenCount = DEFAULT_MIN_TOKEN_COUNT;
   let minEvidenceChars = DEFAULT_MIN_EVIDENCE_CHARS;
   let interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
@@ -880,6 +901,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       maxDeltaLines: number;
       maxSpreadLines: number;
       requireNearMarker: boolean;
+      minDeltaLines?: number;
+      requireForward?: boolean;
     },
   ): ConsistencyResult => {
     trimConsistencyEntries(now);
@@ -910,12 +933,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const spread = Math.max(...idxs) - Math.min(...idxs);
     const minSim = Math.min(...sims);
     const nearOk = !opts.requireNearMarker || tail.every((e) => e.nearMarker);
+    const minDeltaRequired = Number.isFinite(opts.minDeltaLines) ? (opts.minDeltaLines as number) : minLineAdvance;
+    const requireForward = opts.requireForward === true;
+    const hasForward = maxDelta >= minLineAdvance;
     const ok =
       nearOk &&
-      minDelta >= minLineAdvance &&
+      minDelta >= minDeltaRequired &&
       maxDelta <= opts.maxDeltaLines &&
       spread <= opts.maxSpreadLines &&
-      minSim >= opts.minSim;
+      minSim >= opts.minSim &&
+      (!requireForward || hasForward);
     return {
       ok,
       count: tail.length,
@@ -1254,6 +1281,39 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       windowAhead: resolveLookahead(true),
       windowBack: resyncBacktrackOverride,
     });
+  };
+
+  const resetNoMatchTracking = (reason?: string) => {
+    if (!noMatchHits && !noMatchWindowStart) return;
+    noMatchWindowStart = 0;
+    noMatchHits = 0;
+    lastNoMatchAt = 0;
+    if (reason) {
+      logDev('no_match_reset', { reason });
+    }
+  };
+
+  const noteNoMatchGap = (now: number, reason: string, snippet: string) => {
+    const gapMs = lastNoMatchAt ? now - lastNoMatchAt : 0;
+    if (!noMatchWindowStart || now - noMatchWindowStart > noMatchWindowMs) {
+      noMatchWindowStart = now;
+      noMatchHits = 1;
+    } else {
+      noMatchHits += 1;
+    }
+    lastNoMatchAt = now;
+    if (noMatchHits >= noMatchBumpHits) {
+      bumpLookahead(`no_match_${reason}`, now);
+    }
+    if (noMatchHits >= noMatchRelockHits && now - lastResyncAt >= resyncCooldownMs) {
+      const anchorForNoMatch =
+        lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
+      activateStuckResync(anchorForNoMatch, now);
+      emitHudStatus('resync', 'Resyncing...');
+      noMatchHits = 0;
+      noMatchWindowStart = now;
+    }
+    logDev('no_match_gap', { reason, hits: noMatchHits, gapMs, snippet });
   };
 
   const noteBehindBlocked = (now: number) => {
@@ -1802,10 +1862,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         snippet ? `clue="${snippet}"` : '',
       ]);
       emitHudStatus('no_match', 'No match (pipeline)');
+      noteNoMatchGap(now, 'missing_matchId', snippet);
       return;
     }
     if (explicitNoMatch) {
+      const snippet = formatLogSnippet(compacted, 60);
       emitHudStatus('no_match', 'No match');
+      noteNoMatchGap(now, 'explicit_no_match', snippet);
       return;
     }
     const matchId = rawMatchId as string;
@@ -1821,8 +1884,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         snippet ? `clue="${snippet}"` : '',
       ]);
       emitHudStatus('no_match', 'No match (pipeline)');
+      noteNoMatchGap(now, 'missing_payload', snippet);
       return;
     }
+    resetNoMatchTracking('match');
     const prevBufferChars = lastBufferChars;
     const bufferedText = metaTranscript ? compacted : updateEvidenceBuffer(compacted, isFinal, now);
     const bufferGrowing = !metaTranscript && bufferMs > 0 && bufferedText.length > prevBufferChars;
@@ -2024,6 +2089,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
     const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
+    const isSlamDunkFinal = (idx: number, sim: number) => {
+      if (!isFinal) return false;
+      const delta = idx - cursorLine;
+      if (delta < 0 || delta > slamDunkMaxDelta) return false;
+      if (sim < slamDunkSim) return false;
+      const hasCompetitor = topScores.some((entry) => {
+        const entryIdx = Number(entry.idx);
+        const entryScore = Number(entry.score);
+        if (!Number.isFinite(entryIdx) || !Number.isFinite(entryScore)) return false;
+        if (entryIdx === idx) return false;
+        return entryScore >= sim - slamDunkCompetitorDelta;
+      });
+      return !hasCompetitor;
+    };
     if (metaTranscript) {
       const overlapOk = Number.isFinite(bestOverlapRatio) && bestOverlapRatio >= DEFAULT_META_OVERLAP_RATIO;
       if (!overlapOk) {
@@ -2156,8 +2235,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const outrunPick = outrunCandidate;
     const outrunFloor = shortFinalRecent ? shortFinalNeed : outrunRelaxedSim;
     const forwardCandidateOk = !!outrunCandidate && bestForwardSim >= outrunFloor;
+    const slamDunkFinalEarly = isSlamDunkFinal(rawIdx, conf);
     const forcedEvidenceOk =
-      (tokenCount >= forcedMinTokens || evidenceChars >= forcedMinChars) && forwardCandidateOk;
+      slamDunkFinalEarly ||
+      ((tokenCount >= forcedMinTokens || evidenceChars >= forcedMinChars) && forwardCandidateOk);
     const outrunEligible = !!outrunPick && outrunRecent && forcedEvidenceOk;
     const behindByForBias = cursorLine - rawIdx;
     const forwardBiasEligible =
@@ -2526,6 +2607,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       tokenCount <= DEFAULT_GENERIC_MAX_TOKENS &&
       genericCandidateCount >= DEFAULT_GENERIC_MIN_CANDIDATES;
     let effectiveConsistencyCount = consistencyCount + (genericTranscript ? 1 : 0);
+    const forwardDelta = rawIdx - cursorLine;
+    const highConfidenceSmallDelta =
+      isFinal &&
+      forwardDelta >= 0 &&
+      forwardDelta <= confirmationRelaxedMaxDelta &&
+      conf >= confirmationRelaxedSim;
+    if (highConfidenceSmallDelta && effectiveConsistencyCount >= 3) {
+      effectiveConsistencyCount = Math.max(2, effectiveConsistencyCount - 1);
+      logDev('confirmations relaxed', {
+        count: effectiveConsistencyCount,
+        delta: forwardDelta,
+        sim: conf,
+      });
+    }
     if (catchUpModeActive && effectiveConsistencyCount > 0) {
       effectiveConsistencyCount = Math.max(1, effectiveConsistencyCount - 1);
     }
@@ -2535,6 +2630,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const catchupMinSimEffective = catchUpModeActive
       ? Math.max(catchupMinSim, DEFAULT_CATCHUP_MODE_MIN_SIM)
       : catchupMinSim;
+    const allowSameLineConfirmations = highConfidenceSmallDelta && effectiveConsistencyCount > 0;
     const consistencyState = allowShortEvidence
       ? evaluateConsistency(now, {
         requiredCount: effectiveConsistencyCount,
@@ -2542,6 +2638,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         maxDeltaLines: consistencyMaxDeltaLines,
         maxSpreadLines: consistencyMaxSpreadLines,
         requireNearMarker: consistencyRequireNearMarker,
+        minDeltaLines: allowSameLineConfirmations ? 0 : minLineAdvance,
+        requireForward: allowSameLineConfirmations,
       })
       : {
         ok: false,
@@ -2841,7 +2939,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     const consistencyOk = allowShortEvidence && consistencyState.ok;
-    const hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence
+    const slamDunkFinal = isSlamDunkFinal(rawIdx, conf);
+    const hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal
       ? true
       : (isFinal
         ? (hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines)
