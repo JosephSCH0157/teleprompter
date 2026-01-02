@@ -98,15 +98,29 @@ function writeStorage(state: SpeakerProfilesState): void {
   }
 }
 
+function getProfileSummaries() {
+  return state.profiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+  }));
+}
+
 function notifyBindings(): void {
   const bindings = getSpeakerBindings();
   try {
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(BINDING_EVENT, { detail: { bindings } }));
+      window.dispatchEvent(
+        new CustomEvent(BINDING_EVENT, { detail: { bindings, profiles: getProfileSummaries() } }),
+      );
     }
   } catch {}
   try {
-    window?.sendToDisplay?.({ type: 'speaker-bindings', bindings });
+    window?.sendToDisplay?.({
+      type: 'speaker-bindings',
+      bindings,
+      profiles: getProfileSummaries(),
+      activeSlot: state.activeSlot,
+    });
   } catch {}
   subscribers.forEach((cb) => {
     try {
@@ -119,13 +133,26 @@ function notifyBindings(): void {
 
 function notifyActiveSpeaker(): void {
   const slot = getActiveSpeakerSlot();
+  const bindings = getSpeakerBindings();
+  const profile = getProfileById(bindings[slot] || null);
   try {
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent(ACTIVE_SPEAKER_EVENT, { detail: { slot } }));
+      window.dispatchEvent(new CustomEvent(ACTIVE_SPEAKER_EVENT, {
+        detail: {
+          slot,
+          profileId: profile?.id ?? null,
+          profileName: profile?.name ?? '',
+        },
+      }));
     }
   } catch {}
   try {
-    window?.sendToDisplay?.({ type: 'speaker-active', slot });
+    window?.sendToDisplay?.({
+      type: 'speaker-active',
+      slot,
+      profileId: profile?.id ?? null,
+      profileName: profile?.name ?? '',
+    });
   } catch {}
   activeSubscribers.forEach((cb) => {
     try {
@@ -287,4 +314,26 @@ export function subscribeSpeakerProfileState(
   stateSubscribers.add(fn);
   fn(getSpeakerProfilesSnapshot());
   return () => stateSubscribers.delete(fn);
+}
+
+function applyProfileTweaks(profile: SpeakerProfile, tweaks?: Partial<SpeakerProfile['asrTweaks']> | null): SpeakerProfile {
+  const next: SpeakerProfile = {
+    ...profile,
+    asrTweaks: tweaks && Object.keys(tweaks).length ? { ...tweaks } : undefined,
+  };
+  return next;
+}
+
+export function setProfileAsrTweaks(profileId: string | null, tweaks?: Partial<SpeakerProfile['asrTweaks']> | null): void {
+  if (!profileId) return;
+  const profile = getProfileById(profileId);
+  if (!profile) return;
+  state = {
+    ...state,
+    profiles: [
+      ...state.profiles.filter((item) => item.id !== profileId),
+      applyProfileTweaks(profile, tweaks),
+    ],
+  };
+  persist();
 }

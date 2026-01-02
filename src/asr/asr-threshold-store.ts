@@ -34,14 +34,41 @@ function broadcastThresholdUpdate() {
   }
 }
 
-function filterProfileTweaks(tweaks?: Partial<AsrThresholds>): Partial<AsrThresholds> {
+function clampNumber(value: number, min: number, max: number, round = false) {
+  if (!Number.isFinite(value)) return NaN;
+  const v = round ? Math.round(value) : value;
+  return Math.max(min, Math.min(max, v));
+}
+
+function sanitizeProfileTweaks(tweaks?: Partial<AsrThresholds>): Partial<AsrThresholds> {
   if (!tweaks) return {};
   const next: Partial<AsrThresholds> = {};
   for (const key of PROFILE_TWEAK_KEYS) {
-    const value = tweaks[key];
-    if (Number.isFinite(value)) {
-      next[key] = value as number;
+    const raw = tweaks[key];
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    let clamped = raw;
+    switch (key) {
+      case 'interimStreakNeeded':
+        clamped = clampNumber(raw, 1, 5, true);
+        break;
+      case 'maxJumpsPerSecond':
+        clamped = clampNumber(raw, 1, 10, true);
+        break;
+      case 'stickinessDelta':
+      case 'tieDelta':
+      case 'commitFinalMinSim':
+      case 'commitInterimMinSim':
+      case 'anchorMinSim':
+        clamped = clampNumber(raw, 0, 1);
+        break;
+      case 'anchorStreakNeeded':
+        clamped = clampNumber(raw, 1, 6, true);
+        break;
+      default:
+        clamped = raw;
+        break;
     }
+    next[key] = clamped;
   }
   return next;
 }
@@ -51,7 +78,7 @@ function computeEffectiveThresholds(): AsrThresholds {
   const bindings = getSpeakerBindings();
   const profileId = bindings[slot] || null;
   const profile = getProfileById(profileId);
-  const tweaks = filterProfileTweaks(profile?.asrTweaks);
+  const tweaks = sanitizeProfileTweaks(profile?.asrTweaks);
   return normalizeThresholds({
     ...baseThresholds,
     ...tweaks,
@@ -91,4 +118,8 @@ export function getAsrDriverThresholds(): AsrThresholds {
 
 export function getEffectiveAsrThresholds(): AsrThresholds {
   return getAsrDriverThresholds();
+}
+
+export function getBaseAsrThresholds(): AsrThresholds {
+  return baseThresholds;
 }

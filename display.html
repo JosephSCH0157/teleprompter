@@ -48,6 +48,7 @@
           /* Top bar legend (match main) */
           #displayTopbar{position:fixed;top:0;left:0;right:0;height:36px;display:flex;align-items:center;pointer-events:none;z-index:1000;padding:0 10px}
           .legend{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+          .display-active-speaker{margin-left:6px;border-color:rgba(255,255,255,0.35);background:rgba(255,255,255,0.08);}
           .tag{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--edge);border-radius:999px;font-size:12px;background:#0e141b}
           .tag .dot{width:10px;height:10px;border-radius:50%}
           #displayTopbar{display:flex;align-items:center;justify-content:flex-start;gap:12px}
@@ -152,6 +153,7 @@
         <body>
           <header id="displayTopbar">
               <div class="legend" id="legend"></div>
+              <span id="displayActiveSpeakerTag" class="tag display-active-speaker" hidden>Reading: --</span>
               <span id="displayRecPill" class="rec-pill rec-pill--display">REC</span>
           </header>
           <div class="wrap" id="wrap"><div class="marker"></div><div class="script" id="script"></div></div>
@@ -242,6 +244,70 @@
               });
             }
             renderLegend();
+
+            const activeSpeakerTag = document.getElementById('displayActiveSpeakerTag');
+            const speakerNamesById = {};
+            const bindingSlots = { s1: null, s2: null, g1: null, g2: null };
+            const isDisplayDevMode = (() => {
+              try {
+                if (window.opener) {
+                  if (window.opener.__TP_DEV || window.opener.__TP_DEV1) return true;
+                  if (window.opener.__tpDevMode === '1') return true;
+                }
+              } catch {}
+              try {
+                const params = window.location.search || '';
+                if (/[?&]dev=1/.test(params)) return true;
+              } catch {}
+              try {
+                return localStorage.getItem('tp_dev_mode') === '1';
+              } catch {
+                return false;
+              }
+            })();
+            if (activeSpeakerTag) {
+              activeSpeakerTag.hidden = !isDisplayDevMode;
+            }
+
+            function updateActiveSpeakerTagText(slotLabel, profileName) {
+              if (!activeSpeakerTag) return;
+              if (!isDisplayDevMode) {
+                activeSpeakerTag.hidden = true;
+                return;
+              }
+              activeSpeakerTag.hidden = false;
+              const label = `Reading: ${slotLabel || 'Unknown'}${profileName ? ` (${profileName})` : ''}`;
+              activeSpeakerTag.textContent = label;
+            }
+
+            function handleSpeakerBindingsMessage(payload) {
+              if (!payload) return;
+              const bindings = payload.bindings || {};
+              Object.assign(bindingSlots, {
+                s1: bindings.s1 ?? null,
+                s2: bindings.s2 ?? null,
+                g1: bindings.g1 ?? null,
+                g2: bindings.g2 ?? null,
+              });
+              const profiles = Array.isArray(payload.profiles) ? payload.profiles : [];
+              profiles.forEach((profile) => {
+                if (profile && profile.id) {
+                  speakerNamesById[profile.id] = profile.name || '';
+                }
+              });
+              ['s1', 's2'].forEach((slotKey) => {
+                const profileName = speakerNamesById[bindingSlots[slotKey]] || legendState[slotKey]?.name;
+                if (profileName) legendState[slotKey].name = profileName;
+              });
+              renderLegend();
+            }
+
+            function handleSpeakerActiveMessage(payload) {
+              if (!payload) return;
+              const slotLabel = payload.slot ? String(payload.slot).toUpperCase() : 'Unknown';
+              const profileName = payload.profileName || speakerNamesById[payload.profileId] || '';
+              updateActiveSpeakerTagText(slotLabel, profileName);
+            }
 
             // Color/name sync via BroadcastChannel
             let bc = null; try { bc = new BroadcastChannel('prompter'); } catch {}
@@ -644,6 +710,14 @@
 
             window.addEventListener('message', ev => {
               const d = ev.data||{};
+              if (d && d.type === 'speaker-bindings') {
+                handleSpeakerBindingsMessage(d);
+                return;
+              }
+              if (d && d.type === 'speaker-active') {
+                handleSpeakerActiveMessage(d);
+                return;
+              }
               // Scroll mirror: obey main window scroll commands
               if (d && d.kind === 'tp:record') {
                 applyRecordState(d.state || 'idle');
