@@ -3,6 +3,10 @@ import type { HudBus } from './speech-notes-hud';
 import type { AsrThresholds } from '../asr/asr-thresholds';
 import { getActiveAsrTuningProfile } from '../asr/tuning-store';
 import { getAsrDriverThresholds } from '../asr/asr-threshold-store';
+import {
+  subscribeSpeakerBindings,
+  getSpeakerProfiles,
+} from '../ui/speaker-profiles-store';
 
 export interface AsrStatsHudOptions {
   root?: HTMLElement | null;
@@ -154,11 +158,13 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   })();
   let guardText = '';
   let thresholdLabel = '';
+  let speakerBindingLabel = '';
   const refreshMeta = () => {
     if (!metaEl) return;
     const segments = [`profile ${profileLabel}`];
     if (thresholdLabel) segments.push(thresholdLabel);
     if (guardText) segments.push(guardText);
+    if (speakerBindingLabel) segments.push(speakerBindingLabel);
     metaEl.textContent = segments.join(' | ');
   };
   refreshMeta();
@@ -190,6 +196,24 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     }
   };
   handleThresholds({ detail: getAsrDriverThresholds() });
+
+  const buildSpeakerBindingLabel = (bindings: Record<string, string | null>) => {
+    const profiles = getSpeakerProfiles();
+    const parts: string[] = [];
+    for (const slot of ['s1', 's2', 'g1', 'g2'] as const) {
+      const profileId = bindings[slot];
+      if (!profileId) continue;
+      const profile = profiles.find((item) => item.id === profileId);
+      parts.push(`${slot.toUpperCase()}=${profile ? profile.name : 'Custom'}`);
+    }
+    return parts.length ? `speakers ${parts.join(', ')}` : '';
+  };
+
+  const handleSpeakerBindings = (bindings: Record<string, string | null>) => {
+    speakerBindingLabel = buildSpeakerBindingLabel(bindings);
+    refreshMeta();
+  };
+  const unsubscribeBindings = subscribeSpeakerBindings(handleSpeakerBindings);
 
   const handleGuard = (payload: any) => {
     try {
@@ -242,6 +266,11 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     } catch {
       /* ignore */
     }
+    try {
+      unsubscribeBindings();
+    } catch {
+      /* ignore */
+    }
   };
 
   try {
@@ -249,6 +278,5 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   } catch {
     /* ignore */
   }
-
   return { destroy };
 }

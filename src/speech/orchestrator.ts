@@ -3,8 +3,21 @@ import * as matcher from './matcher';
 import type { Recognizer } from './recognizer';
 import { createRecognizer } from './recognizer';
 import { getAsrDriverThresholds } from '../asr/asr-threshold-store';
+import {
+  getSpeakerBindings,
+  subscribeSpeakerBindings,
+} from '../ui/speaker-profiles-store';
 
 console.info('[ASR_ORCH] LIVE envelope v2025-12-30b');
+
+const __tpSpeakerBindings = getSpeakerBindings();
+subscribeSpeakerBindings((bindings) => {
+  try {
+    (window as any).__tpSpeakerBindings = bindings;
+  } catch {
+    // ignore
+  }
+});
 
 const SILENCE_HOLD_MS = 1200;
 

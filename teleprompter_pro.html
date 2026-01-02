@@ -533,21 +533,43 @@
     <label>Name <input id="name-s1" type="text" placeholder="Speaker 1"></label>
     <label>Color <input id="color-s1" type="color" value="#60a5fa"></label>
     <button id="wrap-s1">S1</button> 
+    <label>Profile
+      <select data-tp-profile-s1 class="select-sm"></select>
+    </label>
   </div>
   <div class="row">
     <label>Name <input id="name-s2" type="text" placeholder="Speaker 2"></label>
     <label>Color <input id="color-s2" type="color" value="#facc15"></label>
     <button id="wrap-s2">S2</button> 
+    <label>Profile
+      <select data-tp-profile-s2 class="select-sm"></select>
+    </label>
   </div>
   <div class="row">
     <label>Name <input id="name-g1" type="text" placeholder="Guest 1"></label>
     <label>Color <input id="color-g1" type="color" value="#34d399"></label>
     <button id="wrap-g1">G1</button> 
+    <label>Profile
+      <select data-tp-profile-g1 class="select-sm"></select>
+    </label>
   </div>
   <div class="row">
     <label>Name <input id="name-g2" type="text" placeholder="Guest 2"></label>
     <label>Color <input id="color-g2" type="color" value="#f472b6"></label>
     <button id="wrap-g2">G2</button> 
+    <label>Profile
+      <select data-tp-profile-g2 class="select-sm"></select>
+    </label>
+  </div>
+  <div class="row">
+    <button type="button" class="chip" data-tp-manage-speaker-profiles>Manage profiles...</button>
+  </div>
+  <div id="speakerProfilesManager" class="row" hidden>
+    <div class="row" data-tp-profiles-list></div>
+    <div class="row">
+      <input type="text" placeholder="New profile name" data-tp-profile-new-name class="select-md" />
+      <button type="button" data-tp-profile-create class="chip">Create</button>
+    </div>
   </div>
 
   <div class="row toolbar">

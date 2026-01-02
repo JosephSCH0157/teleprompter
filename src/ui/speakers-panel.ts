@@ -1,8 +1,25 @@
+import {
+  getSpeakerProfiles,
+  setSpeakerBinding,
+  getSpeakerBindings,
+  subscribeSpeakerBindings,
+  upsertSpeakerProfile,
+  deleteSpeakerProfile,
+  type SpeakerSlot,
+} from './speaker-profiles-store';
+
 const SPEAKER_COLOR_SELECTORS: Array<readonly [string, string]> = [
   ['s1', '#color-s1'],
   ['s2', '#color-s2'],
   ['g1', '#color-g1'],
   ['g2', '#color-g2'],
+];
+
+const PROFILE_SELECTORS: Array<{ slot: SpeakerSlot; selector: string }> = [
+  { slot: 's1', selector: '[data-tp-profile-s1]' },
+  { slot: 's2', selector: '[data-tp-profile-s2]' },
+  { slot: 'g1', selector: '[data-tp-profile-g1]' },
+  { slot: 'g2', selector: '[data-tp-profile-g2]' },
 ];
 
 function applySpeakerColorVars(): void {
@@ -66,6 +83,83 @@ export function initSpeakersPanel(): void {
     visible = !visible;
     apply();
   });
+
+  const profileManager = panel.querySelector<HTMLElement>('#speakerProfilesManager');
+  const profilesList = panel.querySelector<HTMLElement>('[data-tp-profiles-list]');
+  const profileInputs: Array<{ slot: SpeakerSlot; el: HTMLSelectElement | null }> = PROFILE_SELECTORS.map(({ slot, selector }) => ({
+    slot,
+    el: panel.querySelector<HTMLSelectElement>(selector),
+  }));
+  const refreshProfileSelectors = () => {
+    const profiles = getSpeakerProfiles();
+    const bindings = getSpeakerBindings();
+    const options = [
+      { value: '', label: 'Default' },
+      ...profiles.map((profile) => ({ value: profile.id, label: profile.name })),
+    ];
+    profileInputs.forEach(({ slot, el }) => {
+      if (!el) return;
+      const current = bindings[slot] || '';
+      el.innerHTML = options
+        .map((opt) => `<option value="${opt.value}">${opt.label}</option>`)
+        .join('');
+      el.value = current;
+    });
+  };
+
+  const renderProfileList = () => {
+    if (!profilesList) return;
+    const profiles = getSpeakerProfiles();
+    profilesList.innerHTML = profiles
+      .map((profile) => `
+        <div class="chip">
+          ${profile.name}
+          ${profile.system ? '' : `<button type="button" data-tp-profile-delete="${profile.id}" class="chip chip-xs">Remove</button>`}
+        </div>
+      `)
+      .join('');
+    profilesList.querySelectorAll<HTMLButtonElement>('[data-tp-profile-delete]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.tpProfileDelete;
+        if (id) {
+          deleteSpeakerProfile(id);
+          refreshProfileSelectors();
+          renderProfileList();
+        }
+      });
+    });
+  };
+
+  subscribeSpeakerBindings(() => refreshProfileSelectors());
+
+  const manageBtn = panel.querySelector<HTMLButtonElement>('[data-tp-manage-speaker-profiles]');
+  const profileNameInput = panel.querySelector<HTMLInputElement>('[data-tp-profile-new-name]');
+  const profileCreateBtn = panel.querySelector<HTMLButtonElement>('[data-tp-profile-create]');
+
+  manageBtn?.addEventListener('click', () => {
+    if (profileManager?.hasAttribute('hidden')) {
+      renderProfileList();
+    }
+    profileManager?.toggleAttribute('hidden');
+  });
+
+  profileCreateBtn?.addEventListener('click', () => {
+    const name = profileNameInput?.value?.trim();
+    if (!name) return;
+    upsertSpeakerProfile({ id: '', name });
+    if (profileNameInput) profileNameInput.value = '';
+    refreshProfileSelectors();
+    renderProfileList();
+  });
+
+  profileInputs.forEach(({ slot, el }) => {
+    el?.addEventListener('change', () => {
+      setSpeakerBinding(slot, el.value || null);
+    });
+  });
+
+  refreshProfileSelectors();
+  renderProfileList();
 
   apply();
 
