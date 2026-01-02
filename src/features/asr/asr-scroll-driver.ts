@@ -10,11 +10,8 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../../scroll/scroller';
-import {
-  AsrThresholds,
-  DEFAULT_ASR_THRESHOLDS,
-  normalizeThresholds,
-} from '../../asr/asr-thresholds';
+import { DEFAULT_ASR_THRESHOLDS, normalizeThresholds } from '../../asr/asr-thresholds';
+import type { AsrThresholds } from '../../asr/asr-thresholds';
 import { loadDevAsrThresholds } from '../../dev/dev-thresholds';
 
 type DriverOptions = {
@@ -1188,23 +1185,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lowSimFirstAt = 0;
   };
 
-  const noteLowSimFreeze = (now: number, snapshot: {
-    cursorLine: number;
-    bestIdx: number;
-    delta: number;
-    sim: number;
-    inBand: boolean;
-    requiredSim: number;
-    need: number;
-    repeatCount: number;
-    bestSpan?: number;
-    overlapRatio?: number;
-    snippet: string;
-    matchId?: string;
-    relockModeActive: boolean;
-    catchUpModeActive: boolean;
-    stuckResyncActive: boolean;
-  }) => {
+    const noteLowSimFreeze = (now: number, snapshot: {
+      cursorLine: number;
+      bestIdx: number;
+      delta: number;
+      sim: number;
+      inBand: boolean;
+      requiredSim: number;
+      need: number;
+      repeatCount: number;
+      bestSpan?: number;
+      overlapRatio?: number;
+      snippet: string;
+      matchId?: string;
+      relockModeActive: boolean;
+      catchUpModeActive: boolean;
+      stuckResyncActive: boolean;
+      tieGap?: number;
+    }) => {
     if (!lowSimFirstAt) lowSimFirstAt = now;
     lowSimStreak += 1;
     if (lowSimFreezeLogged) return;
@@ -1227,6 +1225,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relock: snapshot.relockModeActive,
         catchUp: snapshot.catchUpModeActive,
         stuck: snapshot.stuckResyncActive,
+        tieGap: typeof snapshot.tieGap === 'number' && Number.isFinite(snapshot.tieGap)
+          ? Number(snapshot.tieGap.toFixed(3))
+          : undefined,
         snippet: snapshot.snippet,
       });
     } catch {}
@@ -1502,16 +1503,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockOverlapRatio,
         relockRepeat,
         matchId,
-        requiredThreshold,
+        requiredThreshold: pendingRequiredThreshold,
         topScores = [],
         tieGap,
       } = pending;
       const thresholds = getAsrDriverThresholds();
-      const baselineRequired = Number.isFinite(requiredThreshold)
-        ? clamp(requiredThreshold, 0, 1)
+      const requiredThresholdValue =
+        typeof pendingRequiredThreshold === 'number' ? pendingRequiredThreshold : NaN;
+      const baselineRequired = Number.isFinite(requiredThresholdValue)
+        ? clamp(requiredThresholdValue, 0, 1)
         : 0;
-      const matchThreshold = Number.isFinite(minThreshold)
-        ? clamp(minThreshold as number, 0, 1)
+      const minThresholdValue = typeof minThreshold === 'number' ? minThreshold : NaN;
+      const matchThreshold = Number.isFinite(minThresholdValue)
+        ? clamp(minThresholdValue, 0, 1)
         : baselineRequired;
       const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
       const tieMargin = typeof secondScore === 'number' && Number.isFinite(secondScore)
@@ -1544,7 +1548,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ]);
         emitHudStatus(
           'low_sim',
-          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
+          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(matchThreshold)})`,
         );
         noteLowSimFreeze(Date.now(), {
           cursorLine: lastLineIndex,
@@ -1740,7 +1744,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           return;
         }
 
-        const strongBack = conf >= Math.max(backRecoverStrongConf, requiredThreshold);
+        const strongBack = conf >= Math.max(backRecoverStrongConf, baselineRequired);
         if (isFinal && strongBack && deltaPx < 0 && Math.abs(deltaPx) <= backRecoverMaxPx) {
           if (Math.abs(targetLine - lastBackRecoverIdx) <= 1 && now - lastBackRecoverHitAt <= backRecoverWindowMs) {
             backRecoverStreak += 1;
@@ -2175,9 +2179,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         rawScoreByIdx.set(idx, score);
       }
     });
-    const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
-    const tieGap = typeof secondScore === 'number' && Number.isFinite(secondScore) ? conf - secondScore : undefined;
-    const tieOk = tieGap === undefined || tieGap >= driverThresholds.tieDelta;
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
     const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
@@ -3045,9 +3046,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       snippet,
       minThreshold:
         effectiveThresholdForPending < requiredThreshold ? effectiveThresholdForPending : undefined,
-      requiredThreshold: baselineRequired,
+      requiredThreshold,
       topScores,
-      tieGap: typeof tieMargin === 'number' ? tieMargin : undefined,
       stickinessApplied: stickAdjust > 0,
       forced: outrunCommit || shortFinalForced || catchupCommit,
       forceReason,

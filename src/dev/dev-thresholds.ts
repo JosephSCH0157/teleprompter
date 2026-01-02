@@ -1,4 +1,5 @@
-import { AsrThresholds, DEFAULT_ASR_THRESHOLDS, normalizeThresholds } from '../asr/asr-thresholds';
+import type { AsrThresholds } from '../asr/asr-thresholds';
+import { DEFAULT_ASR_THRESHOLDS, normalizeThresholds } from '../asr/asr-thresholds';
 
 const STORAGE_KEY = 'tp_asr_thresholds_v1';
 
