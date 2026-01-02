@@ -1,20 +1,18 @@
-import type { AsrThresholds } from '../asr/asr-thresholds';
+import type {
+  SpeakerBindingsSettings,
+  SpeakerProfile,
+  SpeakerSlot,
+} from '../types/speaker-profiles';
 
-export type SpeakerSlot = 's1' | 's2' | 'g1' | 'g2';
-
-export type SpeakerProfile = {
-  id: string;
-  name: string;
-  note?: string;
-  asrTweaks?: Partial<AsrThresholds>;
-  system?: boolean;
-};
+type SpeakerBindingsRecord = Record<SpeakerSlot, string | null>;
 
 type SpeakerProfilesState = {
   profiles: SpeakerProfile[];
-  bindings: Record<SpeakerSlot, string | null>;
+  bindings: SpeakerBindingsRecord;
   activeSlot: SpeakerSlot;
 };
+
+export type SpeakerProfilesSnapshot = SpeakerProfilesState;
 
 const STORAGE_KEY = 'tp_speaker_profiles_v1';
 const BINDING_EVENT = 'tp:speaker:bindings';
@@ -37,11 +35,23 @@ const VALID_SLOTS: SpeakerSlot[] = ['s1', 's2', 'g1', 'g2'];
 
 const subscribers = new Set<(bindings: Record<SpeakerSlot, string | null>) => void>();
 const activeSubscribers = new Set<(slot: SpeakerSlot) => void>();
+const stateSubscribers = new Set<(snapshot: SpeakerProfilesSnapshot) => void>();
 
 function normalizeSlot(slot: unknown): SpeakerSlot {
   if (typeof slot !== 'string') return DEFAULT_ACTIVE_SLOT;
   if (VALID_SLOTS.includes(slot as SpeakerSlot)) return slot as SpeakerSlot;
   return DEFAULT_ACTIVE_SLOT;
+}
+
+function normalizeBindings(raw: unknown): SpeakerBindingsRecord {
+  const out: SpeakerBindingsRecord = { ...DEFAULT_BINDINGS };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const slot of VALID_SLOTS) {
+    if (Object.prototype.hasOwnProperty.call(raw, slot)) {
+      out[slot] = (raw as any)[slot] ?? null;
+    }
+  }
+  return out;
 }
 
 function readStorage(): SpeakerProfilesState {
@@ -60,9 +70,7 @@ function readStorage(): SpeakerProfilesState {
     const profiles: SpeakerProfile[] = Array.isArray(parsed.profiles)
       ? parsed.profiles
       : [];
-    const bindings = typeof parsed.bindings === 'object' && parsed.bindings
-      ? (parsed.bindings as Record<SpeakerSlot, string | null>)
-      : {};
+    const bindings = normalizeBindings(parsed?.bindings);
     const activeSlot = normalizeSlot((parsed as any)?.activeSlot);
     return {
       profiles,
@@ -137,6 +145,18 @@ function persist(): void {
   writeStorage(state);
   notifyBindings();
   notifyActiveSpeaker();
+  notifyStateSubscribers();
+}
+
+function notifyStateSubscribers(): void {
+  const snapshot = getSpeakerProfilesSnapshot();
+  stateSubscribers.forEach((cb) => {
+    try {
+      cb(snapshot);
+    } catch {
+      // ignore
+    }
+  });
 }
 
 export function getSpeakerProfiles(): SpeakerProfile[] {
@@ -227,4 +247,44 @@ export function subscribeSpeakerBindings(
   subscribers.add(fn);
   fn(getSpeakerBindings());
   return () => subscribers.delete(fn);
+}
+
+export function getSpeakerProfilesSnapshot(): SpeakerProfilesSnapshot {
+  return {
+    profiles: state.profiles.slice(),
+    bindings: { ...state.bindings },
+    activeSlot: state.activeSlot,
+  };
+}
+
+function mergeBindings(override?: SpeakerBindingsSettings): SpeakerBindingsRecord {
+  if (!override) return state.bindings;
+  const result: SpeakerBindingsRecord = { ...DEFAULT_BINDINGS };
+  for (const slot of VALID_SLOTS) {
+    if (Object.prototype.hasOwnProperty.call(override, slot)) {
+      result[slot] = (override as any)[slot] ?? null;
+    }
+  }
+  return result;
+}
+
+export function initSpeakerProfilesFromSettings(options: {
+  profiles?: SpeakerProfile[];
+  bindings?: SpeakerBindingsSettings;
+  activeSlot?: SpeakerSlot;
+}): void {
+  state = {
+    profiles: Array.isArray(options.profiles) ? options.profiles.slice() : state.profiles,
+    bindings: options.bindings ? mergeBindings(options.bindings) : state.bindings,
+    activeSlot: normalizeSlot(options.activeSlot ?? state.activeSlot),
+  };
+  persist();
+}
+
+export function subscribeSpeakerProfileState(
+  fn: (snapshot: SpeakerProfilesSnapshot) => void,
+): () => void {
+  stateSubscribers.add(fn);
+  fn(getSpeakerProfilesSnapshot());
+  return () => stateSubscribers.delete(fn);
 }

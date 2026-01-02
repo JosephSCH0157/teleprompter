@@ -9,8 +9,8 @@ import {
   getActiveSpeakerSlot,
   setActiveSpeakerSlot,
   subscribeActiveSpeaker,
-  type SpeakerSlot,
 } from './speaker-profiles-store';
+import type { SpeakerSlot } from '../types/speaker-profiles';
 
 const SPEAKER_COLOR_SELECTORS: Array<readonly [string, string]> = [
   ['s1', '#color-s1'],

@@ -37,6 +37,12 @@ import { initSession } from './state/session';
 import './state/auto-record-ssot';
 import './speech/loader';
 import { stopAsrRuntime } from './speech/runtime-control';
+import {
+  getSpeakerProfilesSnapshot,
+  initSpeakerProfilesFromSettings,
+  subscribeSpeakerProfileState,
+} from './ui/speaker-profiles-store';
+import type { SpeakerBindingsSettings } from './types/speaker-profiles';
 // Early dev console noise filter (benign extension async-response errors)
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
@@ -465,6 +471,17 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 					});
 					try { store.set?.('asrProfiles', map); } catch {}
 				}
+				const speakerProfiles = (settings as any).speakerProfiles;
+				const speakerBindings = (settings as any).speakerBindings as SpeakerBindingsSettings | undefined;
+				if (Array.isArray(speakerProfiles) || speakerBindings) {
+					initSpeakerProfilesFromSettings({
+						profiles: Array.isArray(speakerProfiles)
+							? speakerProfiles.filter((profile) => profile && typeof profile === 'object')
+							: undefined,
+						bindings: speakerBindings,
+						activeSlot: speakerBindings?.activeSlot,
+					});
+				}
 				} catch {
 					// ignore ASR hydrate issues
 				}
@@ -491,7 +508,13 @@ function snapshotAppSettings(store: typeof appStore): UserSettings {
 	};
 	const rawProfiles = store.get?.('asrProfiles') as Record<string, unknown> | undefined;
 	const asrProfiles = rawProfiles ? Object.values(rawProfiles) : [];
-	return { app, asrSettings, asrProfiles };
+	const speakerState = getSpeakerProfilesSnapshot();
+	const speakerProfiles = speakerState.profiles;
+	const speakerBindings: SpeakerBindingsSettings = {
+		...speakerState.bindings,
+		activeSlot: speakerState.activeSlot,
+	};
+	return { app, asrSettings, asrProfiles, speakerProfiles, speakerBindings };
 }
 
 function queueProfileSave(userId: string, store: typeof appStore) {
@@ -1767,6 +1790,13 @@ export async function boot() {
 						devLog('hydrate:failed');
 					}
 					installSettingsPersistence(profileUserId, appStore);
+					const persistedUserId = profileUserId;
+					subscribeSpeakerProfileState(() => {
+						if (!persistedUserId) return;
+						if (!profileHydrated || suppressSave) return;
+						lastUserChange = Date.now();
+						queueProfileSave(persistedUserId, appStore);
+					});
 				} else {
 					currentSettings = snapshotAppSettings(appStore);
 					profileHydrated = true;

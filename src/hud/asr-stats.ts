@@ -9,8 +9,8 @@ import {
   getSpeakerBindings,
   getProfileById,
   getSpeakerProfiles,
-  type SpeakerSlot,
 } from '../ui/speaker-profiles-store';
+import type { SpeakerSlot } from '../types/speaker-profiles';
 
 export interface AsrStatsHudOptions {
   root?: HTMLElement | null;
@@ -204,7 +204,7 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   };
   handleThresholds({ detail: getAsrDriverThresholds() });
 
-  const buildSpeakerBindingLabel = (bindings: Record<string, string | null>) => {
+  const buildSpeakerBindingLabel = (bindings: Record<SpeakerSlot, string | null>) => {
     const profiles = getSpeakerProfiles();
     const parts: string[] = [];
     for (const slot of ['s1', 's2', 'g1', 'g2'] as const) {
@@ -216,7 +216,7 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     return parts.length ? `speakers ${parts.join(', ')}` : '';
   };
 
-  const updateActiveSpeakerInfo = (bindings?: Record<string, string | null>) => {
+  const updateActiveSpeakerInfo = (bindings?: Record<SpeakerSlot, string | null>) => {
     if (!activeSlot) {
       activeSpeakerLabel = '';
       return;
@@ -228,7 +228,7 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     activeSpeakerLabel = `active ${slotLabel}${profile ? ` (${profile.name})` : ''}`;
   };
 
-  const handleSpeakerBindings = (bindings: Record<string, string | null>) => {
+  const handleSpeakerBindings = (bindings: Record<SpeakerSlot, string | null>) => {
     speakerBindingLabel = buildSpeakerBindingLabel(bindings);
     updateActiveSpeakerInfo(bindings);
     refreshMeta();

@@ -1,6 +1,10 @@
 // src/forge/authProfile.ts
 // Ensure a logged-in user and a profile row exist; redirect to /login otherwise.
 import type { User } from '@supabase/supabase-js';
+import type {
+  SpeakerBindingsSettings,
+  SpeakerProfile,
+} from '../types/speaker-profiles';
 import { supabase } from './supabaseClient';
 
 export type ForgeTier = 'free' | 'creator' | 'studio' | 'admin' | string;
@@ -56,12 +60,16 @@ export type UserSettings = {
   app?: Partial<Record<PersistedAppKey, any>>;
   asrSettings?: Record<string, any>;
   asrProfiles?: any[];
+  speakerProfiles?: SpeakerProfile[];
+  speakerBindings?: SpeakerBindingsSettings;
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {
   app: {},
   asrSettings: {},
   asrProfiles: [],
+  speakerProfiles: [],
+  speakerBindings: { s1: null, s2: null, g1: null, g2: null, activeSlot: 's1' },
 };
 
 // tiny deep merge (safe for plain objects)
