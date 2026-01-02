@@ -113,9 +113,9 @@ const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
 const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
 const DEFAULT_LOOKAHEAD_STALL_MS = 2500;
-const DEFAULT_SAME_LINE_THROTTLE_MS = 500;
+const DEFAULT_SAME_LINE_THROTTLE_MS = 300;
 const DEFAULT_CREEP_PX = 8;
-const DEFAULT_CREEP_NEAR_PX = 28;
+const DEFAULT_CREEP_NEAR_PX = 12;
 const DEFAULT_CREEP_BUDGET_PX = 40;
 const DEFAULT_DEADBAND_PX = 32;
 const DEFAULT_MAX_VEL_PX_PER_SEC = 470;
@@ -142,6 +142,7 @@ const DEFAULT_BACK_RECOVERY_COOLDOWN_MS = 5000;
 const DEFAULT_BACK_RECOVERY_HIT_LIMIT = 2;
 const DEFAULT_BACK_RECOVERY_WINDOW_MS = 1200;
 const DEFAULT_BACK_RECOVERY_STRONG_CONF = 0.75;
+const MARKER_BIAS_PX = 6;
 const DEFAULT_REALIGN_LEAD_LINES = 6;
 const DEFAULT_REALIGN_LOOKBACK_LINES = 3;
 const DEFAULT_REALIGN_SIM = 0.7;
@@ -425,8 +426,9 @@ function computeLineTargetTop(scroller: HTMLElement | null, lineEl: HTMLElement 
   if (!scroller || !lineEl) return null;
   const offset = Math.max(0, (scroller.clientHeight - (lineEl.offsetHeight || lineEl.clientHeight || 0)) / 2);
   const raw = (lineEl.offsetTop || 0) - offset;
+  const biased = raw - MARKER_BIAS_PX;
   const max = Math.max(0, (scroller.scrollHeight || 0) - scroller.clientHeight);
-  return clamp(raw, 0, max);
+  return clamp(biased, 0, max);
 }
 
 function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
