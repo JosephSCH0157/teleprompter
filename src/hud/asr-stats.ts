@@ -1,6 +1,8 @@
 import type { AppStore } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
+import type { AsrThresholds } from '../asr/asr-thresholds';
 import { getActiveAsrTuningProfile } from '../asr/tuning-store';
+import { getAsrDriverThresholds } from '../features/asr/asr-scroll-driver';
 
 export interface AsrStatsHudOptions {
   root?: HTMLElement | null;
@@ -151,12 +153,40 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     }
   })();
   let guardText = '';
+  let thresholdLabel = '';
   const refreshMeta = () => {
     if (!metaEl) return;
-    const base = `profile ${profileLabel}`;
-    metaEl.textContent = guardText ? `${base} | ${guardText}` : base;
+    const segments = [`profile ${profileLabel}`];
+    if (thresholdLabel) segments.push(thresholdLabel);
+    if (guardText) segments.push(guardText);
+    metaEl.textContent = segments.join(' | ');
   };
   refreshMeta();
+
+  const buildThresholdLabel = (values: AsrThresholds) => {
+    const toFixed = (n: number, prec = 2) => (Number.isFinite(n) ? n.toFixed(prec) : '?');
+    const parts = [
+      `cand=${toFixed(values.candidateMinSim)}`,
+      `final=${toFixed(values.commitFinalMinSim)}`,
+      `interim=${toFixed(values.commitInterimMinSim)}`,
+      `stick=${toFixed(values.stickinessDelta)}`,
+      `tie=${toFixed(values.tieDelta)}`,
+      `streak=${Number.isFinite(values.interimStreakNeeded) ? values.interimStreakNeeded : '?'}`,
+      `max=${Number.isFinite(values.maxJumpsPerSecond) ? values.maxJumpsPerSecond : '?'}`,
+    ];
+    return `thresholds ${parts.join(' ')}`;
+  };
+  const handleThresholds = (payload: any) => {
+    try {
+      const detail = payload?.detail ?? payload ?? {};
+      if (!detail || typeof detail !== 'object') return;
+      thresholdLabel = buildThresholdLabel(detail as AsrThresholds);
+      refreshMeta();
+    } catch {
+      /* ignore */
+    }
+  };
+  handleThresholds({ detail: getAsrDriverThresholds() });
 
   const handleGuard = (payload: any) => {
     try {
@@ -181,10 +211,12 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   };
 
   window.addEventListener('tp:asr:guard', handleGuard as EventListener);
+  window.addEventListener('tp:asr:thresholds', handleThresholds as EventListener);
   window.addEventListener('tp:asr:tuning', handleTuning as EventListener);
   try {
     bus?.on('asr:stats', handleStats);
     bus?.on('asr:guard', handleGuard);
+    bus?.on('asr:thresholds', handleThresholds);
   } catch {
     /* ignore */
   }
@@ -192,10 +224,12 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   const destroy = () => {
     window.removeEventListener('asr:stats', onWindowStats);
     window.removeEventListener('tp:asr:guard', handleGuard as EventListener);
+    window.removeEventListener('tp:asr:thresholds', handleThresholds as EventListener);
     window.removeEventListener('tp:asr:tuning', handleTuning as EventListener);
     try {
       bus?.off?.('asr:stats', handleStats);
       bus?.off?.('asr:guard', handleGuard);
+      bus?.off?.('asr:thresholds', handleThresholds);
     } catch {
       /* ignore */
     }

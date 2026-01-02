@@ -10,6 +10,12 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../../scroll/scroller';
+import {
+  AsrThresholds,
+  DEFAULT_ASR_THRESHOLDS,
+  normalizeThresholds,
+} from '../../asr/asr-thresholds';
+import { loadDevAsrThresholds } from '../../dev/dev-thresholds';
 
 type DriverOptions = {
   /** Minimum forward line delta before issuing a seek. */
@@ -44,6 +50,10 @@ type PendingMatch = {
   relockOverlapRatio?: number;
   relockRepeat?: number;
   matchId?: string;
+  requiredThreshold?: number;
+  topScores?: Array<{ idx: number; score: number }>;
+  tieGap?: number;
+  stickinessApplied?: boolean;
 };
 
 type AsrEventSnapshot = {
@@ -377,6 +387,43 @@ function logDev(...args: any[]) {
   }
 }
 
+let driverThresholds: AsrThresholds = DEFAULT_ASR_THRESHOLDS;
+
+function broadcastThresholdUpdate() {
+  if (typeof window === 'undefined') return;
+  const payload = driverThresholds;
+  try {
+    window.dispatchEvent(new CustomEvent('tp:asr:thresholds', { detail: payload }));
+  } catch {
+    // ignore
+  }
+  try {
+    (window as any).__tpHud?.bus?.emit?.('asr:thresholds', payload);
+  } catch {
+    // ignore
+  }
+}
+
+function applyDevThresholdOverrides() {
+  if (!isDevMode()) return;
+  const devOverrides = loadDevAsrThresholds();
+  if (devOverrides) {
+    driverThresholds = devOverrides;
+  }
+  broadcastThresholdUpdate();
+}
+
+applyDevThresholdOverrides();
+
+export function setAsrDriverThresholds(next: Partial<AsrThresholds>) {
+  driverThresholds = normalizeThresholds({ ...driverThresholds, ...next });
+  broadcastThresholdUpdate();
+}
+
+export function getAsrDriverThresholds(): AsrThresholds {
+  return driverThresholds;
+}
+
 function getScrollMode(): string {
   try {
     const store = (window as any).__tpStore;
@@ -549,6 +596,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const sessionStartAt = Date.now();
   let threshold = resolveThreshold();
+  setAsrDriverThresholds({ candidateMinSim: threshold });
   let lastLineIndex = -1;
   let lastSeekTs = 0;
   let lastSameLineNudgeTs = 0;
@@ -607,6 +655,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let bootLogged = false;
     let forcedCooldownUntil = 0;
     const forcedCommitTimes: number[] = [];
+    let jumpHistory: number[] = [];
     let noTargetRetryLine = -1;
     let noTargetRetryCount = 0;
     let noTargetRetryAt = 0;
@@ -807,8 +856,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
-    if (typeof state.threshold === 'number') {
+    if (typeof state.threshold === 'number' && !isDevMode()) {
       threshold = clamp(state.threshold, 0, 1);
+      setAsrDriverThresholds({ candidateMinSim: threshold });
     }
   });
 
@@ -1452,20 +1502,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockOverlapRatio,
         relockRepeat,
         matchId,
+        requiredThreshold,
+        topScores = [],
+        tieGap,
       } = pending;
-      const requiredThreshold = clamp(isFinal ? threshold : threshold * interimScale, 0, 1);
-      const effectiveThreshold = Number.isFinite(minThreshold)
+      const thresholds = getAsrDriverThresholds();
+      const baselineRequired = Number.isFinite(requiredThreshold)
+        ? clamp(requiredThreshold, 0, 1)
+        : 0;
+      const matchThreshold = Number.isFinite(minThreshold)
         ? clamp(minThreshold as number, 0, 1)
-        : requiredThreshold;
-      const strongMatch = conf >= effectiveThreshold;
+        : baselineRequired;
+      const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
+      const tieMargin = typeof secondScore === 'number' && Number.isFinite(secondScore)
+        ? conf - secondScore
+        : typeof tieGap === 'number'
+          ? tieGap
+          : undefined;
+      const tieOk = tieMargin === undefined || tieMargin >= thresholds.tieDelta;
+      const strongMatch = conf >= matchThreshold && tieOk;
       if (!strongMatch) {
+        const tieParts = !tieOk && typeof tieMargin === 'number'
+          ? [`tie=${formatLogScore(tieMargin)}`, `tieNeed=${formatLogScore(thresholds.tieDelta)}`]
+          : [];
         warnGuard('low_sim', [
           matchId ? `matchId=${matchId}` : '',
           `current=${lastLineIndex}`,
           `best=${line}`,
           `delta=${line - lastLineIndex}`,
           `sim=${formatLogScore(conf)}`,
-          `need=${formatLogScore(effectiveThreshold)}`,
+          `need=${formatLogScore(matchThreshold)}`,
+          ...tieParts,
           relockOverride ? `relock=1` : '',
           relockReason ? `relockReason=${relockReason}` : '',
           Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
@@ -1485,8 +1552,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           delta: line - lastLineIndex,
           sim: conf,
           inBand: true,
-          requiredSim: requiredThreshold,
-          need: effectiveThreshold,
+          requiredSim: baselineRequired,
+          need: matchThreshold,
           repeatCount: relockRepeat || 0,
           bestSpan: relockSpan,
           overlapRatio: relockOverlapRatio,
@@ -1495,6 +1562,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           relockModeActive: !!relockOverride,
           catchUpModeActive: false,
           stuckResyncActive: false,
+          tieGap: typeof tieMargin === 'number' ? Number(tieMargin.toFixed(3)) : undefined,
         });
         return;
       }
@@ -1751,6 +1819,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
 
+      const rateWindowMs = 1000;
+      jumpHistory = jumpHistory.filter((ts) => now - ts < rateWindowMs);
+      if (!forced && jumpHistory.length >= thresholds.maxJumpsPerSecond) {
+        warnGuard('rate_limited', [
+          `limit=${thresholds.maxJumpsPerSecond}`,
+          `windowMs=${rateWindowMs}`,
+          `since=${now - (jumpHistory[0] || 0)}`,
+        ]);
+        emitHudStatus('rate_limited', 'Rate-limited - waiting');
+        return;
+      }
+
       const prevLineIndex = lastLineIndex;
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
@@ -1770,6 +1850,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (forced) {
         forcedCommitTimes.push(now);
         pruneForcedCommits(now);
+      }
+      else {
+        jumpHistory.push(now);
       }
       noteCommit(prevLineIndex, targetLine, now);
       resetLowSimStreak();
@@ -2010,15 +2093,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : driverWindowAhead;
     let rawIdx = Number(match.bestIdx);
     let conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
-    const baseThreshold = isFinal ? threshold : threshold * interimScale;
-    const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
-    const requiredThreshold = clamp(baseThreshold + shortBoost, 0, 1);
-    const interimHighThreshold = clamp(baseThreshold + shortBoost + interimHysteresisBonus, 0, 1);
-    const consistencyMinSim = clamp(requiredThreshold - consistencySimSlack, 0, 1);
-    const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const driverThresholds = getAsrDriverThresholds();
+    const baseCommitThreshold = isFinal
+      ? driverThresholds.commitFinalMinSim
+      : clamp(driverThresholds.commitInterimMinSim * interimScale, 0, 1);
+    const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
+    const requiredThreshold = clamp(baseCommitThreshold + shortBoost, 0, 1);
+    const interimHighThreshold = clamp(requiredThreshold + interimHysteresisBonus, 0, 1);
+    const consistencyMinSim = clamp(requiredThreshold - consistencySimSlack, 0, 1);
+    const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
     const noMatchFlag = !Number.isFinite(rawIdx) || rawIdx < 0;
     if (isDevMode() && rawIdx !== cursorLine) {
       const bestOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) : rawIdx;
@@ -2076,16 +2162,22 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     const rawBestSim = conf;
-    const rawScores = Array.isArray(match.topScores) ? match.topScores : [];
+    const candidateIdx = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
+    const confirmingCurrentLine = candidateIdx >= 0 && candidateIdx === cursorLine;
+    const stickAdjust = confirmingCurrentLine ? driverThresholds.stickinessDelta : 0;
+    const effectiveThresholdForPending = clamp(requiredThreshold - stickAdjust, 0, 1);
+    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     const rawScoreByIdx = new Map<number, number>();
-    rawScores.forEach((entry) => {
+    topScores.forEach((entry) => {
       const idx = Number(entry.idx);
       const score = Number(entry.score);
       if (Number.isFinite(idx) && Number.isFinite(score)) {
         rawScoreByIdx.set(idx, score);
       }
     });
-    const topScores = rawScores;
+    const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
+    const tieGap = typeof secondScore === 'number' && Number.isFinite(secondScore) ? conf - secondScore : undefined;
+    const tieOk = tieGap === undefined || tieGap >= driverThresholds.tieDelta;
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
     const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
@@ -2951,7 +3043,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal,
       hasEvidence,
       snippet,
-      minThreshold: effectiveThreshold < requiredThreshold ? effectiveThreshold : undefined,
+      minThreshold:
+        effectiveThresholdForPending < requiredThreshold ? effectiveThresholdForPending : undefined,
+      requiredThreshold: baselineRequired,
+      topScores,
+      tieGap: typeof tieMargin === 'number' ? tieMargin : undefined,
+      stickinessApplied: stickAdjust > 0,
       forced: outrunCommit || shortFinalForced || catchupCommit,
       forceReason,
       consistency: { count: consistencyState.count, needed: consistencyState.needed },

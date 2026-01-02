@@ -73,6 +73,7 @@ import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
+import './dev/asr-thresholds-panel';
 import './hud/loader';
 import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
