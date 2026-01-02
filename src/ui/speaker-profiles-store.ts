@@ -13,10 +13,12 @@ export type SpeakerProfile = {
 type SpeakerProfilesState = {
   profiles: SpeakerProfile[];
   bindings: Record<SpeakerSlot, string | null>;
+  activeSlot: SpeakerSlot;
 };
 
 const STORAGE_KEY = 'tp_speaker_profiles_v1';
 const BINDING_EVENT = 'tp:speaker:bindings';
+const ACTIVE_SPEAKER_EVENT = 'tp:speaker:active';
 
 const DEFAULT_PROFILES: SpeakerProfile[] = [
   { id: 'default-s1', name: 'Default S1', system: true },
@@ -30,13 +32,24 @@ const DEFAULT_BINDINGS: Record<SpeakerSlot, string | null> = {
   g2: null,
 };
 
+const DEFAULT_ACTIVE_SLOT: SpeakerSlot = 's1';
+const VALID_SLOTS: SpeakerSlot[] = ['s1', 's2', 'g1', 'g2'];
+
 const subscribers = new Set<(bindings: Record<SpeakerSlot, string | null>) => void>();
+const activeSubscribers = new Set<(slot: SpeakerSlot) => void>();
+
+function normalizeSlot(slot: unknown): SpeakerSlot {
+  if (typeof slot !== 'string') return DEFAULT_ACTIVE_SLOT;
+  if (VALID_SLOTS.includes(slot as SpeakerSlot)) return slot as SpeakerSlot;
+  return DEFAULT_ACTIVE_SLOT;
+}
 
 function readStorage(): SpeakerProfilesState {
   if (typeof window === 'undefined') {
     return {
       profiles: [...DEFAULT_PROFILES],
       bindings: { ...DEFAULT_BINDINGS },
+      activeSlot: DEFAULT_ACTIVE_SLOT,
     };
   }
   try {
@@ -50,17 +63,20 @@ function readStorage(): SpeakerProfilesState {
     const bindings = typeof parsed.bindings === 'object' && parsed.bindings
       ? (parsed.bindings as Record<SpeakerSlot, string | null>)
       : {};
+    const activeSlot = normalizeSlot((parsed as any)?.activeSlot);
     return {
       profiles,
       bindings: {
         ...DEFAULT_BINDINGS,
         ...bindings,
       },
+      activeSlot,
     };
   } catch {
     return {
       profiles: [...DEFAULT_PROFILES],
       bindings: { ...DEFAULT_BINDINGS },
+      activeSlot: DEFAULT_ACTIVE_SLOT,
     };
   }
 }
@@ -93,13 +109,34 @@ function notifyBindings(): void {
   });
 }
 
+function notifyActiveSpeaker(): void {
+  const slot = getActiveSpeakerSlot();
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(ACTIVE_SPEAKER_EVENT, { detail: { slot } }));
+    }
+  } catch {}
+  try {
+    window?.sendToDisplay?.({ type: 'speaker-active', slot });
+  } catch {}
+  activeSubscribers.forEach((cb) => {
+    try {
+      cb(slot);
+    } catch {
+      // ignore
+    }
+  });
+}
+
 let state = readStorage();
 writeStorage(state);
 notifyBindings();
+notifyActiveSpeaker();
 
 function persist(): void {
   writeStorage(state);
   notifyBindings();
+  notifyActiveSpeaker();
 }
 
 export function getSpeakerProfiles(): SpeakerProfile[] {
@@ -136,7 +173,7 @@ export function deleteSpeakerProfile(profileId: string): void {
         slot,
         value === profileId ? null : value,
       ]),
-    ),
+    ) as Record<SpeakerSlot, string | null>,
   };
   persist();
 }
@@ -155,6 +192,28 @@ export function setSpeakerBinding(slot: SpeakerSlot, profileId: string | null): 
     },
   };
   persist();
+}
+
+export function getActiveSpeakerSlot(): SpeakerSlot {
+  return state.activeSlot;
+}
+
+export function setActiveSpeakerSlot(slot: SpeakerSlot): void {
+  if (!slot || !VALID_SLOTS.includes(slot)) return;
+  if (state.activeSlot === slot) return;
+  state = {
+    ...state,
+    activeSlot: slot,
+  };
+  persist();
+}
+
+export function subscribeActiveSpeaker(
+  fn: (slot: SpeakerSlot) => void,
+): () => void {
+  activeSubscribers.add(fn);
+  fn(getActiveSpeakerSlot());
+  return () => activeSubscribers.delete(fn);
 }
 
 export function getProfileById(id: string | null): SpeakerProfile | undefined {

@@ -5,6 +5,10 @@ import {
   subscribeSpeakerBindings,
   upsertSpeakerProfile,
   deleteSpeakerProfile,
+  getProfileById,
+  getActiveSpeakerSlot,
+  setActiveSpeakerSlot,
+  subscribeActiveSpeaker,
   type SpeakerSlot,
 } from './speaker-profiles-store';
 
@@ -86,10 +90,19 @@ export function initSpeakersPanel(): void {
 
   const profileManager = panel.querySelector<HTMLElement>('#speakerProfilesManager');
   const profilesList = panel.querySelector<HTMLElement>('[data-tp-profiles-list]');
+  const activeLabel = panel.querySelector<HTMLElement>('[data-tp-active-speaker-label]');
+  const activeButtons = Array.from(panel.querySelectorAll<HTMLButtonElement>('[data-tp-active-speaker-slot]'));
   const profileInputs: Array<{ slot: SpeakerSlot; el: HTMLSelectElement | null }> = PROFILE_SELECTORS.map(({ slot, selector }) => ({
     slot,
     el: panel.querySelector<HTMLSelectElement>(selector),
   }));
+  activeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const slot = button.dataset.tpActiveSpeakerSlot as SpeakerSlot | undefined;
+      if (!slot) return;
+      setActiveSpeakerSlot(slot);
+    });
+  });
   const refreshProfileSelectors = () => {
     const profiles = getSpeakerProfiles();
     const bindings = getSpeakerBindings();
@@ -105,6 +118,29 @@ export function initSpeakersPanel(): void {
         .join('');
       el.value = current;
     });
+  };
+
+  const highlightActiveSlot = (slot: SpeakerSlot) => {
+    activeButtons.forEach((button) => {
+      const btnSlot = button.dataset.tpActiveSpeakerSlot as SpeakerSlot | undefined;
+      if (!btnSlot) return;
+      const isActive = btnSlot === slot;
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      button.classList.toggle('is-active', isActive);
+    });
+  };
+
+  const updateActiveLabel = (slot: SpeakerSlot) => {
+    if (!activeLabel) return;
+    const bindings = getSpeakerBindings();
+    const profile = getProfileById(bindings[slot] || null);
+    const slotName = slot.toUpperCase();
+    activeLabel.textContent = `Reading now: ${slotName}${profile ? ` (${profile.name})` : ''}`;
+  };
+
+  const renderActiveSpeaker = (slot: SpeakerSlot) => {
+    highlightActiveSlot(slot);
+    updateActiveLabel(slot);
   };
 
   const renderProfileList = () => {
@@ -130,7 +166,12 @@ export function initSpeakersPanel(): void {
     });
   };
 
-  subscribeSpeakerBindings(() => refreshProfileSelectors());
+  const handleBindingsChange = () => {
+    refreshProfileSelectors();
+    renderActiveSpeaker(getActiveSpeakerSlot());
+  };
+  subscribeSpeakerBindings(handleBindingsChange);
+  subscribeActiveSpeaker(renderActiveSpeaker);
 
   const manageBtn = panel.querySelector<HTMLButtonElement>('[data-tp-manage-speaker-profiles]');
   const profileNameInput = panel.querySelector<HTMLInputElement>('[data-tp-profile-new-name]');

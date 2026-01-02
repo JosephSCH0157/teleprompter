@@ -5,7 +5,11 @@ import { getActiveAsrTuningProfile } from '../asr/tuning-store';
 import { getAsrDriverThresholds } from '../asr/asr-threshold-store';
 import {
   subscribeSpeakerBindings,
+  subscribeActiveSpeaker,
+  getSpeakerBindings,
+  getProfileById,
   getSpeakerProfiles,
+  type SpeakerSlot,
 } from '../ui/speaker-profiles-store';
 
 export interface AsrStatsHudOptions {
@@ -159,11 +163,14 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   let guardText = '';
   let thresholdLabel = '';
   let speakerBindingLabel = '';
+  let activeSlot: SpeakerSlot | null = null;
+  let activeSpeakerLabel = '';
   const refreshMeta = () => {
     if (!metaEl) return;
     const segments = [`profile ${profileLabel}`];
     if (thresholdLabel) segments.push(thresholdLabel);
     if (guardText) segments.push(guardText);
+    if (activeSpeakerLabel) segments.push(activeSpeakerLabel);
     if (speakerBindingLabel) segments.push(speakerBindingLabel);
     metaEl.textContent = segments.join(' | ');
   };
@@ -209,11 +216,29 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     return parts.length ? `speakers ${parts.join(', ')}` : '';
   };
 
+  const updateActiveSpeakerInfo = (bindings?: Record<string, string | null>) => {
+    if (!activeSlot) {
+      activeSpeakerLabel = '';
+      return;
+    }
+    const lookup = bindings || getSpeakerBindings();
+    const profileId = lookup[activeSlot];
+    const profile = getProfileById(profileId || null);
+    const slotLabel = activeSlot.toUpperCase();
+    activeSpeakerLabel = `active ${slotLabel}${profile ? ` (${profile.name})` : ''}`;
+  };
+
   const handleSpeakerBindings = (bindings: Record<string, string | null>) => {
     speakerBindingLabel = buildSpeakerBindingLabel(bindings);
+    updateActiveSpeakerInfo(bindings);
     refreshMeta();
   };
   const unsubscribeBindings = subscribeSpeakerBindings(handleSpeakerBindings);
+  const unsubscribeActiveSlot = subscribeActiveSpeaker((slot) => {
+    activeSlot = slot;
+    updateActiveSpeakerInfo();
+    refreshMeta();
+  });
 
   const handleGuard = (payload: any) => {
     try {
@@ -268,6 +293,7 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
     }
     try {
       unsubscribeBindings();
+      unsubscribeActiveSlot();
     } catch {
       /* ignore */
     }

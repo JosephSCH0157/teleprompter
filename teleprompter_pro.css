@@ -1089,3 +1089,23 @@ html.tp-mode-rehearsal::after{
   padding:10px;
   outline:none;
 }
+
+[data-tp-active-speaker-row] .chip {
+  margin-right: 6px;
+}
+[data-tp-active-speaker-slot] {
+  border-color: rgba(255, 255, 255, 0.35);
+  opacity: 0.92;
+  transition: color 0.15s ease, background 0.15s ease, border 0.15s ease;
+}
+[data-tp-active-speaker-slot].is-active {
+  border-color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+[data-tp-active-speaker-label] {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-right: 8px;
+}
