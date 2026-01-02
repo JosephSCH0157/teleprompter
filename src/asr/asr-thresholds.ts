@@ -6,6 +6,9 @@ export type AsrThresholds = {
   interimStreakNeeded: number;
   maxJumpsPerSecond: number;
   tieDelta: number;
+  anchorMinSim: number;
+  maxAnchorJumpLines: number;
+  anchorStreakNeeded: number;
 };
 
 export const DEFAULT_ASR_THRESHOLDS: AsrThresholds = {
@@ -16,6 +19,9 @@ export const DEFAULT_ASR_THRESHOLDS: AsrThresholds = {
   interimStreakNeeded: 2,
   maxJumpsPerSecond: 3,
   tieDelta: 0.05,
+  anchorMinSim: 0.7,
+  maxAnchorJumpLines: 60,
+  anchorStreakNeeded: 2,
 };
 
 export function clamp01(n: number): number {
@@ -33,5 +39,8 @@ export function normalizeThresholds(thresholds: AsrThresholds): AsrThresholds {
     interimStreakNeeded: Math.max(1, Math.floor(thresholds.interimStreakNeeded || 1)),
     maxJumpsPerSecond: Math.max(1, Math.floor(thresholds.maxJumpsPerSecond || 1)),
     tieDelta: clamp01(thresholds.tieDelta),
+    anchorMinSim: clamp01(thresholds.anchorMinSim),
+    maxAnchorJumpLines: Math.max(1, Math.floor(thresholds.maxAnchorJumpLines || 1)),
+    anchorStreakNeeded: Math.max(1, Math.floor(thresholds.anchorStreakNeeded || 1)),
   };
 }

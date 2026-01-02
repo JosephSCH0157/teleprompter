@@ -125,9 +125,11 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   } catch {}
 
   let currentSpeaker: SpeakerKey | null = null;
+  let devLineIndexWarningLogged = false;
   let inNote = false;
 
   try { root.textContent = ''; } catch {}
+  let renderedLineIndex = 0;
 
   for (let i = 0; i < lines.length; i++) {
     let rawLine = lines[i] ?? '';
@@ -137,13 +139,15 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       const div = document.createElement('div');
       div.className = 'line line-empty';
       div.innerHTML = '&nbsp;';
-      const idx = String(i);
-      div.id = `tp-line-${idx}`;
-      (div as any).dataset.i = idx;
-      (div as any).dataset.index = idx;
-      (div as any).dataset.line = idx;
-      (div as any).dataset.lineIdx = idx;
+      const renderIdx = String(renderedLineIndex);
+      div.id = `tp-line-${renderIdx}`;
+      (div as any).dataset.i = renderIdx;
+      (div as any).dataset.index = renderIdx;
+      (div as any).dataset.line = renderIdx;
+      (div as any).dataset.lineIdx = renderIdx;
+      (div as any).dataset.rawLine = String(i);
       frag.appendChild(div);
+      renderedLineIndex += 1;
       continue;
     }
 
@@ -193,12 +197,13 @@ export function renderScript(text: string, container?: HTMLElement | null): void
 
     const div = document.createElement('div');
     div.className = 'line';
-    const idx = String(i);
-    div.id = `tp-line-${idx}`;
-    (div as any).dataset.i = idx;
-    (div as any).dataset.index = idx;
-    (div as any).dataset.line = idx;
-    (div as any).dataset.lineIdx = idx;
+    const renderIdx = String(renderedLineIndex);
+    div.id = `tp-line-${renderIdx}`;
+    (div as any).dataset.i = renderIdx;
+    (div as any).dataset.index = renderIdx;
+    (div as any).dataset.line = renderIdx;
+    (div as any).dataset.lineIdx = renderIdx;
+    (div as any).dataset.rawLine = String(i);
 
     if (currentSpeaker) {
       div.classList.add(SPEAKER_CLASS[currentSpeaker]);
@@ -209,6 +214,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     div.innerHTML = html || '&nbsp;';
     applyInlineColors(div);
     frag.appendChild(div);
+    renderedLineIndex += 1;
 
     if (closeAfterLine) {
       currentSpeaker = null;
@@ -216,17 +222,28 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   }
 
   try { root.appendChild(frag); } catch {}
-  try { (root as any).dataset.lineCount = String(lines.length); } catch {}
+  try { (root as any).dataset.lineCount = String(renderedLineIndex); } catch {}
   try { root.scrollTop = 0; } catch {}
 
   try {
     if ((window as any).__TP_DEV || (window as any).__TP_DEV1) {
-      const lineEls = Array.from(root.querySelectorAll<HTMLElement>('.line'));
-        if (lineEls.length && lineEls.every((el) => !el.dataset.speaker)) {
-          console.info('[render] no speaker markers applied to rendered lines', {
-            lineCount: lineEls.length,
-          });
-        }
+      const lineEls = Array.from(root.querySelectorAll<HTMLElement>('.line[data-line]'));
+      const maxLineIdx = lineEls.reduce((max, el) => {
+        const idx = Number(el.dataset.line ?? -1);
+        return Number.isFinite(idx) ? Math.max(max, idx) : max;
+      }, -1);
+      if (lineEls.length && maxLineIdx !== lineEls.length - 1 && !devLineIndexWarningLogged) {
+        devLineIndexWarningLogged = true;
+        console.warn('[render] line index mismatch', {
+          rendered: lineEls.length,
+          maxLineIdx,
+        });
+      }
+      if (lineEls.length && lineEls.every((el) => !el.dataset.speaker)) {
+        console.info('[render] no speaker markers applied to rendered lines', {
+          lineCount: lineEls.length,
+        });
+      }
     }
   } catch {}
 
@@ -239,7 +256,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   } catch {}
 
   try {
-    const evt = new CustomEvent('tp:render:done', { detail: { lineCount: lines.length } });
+    const evt = new CustomEvent('tp:render:done', { detail: { lineCount: renderedLineIndex } });
     root.dispatchEvent(evt);
     document.dispatchEvent(evt);
   } catch {
@@ -248,10 +265,10 @@ export function renderScript(text: string, container?: HTMLElement | null): void
 
   // Notify observers (e.g., display mirror) that content changed
   try {
-    document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { lineCount: lines.length } }));
+    document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { lineCount: renderedLineIndex } }));
   } catch {}
   // Notify listeners (e.g., display sync) that script content changed
-  try { window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { lineCount: lines.length } })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { lineCount: renderedLineIndex } })); } catch {}
 
 }
 

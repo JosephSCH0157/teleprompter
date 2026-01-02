@@ -10,9 +10,7 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../../scroll/scroller';
-import { DEFAULT_ASR_THRESHOLDS, normalizeThresholds } from '../../asr/asr-thresholds';
-import type { AsrThresholds } from '../../asr/asr-thresholds';
-import { loadDevAsrThresholds } from '../../dev/dev-thresholds';
+import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
 
 type DriverOptions = {
   /** Minimum forward line delta before issuing a seek. */
@@ -135,6 +133,7 @@ const DEFAULT_PURSUE_MANUAL_CANCEL_PX = 48;
 const DEFAULT_NO_TARGET_RETRY_SIM = 0.9;
 const DEFAULT_NO_TARGET_RETRY_MAX_DELTA = 6;
 const DEFAULT_NO_TARGET_RETRY_FRAMES = 2;
+const DEFAULT_LINE_MISSING_LOOKUP_FRAMES = 2;
 const DEFAULT_NO_TARGET_RETRY_WINDOW_MS = 350;
 const DEFAULT_STRONG_WINDOW_MS = 700;
 const DEFAULT_FINAL_EVIDENCE_LEAD_LINES = 2;
@@ -384,42 +383,6 @@ function logDev(...args: any[]) {
   }
 }
 
-let driverThresholds: AsrThresholds = DEFAULT_ASR_THRESHOLDS;
-
-function broadcastThresholdUpdate() {
-  if (typeof window === 'undefined') return;
-  const payload = driverThresholds;
-  try {
-    window.dispatchEvent(new CustomEvent('tp:asr:thresholds', { detail: payload }));
-  } catch {
-    // ignore
-  }
-  try {
-    (window as any).__tpHud?.bus?.emit?.('asr:thresholds', payload);
-  } catch {
-    // ignore
-  }
-}
-
-function applyDevThresholdOverrides() {
-  if (!isDevMode()) return;
-  const devOverrides = loadDevAsrThresholds();
-  if (devOverrides) {
-    driverThresholds = devOverrides;
-  }
-  broadcastThresholdUpdate();
-}
-
-applyDevThresholdOverrides();
-
-export function setAsrDriverThresholds(next: Partial<AsrThresholds>) {
-  driverThresholds = normalizeThresholds({ ...driverThresholds, ...next });
-  broadcastThresholdUpdate();
-}
-
-export function getAsrDriverThresholds(): AsrThresholds {
-  return driverThresholds;
-}
 
 function getScrollMode(): string {
   try {
@@ -442,30 +405,46 @@ function getScroller(): HTMLElement | null {
   return resolveActiveScroller(primary, fallback);
 }
 
-function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
-  if (!scroller) return null;
-  const idx = Math.max(0, Math.floor(lineIndex));
-  const line = getLineElementByIndex(scroller, idx);
-  if (!line) return null;
-  const offset = Math.max(0, (scroller.clientHeight - line.offsetHeight) / 2);
-  const raw = (line.offsetTop || 0) - offset;
-  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-  return clamp(raw, 0, max);
-}
-
 function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number): HTMLElement | null {
   if (!scroller) return null;
   const idx = Math.max(0, Math.floor(lineIndex));
-  return (
-    scroller.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.line[data-index="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.line[data-line="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.line[data-line-idx="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.tp-line[data-i="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.tp-line[data-index="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.tp-line[data-line="${idx}"]`) ||
-    scroller.querySelector<HTMLElement>(`.tp-line[data-line-idx="${idx}"]`)
-  );
+  const selectors = [
+    `.line[data-line="${idx}"]`,
+    `.tp-line[data-line="${idx}"]`,
+    `.line[data-line-idx="${idx}"]`,
+    `.tp-line[data-line-idx="${idx}"]`,
+  ];
+  for (const selector of selectors) {
+    const candidate = scroller.querySelector<HTMLElement>(selector);
+    if (candidate) return candidate;
+  }
+  return null;
+}
+
+function computeLineTargetTop(scroller: HTMLElement | null, lineEl: HTMLElement | null): number | null {
+  if (!scroller || !lineEl) return null;
+  const offset = Math.max(0, (scroller.clientHeight - (lineEl.offsetHeight || lineEl.clientHeight || 0)) / 2);
+  const raw = (lineEl.offsetTop || 0) - offset;
+  const max = Math.max(0, (scroller.scrollHeight || 0) - scroller.clientHeight);
+  return clamp(raw, 0, max);
+}
+
+function resolveTargetTop(scroller: HTMLElement, lineIndex: number): number | null {
+  return computeLineTargetTop(scroller, getLineElementByIndex(scroller, lineIndex));
+}
+
+async function findLineElWithRetry(
+  scroller: HTMLElement,
+  targetIndex: number,
+  retries = DEFAULT_LINE_MISSING_LOOKUP_FRAMES,
+): Promise<HTMLElement | null> {
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const el = getLineElementByIndex(scroller, targetIndex);
+    if (el) return el;
+    if (attempt === retries) break;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  return null;
 }
 
 function diagnoseNoTarget(scroller: HTMLElement | null, lineIndex: number) {
@@ -521,6 +500,7 @@ function diagnoseNoTarget(scroller: HTMLElement | null, lineIndex: number) {
     scrollerId: describeElement(scroller),
   };
 }
+
 
 function estimateTargetTopFromLines(
   scroller: HTMLElement | null,
@@ -653,6 +633,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let forcedCooldownUntil = 0;
     const forcedCommitTimes: number[] = [];
     let jumpHistory: number[] = [];
+    const LINE_MISSING_RETRY_LIMIT = 2;
+    let lineMissingRetryLine: number | null = null;
+    let lineMissingRetryCount = 0;
+    let anchorStreakLine: number | null = null;
+    let anchorStreakCount = 0;
     let noTargetRetryLine = -1;
     let noTargetRetryCount = 0;
     let noTargetRetryAt = 0;
@@ -840,6 +825,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         if (scriptHashChanged) lastScriptHash = scriptHash;
         return;
       }
+      lineMissingRetryLine = null;
+      lineMissingRetryCount = 0;
     }
     try { (window as any).currentIndex = next; } catch {}
     if (scriptHashChanged) lastScriptHash = scriptHash;
@@ -1475,6 +1462,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     pendingRaf = window.requestAnimationFrame(() => {
       pendingRaf = 0;
       if (disposed) return;
+      void (async () => {
       const pending = pendingMatch;
       if (!pending) return;
       pendingMatch = null;
@@ -1572,22 +1560,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       let targetLine = Math.max(0, Math.floor(line));
-        let targetTop = resolveTargetTop(scroller, targetLine);
-        const currentTop = scroller.scrollTop || 0;
-        let deltaPx = targetTop != null ? targetTop - currentTop : 0;
+      let lineEl = getLineElementByIndex(scroller, targetLine);
+      if (!lineEl) {
+        lineEl = await findLineElWithRetry(scroller, targetLine);
+      }
+      let targetTop = computeLineTargetTop(scroller, lineEl);
+      const currentTop = scroller.scrollTop || 0;
+      let deltaPx = targetTop != null ? targetTop - currentTop : 0;
 
         if (targetTop == null) {
           const deltaLines = targetLine - lastLineIndex;
-          const diag = diagnoseNoTarget(scroller, targetLine);
-          const reasonChain = diag.reasons.length ? diag.reasons.join('|') : 'unknown';
-          const retryEligible =
-            strongMatch &&
-            conf >= DEFAULT_NO_TARGET_RETRY_SIM &&
-            deltaLines >= 0 &&
-            deltaLines <= DEFAULT_NO_TARGET_RETRY_MAX_DELTA;
-          let retryCount = 0;
+        const diag = diagnoseNoTarget(scroller, targetLine);
+        if (maybeScheduleLineRetry(targetLine, pending)) {
+          return;
+        }
+        const reasonChain = diag.reasons.length ? diag.reasons.join('|') : 'unknown';
+        const retryEligible =
+          strongMatch &&
+          conf >= DEFAULT_NO_TARGET_RETRY_SIM &&
+          deltaLines >= 0 &&
+          deltaLines <= DEFAULT_NO_TARGET_RETRY_MAX_DELTA;
+        let retryCount = 0;
 
-          if (retryEligible) {
+        if (retryEligible) {
             const sameKey =
               noTargetRetryLine === targetLine &&
               (matchId ? matchId === noTargetRetryMatchId : noTargetRetryMatchId == null);
@@ -1921,6 +1916,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       clearEvidenceBuffer('commit');
       logDev('target update', { line: targetLine, conf, pxDelta: deltaPx, targetTop: pursuitTargetTop });
       updateDebugState('target-update');
+      })();
     });
   };
 
@@ -2070,7 +2066,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const effectiveAnchor = resyncActive
       ? Math.max(0, Math.floor(resyncAnchorIdx as number))
       : Math.max(0, Math.floor(anchorIdx));
-    setCurrentIndex(effectiveAnchor, 'anchor-sync');
+    const anchorTarget = effectiveAnchor;
 
     const driverWindowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
     const catchUpModeActivePre = catchUpModeUntil > now;
@@ -2087,6 +2083,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
       return;
     }
+    const thresholds = getAsrDriverThresholds();
     const matchWindowBackRaw = Number((match as any)?.windowBack);
     const matchWindowAheadRaw = Number((match as any)?.windowAhead);
     const matchWindowBack = Number.isFinite(matchWindowBackRaw)
@@ -2100,15 +2097,43 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
-    const driverThresholds = getAsrDriverThresholds();
     const baseCommitThreshold = isFinal
-      ? driverThresholds.commitFinalMinSim
-      : clamp(driverThresholds.commitInterimMinSim * interimScale, 0, 1);
+      ? thresholds.commitFinalMinSim
+      : clamp(thresholds.commitInterimMinSim * interimScale, 0, 1);
     const shortBoost = tokenCount <= shortTokenMax ? shortTokenBoost : 0;
     const requiredThreshold = clamp(baseCommitThreshold + shortBoost, 0, 1);
     const interimHighThreshold = clamp(requiredThreshold + interimHysteresisBonus, 0, 1);
     const consistencyMinSim = clamp(requiredThreshold - consistencySimSlack, 0, 1);
     const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
+    const prevIndex = Number.isFinite(currentIdxRaw) ? Math.floor(currentIdxRaw) : 0;
+    const candidateAnchorLine = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : null;
+    if (candidateAnchorLine !== null && conf >= thresholds.anchorMinSim) {
+      if (anchorStreakLine === candidateAnchorLine) {
+        anchorStreakCount += 1;
+      } else {
+        anchorStreakLine = candidateAnchorLine;
+        anchorStreakCount = 1;
+      }
+    } else {
+      anchorStreakLine = null;
+      anchorStreakCount = 0;
+    }
+    const anchorDelta = Math.abs(anchorTarget - prevIndex);
+    const commitFinalOk = isFinal && conf >= thresholds.commitFinalMinSim;
+    const anchorStreakOk = anchorStreakLine !== null && anchorStreakCount >= thresholds.anchorStreakNeeded;
+    const anchorAllowedByDelta = anchorDelta <= thresholds.maxAnchorJumpLines;
+    const anchorAllowedByConfidence = commitFinalOk || anchorStreakOk;
+    if (anchorAllowedByDelta || anchorAllowedByConfidence) {
+      setCurrentIndex(anchorTarget, 'anchor-sync');
+    } else {
+      warnGuard('anchor_blocked', [
+        `current=${prevIndex}`,
+        `target=${anchorTarget}`,
+        `delta=${anchorDelta}`,
+        `sim=${formatLogScore(conf)}`,
+        `need=${formatLogScore(thresholds.anchorMinSim)}`,
+      ]);
+    }
     const noMatchFlag = !Number.isFinite(rawIdx) || rawIdx < 0;
     if (isDevMode() && rawIdx !== cursorLine) {
       const bestOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) : rawIdx;
@@ -2168,7 +2193,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const rawBestSim = conf;
     const candidateIdx = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
     const confirmingCurrentLine = candidateIdx >= 0 && candidateIdx === cursorLine;
-    const stickAdjust = confirmingCurrentLine ? driverThresholds.stickinessDelta : 0;
+    const stickAdjust = confirmingCurrentLine ? thresholds.stickinessDelta : 0;
     const effectiveThresholdForPending = clamp(requiredThreshold - stickAdjust, 0, 1);
     const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     const rawScoreByIdx = new Map<number, number>();
@@ -3061,6 +3086,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     };
     schedulePending();
   };
+
+  function maybeScheduleLineRetry(targetLine: number, pending: PendingMatch): boolean {
+    if (!Number.isFinite(targetLine)) return false;
+    const line = Math.max(0, Math.floor(targetLine));
+    if (lineMissingRetryLine !== line) {
+      lineMissingRetryLine = line;
+      lineMissingRetryCount = 1;
+    } else if (lineMissingRetryCount < LINE_MISSING_RETRY_LIMIT) {
+      lineMissingRetryCount += 1;
+    } else {
+      lineMissingRetryLine = null;
+      lineMissingRetryCount = 0;
+      return false;
+    }
+    pendingMatch = { ...pending };
+    schedulePending();
+    return true;
+  }
 
   const dispose = () => {
     if (disposed) return;

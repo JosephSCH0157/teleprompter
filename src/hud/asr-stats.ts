@@ -2,7 +2,7 @@ import type { AppStore } from '../state/app-store';
 import type { HudBus } from './speech-notes-hud';
 import type { AsrThresholds } from '../asr/asr-thresholds';
 import { getActiveAsrTuningProfile } from '../asr/tuning-store';
-import { getAsrDriverThresholds } from '../features/asr/asr-scroll-driver';
+import { getAsrDriverThresholds } from '../asr/asr-threshold-store';
 
 export interface AsrStatsHudOptions {
   root?: HTMLElement | null;
@@ -171,6 +171,9 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
       `interim=${toFixed(values.commitInterimMinSim)}`,
       `stick=${toFixed(values.stickinessDelta)}`,
       `tie=${toFixed(values.tieDelta)}`,
+      `anchor=${toFixed(values.anchorMinSim)}`,
+      `anchorStreak=${Number.isFinite(values.anchorStreakNeeded) ? values.anchorStreakNeeded : '?'}`,
+      `anchorJump=${Number.isFinite(values.maxAnchorJumpLines) ? values.maxAnchorJumpLines : '?'}`,
       `streak=${Number.isFinite(values.interimStreakNeeded) ? values.interimStreakNeeded : '?'}`,
       `max=${Number.isFinite(values.maxJumpsPerSecond) ? values.maxJumpsPerSecond : '?'}`,
     ];

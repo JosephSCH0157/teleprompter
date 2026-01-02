@@ -1,5 +1,5 @@
 import type { AsrThresholds } from '../asr/asr-thresholds';
-import { getAsrDriverThresholds, setAsrDriverThresholds } from '../features/asr/asr-scroll-driver';
+import { getAsrDriverThresholds, setAsrDriverThresholds } from '../asr/asr-threshold-store';
 import { saveDevAsrThresholds } from './dev-thresholds';
 
 type ThresholdControl = {
@@ -17,6 +17,9 @@ const CONTROLS: ThresholdControl[] = [
   { key: 'commitInterimMinSim', label: 'Commit interim sim', min: 0, max: 1, step: 0.01 },
   { key: 'stickinessDelta', label: 'Stickiness delta', min: 0, max: 0.3, step: 0.01 },
   { key: 'tieDelta', label: 'Tie margin', min: 0, max: 0.2, step: 0.01 },
+  { key: 'anchorMinSim', label: 'Anchor min sim', min: 0, max: 1, step: 0.01 },
+  { key: 'anchorStreakNeeded', label: 'Anchor streak', min: 1, max: 6, step: 1, isInt: true },
+  { key: 'maxAnchorJumpLines', label: 'Anchor max jump', min: 10, max: 200, step: 5, isInt: true },
   { key: 'interimStreakNeeded', label: 'Interim streak', min: 1, max: 5, step: 1, isInt: true },
   { key: 'maxJumpsPerSecond', label: 'Max jumps/sec', min: 1, max: 8, step: 1, isInt: true },
 ];

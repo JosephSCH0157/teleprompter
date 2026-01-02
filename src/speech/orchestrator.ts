@@ -2,6 +2,7 @@ import { emitAsrSyncFromLineDelta } from './asrSync';
 import * as matcher from './matcher';
 import type { Recognizer } from './recognizer';
 import { createRecognizer } from './recognizer';
+import { getAsrDriverThresholds } from '../asr/asr-threshold-store';
 
 console.info('[ASR_ORCH] LIVE envelope v2025-12-30b');
 
@@ -464,7 +465,10 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
         try { console.log('[ASR] raw recognizer result', { transcript, isFinal }); } catch {}
       const text = transcript || '';
       const match = matchBatch(text, isFinal);
-      const payload = buildTranscriptEnvelope(text, isFinal, match);
+      const thresholds = getAsrDriverThresholds();
+      const bestSim = Number.isFinite(match?.bestSim) ? match.bestSim : 0;
+      const candidateMatch = bestSim >= thresholds.candidateMinSim ? match : undefined;
+      const payload = buildTranscriptEnvelope(text, isFinal, candidateMatch);
       dispatchTranscript(payload);
       });
       try { console.log('[ASR] recognizer.start() returned without throwing'); } catch {}
