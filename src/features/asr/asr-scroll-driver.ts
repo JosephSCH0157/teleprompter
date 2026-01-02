@@ -628,6 +628,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lagRelockHits = 0;
   let lagRelockWindowStart = 0;
     let pendingMatch: PendingMatch | null = null;
+    let pendingSeq = 0;
+
+    const adoptPendingMatch = (next: PendingMatch) => {
+      pendingMatch = next;
+      pendingSeq += 1;
+      return pendingMatch;
+    };
     let pendingRaf = 0;
     let bootLogged = false;
     let forcedCooldownUntil = 0;
@@ -1463,9 +1470,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       pendingRaf = 0;
       if (disposed) return;
       void (async () => {
-      const pending = pendingMatch;
-      if (!pending) return;
-      pendingMatch = null;
+        const seq = pendingSeq;
+        const pending = pendingMatch;
+        if (!pending) return;
+        pendingMatch = null;
 
       const scroller = getScroller();
       if (!scroller) {
@@ -1563,6 +1571,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       let lineEl = getLineElementByIndex(scroller, targetLine);
       if (!lineEl) {
         lineEl = await findLineElWithRetry(scroller, targetLine);
+        if (seq !== pendingSeq) {
+          return;
+        }
       }
       let targetTop = computeLineTargetTop(scroller, lineEl);
       const currentTop = scroller.scrollTop || 0;
@@ -1641,7 +1652,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 logDev('no_target_nudge', { line: targetLine, px: Math.round(limitedTarget - base), conf });
               }
             }
-            pendingMatch = { ...pending };
+            adoptPendingMatch({ ...pending });
             schedulePending();
             return;
           }
@@ -3063,7 +3074,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : (isFinal
         ? (hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines)
         : ((hasPairEvidence || consistencyOk) && interimEligible));
-    pendingMatch = {
+    adoptPendingMatch({
       line: Math.max(0, Math.floor(rawIdx)),
       conf,
       isFinal,
@@ -3083,7 +3094,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       relockOverlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
       relockRepeat: relockRepeatCount || undefined,
       matchId,
-    };
+    });
     schedulePending();
   };
 
@@ -3100,7 +3111,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lineMissingRetryCount = 0;
       return false;
     }
-    pendingMatch = { ...pending };
+    adoptPendingMatch({ ...pending });
     schedulePending();
     return true;
   }
