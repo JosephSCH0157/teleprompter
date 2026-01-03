@@ -22,24 +22,9 @@ function isLocalhost(): boolean {
   }
 }
 
-function wantsLocalAuth(): boolean {
-  if (typeof window === 'undefined') return false;
-  try {
-    const params = new URLSearchParams(window.location.search || '');
-    if (params.get('devAuth') === '1') return true;
-    if (params.get('forceAuth') === '1') return true;
-    if ((window as any).__TP_DEV_FORCE_AUTH) return true;
-  } catch {}
-  try {
-    if (window.localStorage?.getItem('tp_dev_force_auth') === '1') return true;
-  } catch {}
-  return false;
-}
-
 function shouldGateAuth(): boolean {
   if (shouldBypassAuth()) return false;
   if (!hasSupabaseConfig) return false;
-  if (!wantsLocalAuth() && isLocalhost()) return false;
   return true;
 }
 
