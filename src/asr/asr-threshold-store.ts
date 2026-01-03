@@ -12,6 +12,7 @@ import {
 
 export const THRESHOLD_EVENT = 'tp:asr:thresholds';
 const PROFILE_TWEAK_KEYS: Array<keyof AsrThresholds> = [
+  'candidateMinSim',
   'commitFinalMinSim',
   'commitInterimMinSim',
   'stickinessDelta',
@@ -63,6 +64,7 @@ function sanitizeProfileTweaks(tweaks?: Partial<AsrThresholds>): Partial<AsrThre
       case 'commitFinalMinSim':
       case 'commitInterimMinSim':
       case 'anchorMinSim':
+      case 'candidateMinSim':
         clamped = clampNumber(raw, 0, 1);
         break;
       case 'anchorStreakNeeded':
