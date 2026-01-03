@@ -13,11 +13,11 @@ export type AsrThresholds = {
 
 export const DEFAULT_ASR_THRESHOLDS: AsrThresholds = {
   candidateMinSim: 0.46,
-  commitFinalMinSim: 0.69,
-  commitInterimMinSim: 0.77,
+  commitFinalMinSim: 0.66,
+  commitInterimMinSim: 0.66,
   stickinessDelta: 0.08,
-  interimStreakNeeded: 2,
-  maxJumpsPerSecond: 3,
+  interimStreakNeeded: 3,
+  maxJumpsPerSecond: 4,
   tieDelta: 0.05,
   anchorMinSim: 0.7,
   maxAnchorJumpLines: 60,
