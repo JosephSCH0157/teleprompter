@@ -225,6 +225,11 @@ const DEFAULT_CATCHUP_MODE_MAX_JUMP = 25;
 const DEFAULT_CATCHUP_MODE_MIN_SIM = 0.55;
 const DEFAULT_CATCHUP_MODE_DURATION_MS = 2500;
 const DEFAULT_CATCHUP_LOOKAHEAD_BONUS = 120;
+const POST_CATCHUP_MS = 2200;
+const POST_CATCHUP_DROP = 0.05;
+const POST_CATCHUP_MAX_DELTA = 24;
+const POST_CATCHUP_REQUIRE_IN_BAND = true;
+const POST_CATCHUP_SAMPLES = 6;
 const DEFAULT_BACKJUMP_BLOCK_LINES = 5;
 const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
 const DEFAULT_FREEZE_LOW_SIM_WINDOW_MS = 5000;
@@ -577,6 +582,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let threshold = resolveThreshold();
   setAsrDriverThresholds({ candidateMinSim: threshold });
   let lastLineIndex = -1;
+  let postCatchupUntil = 0;
+  let postCatchupSamplesLeft = 0;
   let lastSeekTs = 0;
   let lastSameLineNudgeTs = 0;
   let lastMoveAt = 0;
@@ -655,9 +662,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let noMatchHits = 0;
     let lastNoMatchAt = 0;
     let lastStuckDumpAt = 0;
-  let lastMatchId: string | undefined;
-  let lastScriptHash = '';
-  let missingMatchIdKeysLogged = false;
+    let lastMatchId: string | undefined;
+    let lastScriptHash = '';
+    let missingMatchIdKeysLogged = false;
+    const armPostCatchupGrace = (reason: string) => {
+      const now = Date.now();
+      postCatchupUntil = now + POST_CATCHUP_MS;
+      postCatchupSamplesLeft = POST_CATCHUP_SAMPLES;
+      logDev('[ASR] post catchup armed', { reason, until: postCatchupUntil });
+    };
+    const isPostCatchupActive = (now: number) =>
+      now < postCatchupUntil && postCatchupSamplesLeft > 0;
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -1939,6 +1954,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     const rawMatchId = (detail as any)?.matchId;
     const noMatch = detail?.noMatch === true;
     const hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
@@ -2274,6 +2290,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
     const catchUpModeWasActive = catchUpModeUntil > now;
     const lowSimFloor = lagRelockActive ? DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR : DEFAULT_LOW_SIM_FLOOR;
+    const delta = rawIdx - cursorLine;
+    const deltaAbs = Math.abs(delta);
+    const postCatchupActive = isPostCatchupActive(now);
+    if (postCatchupActive) {
+      effectiveThreshold = Math.max(0.5, effectiveThreshold - POST_CATCHUP_DROP);
+    }
+    const alignedPostCatchup =
+      postCatchupActive &&
+      (!POST_CATCHUP_REQUIRE_IN_BAND || inBand) &&
+      deltaAbs <= POST_CATCHUP_MAX_DELTA;
     if (catchUpModeWasActive && rawIdx < cursorLine) {
       warnGuard('catchup_ignore_behind', [
         `current=${cursorLine}`,
@@ -2654,7 +2680,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockReason = isFinal ? 'final' : repeatOk ? 'repeat' : spanOk ? 'span' : 'overlap';
       }
     }
-    if (effectiveThreshold > 0 && conf < effectiveThreshold) {
+    if (alignedPostCatchup && effectiveThreshold > 0 && conf < effectiveThreshold) {
+      logDev('postCatchup relax', {
+        sim: conf,
+        need: effectiveThreshold,
+        delta,
+        aligned: alignedPostCatchup,
+        msLeft: postCatchupUntil - now,
+      });
+    } else if (effectiveThreshold > 0 && conf < effectiveThreshold) {
       if (!relockModeActive) {
         warnGuard('low_sim_wait', [
           matchId ? `matchId=${matchId}` : '',
@@ -2829,6 +2863,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             catchupCommit = true;
             forceReason = forceReason || 'catchup';
             effectiveThreshold = Math.min(effectiveThreshold, catchupMinSim);
+            armPostCatchupGrace('catchup');
           }
         }
       }
