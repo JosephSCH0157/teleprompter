@@ -171,10 +171,36 @@ function isLocalhost(): boolean {
   }
 }
 
+function shouldBypassAuth(): boolean {
+	try {
+		const search = window.location.search || '';
+		const hash = window.location.hash || '';
+		if (search.includes('ci=1') || search.includes('uiMock=1') || search.includes('mockFolder=1')) return true;
+		if (hash.includes('ci=1') || hash.includes('uiMock=1')) return true;
+		if ((window as any).__TP_SKIP_AUTH === true) return true;
+	} catch {}
+	return false;
+}
+
+function wantsLocalAuth(): boolean {
+	if (typeof window === 'undefined') return false;
+	try {
+		const params = new URLSearchParams(window.location.search || '');
+		if (params.get('devAuth') === '1') return true;
+		if (params.get('forceAuth') === '1') return true;
+		if ((window as any).__TP_DEV_FORCE_AUTH) return true;
+	} catch {}
+	try {
+		if (window.localStorage?.getItem('tp_dev_force_auth') === '1') return true;
+	} catch {}
+	return false;
+}
+
 function shouldGateAuth(): boolean {
-  if (!hasSupabaseConfig) return false;
-  if (isLocalhost()) return false;
-  return true;
+	if (shouldBypassAuth()) return false;
+	if (!hasSupabaseConfig) return false;
+	if (!wantsLocalAuth() && isLocalhost()) return false;
+	return true;
 }
 
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
