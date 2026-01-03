@@ -13,15 +13,6 @@ function shouldBypassAuth(): boolean {
   return false;
 }
 
-function isLocalhost(): boolean {
-  try {
-    const host = window.location.hostname;
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
-  } catch {
-    return false;
-  }
-}
-
 function shouldGateAuth(): boolean {
   if (shouldBypassAuth()) return false;
   if (!hasSupabaseConfig) return false;

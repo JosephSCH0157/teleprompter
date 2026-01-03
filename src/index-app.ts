@@ -162,15 +162,6 @@ function isCiSmoke(): boolean {
   }
 }
 
-function isLocalhost(): boolean {
-  try {
-    const host = window.location.hostname;
-    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
-  } catch {
-    return false;
-  }
-}
-
 function shouldBypassAuth(): boolean {
 	try {
 		const search = window.location.search || '';

@@ -25,6 +25,10 @@ function hasSessionPatches(patches: Partial<Record<SpeakerSlot, LearnedPatch>>):
   return Object.values(patches).some((patch) => !!patch && Object.keys(patch).length > 0);
 }
 
+function hasPatchValuesLocal(patch?: LearnedPatch | null): patch is LearnedPatch {
+  return !!patch && Object.keys(patch).length > 0;
+}
+
 function buildModalContent(entries: Array<{ slot: SpeakerSlot; label: string; name: string }>): string {
   const rows = entries
     .map(
@@ -164,7 +168,7 @@ export function maybePromptSaveSpeakerProfiles(mode: string | null | undefined):
 
   for (const slot of (Object.keys(patches) as SpeakerSlot[])) {
     const patch = patches[slot];
-    if (!hasPatchValues(patch)) continue;
+    if (!hasPatchValuesLocal(patch)) continue;
     const profileId = bindings[slot] || null;
     const profile = getProfile(profileId);
     const bindingLabel = profile?.name || SLOT_LABELS[slot] || slot.toUpperCase();
@@ -197,7 +201,7 @@ export function maybePromptSaveSpeakerProfiles(mode: string | null | undefined):
     entries.forEach((entry) => {
       const input = inputs[entry.slot];
       const patch = patchMap[entry.slot];
-      if (!patch || !hasPatchValues(patch)) return;
+      if (!patch || !hasPatchValuesLocal(patch)) return;
       const name = input?.value?.trim() || entry.label;
       const existingId = bindingsSnapshot[entry.slot] || null;
       if (existingId) {

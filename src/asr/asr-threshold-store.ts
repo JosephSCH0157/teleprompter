@@ -89,9 +89,11 @@ function computeEffectiveThresholds(): AsrThresholds {
   });
 }
 
-function approxEqual(a: number | undefined, b: number | undefined, eps = 1e-6): boolean {
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
-  return Math.abs(a - b) <= eps;
+function approxEqual(a: number | null | undefined, b: number | null | undefined, eps = 1e-6): boolean {
+  const au = typeof a === 'number' ? a : NaN;
+  const bu = typeof b === 'number' ? b : NaN;
+  if (!Number.isFinite(au) || !Number.isFinite(bu)) return false;
+  return Math.abs(au - bu) <= eps;
 }
 
 function hasPatchValues(patch?: LearnedPatch | null): patch is LearnedPatch {
