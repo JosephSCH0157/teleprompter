@@ -18,6 +18,7 @@ import {
 import {
   applyProfileToSlot,
   createProfile,
+  getActiveSpeakerSlot,
   getProfile,
   getSpeakerBindings,
   setProfileAsrTweaks,
