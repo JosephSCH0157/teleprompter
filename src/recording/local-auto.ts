@@ -7,15 +7,48 @@
   let active = false;
   let currentStream: MediaStream | null = null;
 
+  const pad = (n: number) => String(n).padStart(2, '0');
+  function formatTimestamp(date: Date): string {
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+    const hour = pad(date.getHours());
+    const minute = pad(date.getMinutes());
+    const second = pad(date.getSeconds());
+    return `${year}-${month}-${day}_${hour}-${minute}-${second}`;
+  }
+
+  function sanitizeTitle(title: string): string {
+    const trimmed = String(title || 'Script').trim() || 'Script';
+    const cleaned = trimmed
+      .replace(/[:/\\?<>|*"']/g, '-')
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_');
+    const sliced = cleaned.slice(0, 64).replace(/^_+|_+$/g, '');
+    return sliced || 'Script';
+  }
+
+  function getActiveScriptTitle(): string {
+    try {
+      const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
+      if (titleInput && titleInput.value) return titleInput.value;
+    } catch {}
+    try {
+      const stored = localStorage.getItem('tp_last_script_title') || localStorage.getItem('tp_last_script_name');
+      if (stored) return stored;
+    } catch {}
+    return 'Script';
+  }
+
   const nowName = (): string => {
     try {
-      const d = new Date();
-      const pad = (n: number) => String(n).padStart(2, '0');
-      return `Anvil_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(
-        d.getMinutes(),
-      )}-${pad(d.getSeconds())}.webm`;
+      const date = new Date();
+      const title = sanitizeTitle(getActiveScriptTitle());
+      const ts = formatTimestamp(date);
+      return `${title}_${ts}.webm`;
     } catch {
-      return 'Anvil_Recording.webm';
+      return `Script_${formatTimestamp(new Date())}.webm`;
     }
   };
 
