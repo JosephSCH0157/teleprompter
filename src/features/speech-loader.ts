@@ -11,6 +11,18 @@ import {
   resolveActiveScroller,
 } from '../scroll/scroller';
 import { maybePromptSaveSpeakerProfiles } from '../ui/save-speaker-profiles-prompt';
+import {
+  getSessionLearnedPatches,
+  clearSessionLearnedPatches,
+} from '../asr/asr-threshold-store';
+import {
+  applyProfileToSlot,
+  createProfile,
+  getProfile,
+  getSpeakerBindings,
+  setProfileAsrTweaks,
+} from '../ui/speaker-profiles-store';
+import type { SpeakerSlot } from '../types/speaker-profiles';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -469,6 +481,39 @@ function isDevMode(): boolean {
   return false;
 }
 
+const AUTO_SLOT_NAMES: Record<SpeakerSlot, string> = {
+  s1: 'Speaker 1 (S1)',
+  s2: 'Speaker 2 (S2)',
+  g1: 'Guest 1 (G1)',
+  g2: 'Guest 2 (G2)',
+};
+
+function autoSaveSpeakerPatchesAfterStop(mode: string | null | undefined): void {
+  if (typeof document === 'undefined') return;
+  const normalizedMode = (mode || '').toLowerCase();
+  if (!['asr', 'hybrid'].includes(normalizedMode)) return;
+  const patches = getSessionLearnedPatches();
+  const slots = Object.keys(patches) as SpeakerSlot[];
+  if (!slots.length) return;
+  const bindings = getSpeakerBindings();
+  for (const slot of slots) {
+    const patch = patches[slot];
+    if (!patch || !Object.keys(patch).length) continue;
+    const profileId = bindings[slot] || null;
+    const profile = getProfile(profileId);
+    if (!profile) {
+      const name = AUTO_SLOT_NAMES[slot] || slot.toUpperCase();
+      const created = createProfile(name, patch);
+      applyProfileToSlot(slot, created.id);
+      continue;
+    }
+    setProfileAsrTweaks(profile.id, {
+      ...(profile.asrTweaks || {}),
+      ...patch,
+    });
+  }
+}
+
 function isSettingsHydrating(): boolean {
   try { return !!(window as any).__tpSettingsHydrating; } catch { return false; }
 }
@@ -686,7 +731,11 @@ function ensureSessionStopHooked(): void {
     const mode = typeof detail.mode === 'string' && detail.mode
       ? detail.mode
       : lastScrollMode || getScrollMode();
-    maybePromptSaveSpeakerProfiles(mode);
+    autoSaveSpeakerPatchesAfterStop(mode);
+    if (isDevMode()) {
+      maybePromptSaveSpeakerProfiles(mode);
+    }
+    clearSessionLearnedPatches();
   }, TRANSCRIPT_EVENT_OPTIONS);
 }
 
