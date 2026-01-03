@@ -22,6 +22,7 @@ import {
   getSpeakerBindings,
   setProfileAsrTweaks,
 } from '../ui/speaker-profiles-store';
+import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
 import type { SpeakerSlot } from '../types/speaker-profiles';
 
 type AnyFn = (...args: any[]) => any;
@@ -481,36 +482,140 @@ function isDevMode(): boolean {
   return false;
 }
 
-const AUTO_SLOT_NAMES: Record<SpeakerSlot, string> = {
-  s1: 'Speaker 1 (S1)',
-  s2: 'Speaker 2 (S2)',
-  g1: 'Guest 1 (G1)',
-  g2: 'Guest 2 (G2)',
+const SPEAKER_SLOTS: SpeakerSlot[] = ['s1', 's2', 'g1', 'g2'];
+const SPEAKER_NAME_SELECTORS: Record<SpeakerSlot, string> = {
+  s1: '#name-s1',
+  s2: '#name-s2',
+  g1: '#name-g1',
+  g2: '#name-g2',
 };
+
+const DEFAULT_SPEAKER_LABELS: Record<SpeakerSlot, string> = {
+  s1: 'Speaker 1',
+  s2: 'Speaker 2',
+  g1: 'Guest 1',
+  g2: 'Guest 2',
+};
+
+function getSpeakerName(slot: SpeakerSlot): string {
+  try {
+    const selector = SPEAKER_NAME_SELECTORS[slot];
+    const input = document.querySelector<HTMLInputElement>(selector);
+    const value = input?.value?.trim();
+    if (value) return value;
+  } catch {}
+  return DEFAULT_SPEAKER_LABELS[slot] || slot.toUpperCase();
+}
+
+function ensureProfileForSlot(slot: SpeakerSlot): ReturnType<typeof createProfile> {
+  const bindings = getSpeakerBindings();
+  const existingId = bindings[slot] || null;
+  const profile = getProfile(existingId);
+  if (profile) return profile;
+  const created = createProfile(getSpeakerName(slot));
+  applyProfileToSlot(slot, created.id);
+  return created;
+}
+
+const LOWER_GUARDS = [
+  'low_sim',
+  'low_sim_wait',
+  'no_match',
+  'no_match_pipeline',
+  'min_evidence',
+];
+const RAISE_GUARDS = [
+  'tie_forward',
+  'forward_outrun',
+  'forward_progress',
+  'forward_bias',
+];
+
+function clampCandidate(value: number): number {
+  return Math.max(0.55, Math.min(0.85, clamp01(value)));
+}
+
+let summaryListenerAttached = false;
+
+function computeCandidateDelta(guardCounts?: Record<string, number>): number {
+  if (!guardCounts) return 0;
+  const lowerHits = LOWER_GUARDS.reduce((sum, key) => sum + (guardCounts[key] || 0), 0);
+  const raiseHits = RAISE_GUARDS.reduce((sum, key) => sum + (guardCounts[key] || 0), 0);
+  if (lowerHits >= 3) return -0.01;
+  if (raiseHits >= 3) return 0.01;
+  return 0;
+}
+
+function handleAsrSummary(summary: Record<string, any> | undefined): void {
+  if (!summary) return;
+  const mode = (summary.mode || '').toLowerCase();
+  if (!['asr', 'hybrid'].includes(mode)) return;
+  const commitCount = typeof summary.commitCount === 'number' ? summary.commitCount : 0;
+  if (commitCount < 4) return;
+  const guardCounts = summary.guardCounts as Record<string, number> | undefined;
+  const delta = computeCandidateDelta(guardCounts);
+  if (!delta) return;
+  const slot = getActiveSpeakerSlot();
+  const profile = ensureProfileForSlot(slot);
+  const existing = profile.asrTweaks?.candidateMinSim ?? DEFAULT_ASR_THRESHOLDS.candidateMinSim;
+  const next = clampCandidate(existing + delta);
+  if (Math.abs(next - existing) < 1e-6) return;
+  setProfileAsrTweaks(profile.id, {
+    ...(profile.asrTweaks || {}),
+    candidateMinSim: next,
+  });
+  if (isDevMode()) {
+    console.debug('[ASR] summary auto-tune', { slot, delta, next, guardCounts });
+  }
+}
+
+function attachSummaryListener(): void {
+  if (summaryListenerAttached || typeof window === 'undefined') return;
+  summaryListenerAttached = true;
+  try {
+    window.addEventListener('tp:asr:summary', (event) => {
+      handleAsrSummary((event as CustomEvent)?.detail);
+    });
+  } catch {}
+}
 
 function autoSaveSpeakerPatchesAfterStop(mode: string | null | undefined): void {
   if (typeof document === 'undefined') return;
   const normalizedMode = (mode || '').toLowerCase();
   if (!['asr', 'hybrid'].includes(normalizedMode)) return;
   const patches = getSessionLearnedPatches();
-  const slots = Object.keys(patches) as SpeakerSlot[];
-  if (!slots.length) return;
-  const bindings = getSpeakerBindings();
-  for (const slot of slots) {
+  const bindingsBefore = getSpeakerBindings();
+  const createdSlots: SpeakerSlot[] = [];
+  for (const slot of SPEAKER_SLOTS) {
+    if (!bindingsBefore[slot]) {
+      ensureProfileForSlot(slot);
+      createdSlots.push(slot);
+    } else {
+      ensureProfileForSlot(slot);
+    }
+  }
+
+  if (isDevMode()) {
+    console.debug('[ASR] autoSaveSpeakerPatchesAfterStop', {
+      mode: normalizedMode,
+      patches: Object.fromEntries(
+        SPEAKER_SLOTS.map((slot) => [slot, Object.keys(patches[slot] || {})]),
+      ),
+      createdSlots,
+    });
+  }
+
+  for (const slot of SPEAKER_SLOTS) {
     const patch = patches[slot];
     if (!patch || !Object.keys(patch).length) continue;
-    const profileId = bindings[slot] || null;
-    const profile = getProfile(profileId);
-    if (!profile) {
-      const name = AUTO_SLOT_NAMES[slot] || slot.toUpperCase();
-      const created = createProfile(name, patch);
-      applyProfileToSlot(slot, created.id);
-      continue;
-    }
+    const profile = ensureProfileForSlot(slot);
     setProfileAsrTweaks(profile.id, {
       ...(profile.asrTweaks || {}),
       ...patch,
     });
+    if (isDevMode()) {
+      console.debug('[ASR] saved patch', slot, Object.keys(patch));
+    }
   }
 }
 
@@ -744,6 +849,10 @@ try {
 } catch {
   // ignore
 }
+
+try {
+  attachSummaryListener();
+} catch {}
 
 function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
   if (!sr) return;
