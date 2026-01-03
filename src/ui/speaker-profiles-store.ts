@@ -3,6 +3,7 @@ import type {
   SpeakerProfile,
   SpeakerSlot,
 } from '../types/speaker-profiles';
+import type { AsrThresholds } from '../asr/asr-thresholds';
 
 type SpeakerBindingsRecord = Record<SpeakerSlot, string | null>;
 
@@ -266,6 +267,51 @@ export function subscribeActiveSpeaker(
 export function getProfileById(id: string | null): SpeakerProfile | undefined {
   if (!id) return undefined;
   return state.profiles.find((profile) => profile.id === id);
+}
+
+export type SpeakerProfileSummary = {
+  id: string;
+  name: string;
+};
+
+export type LearnedPatch = Partial<AsrThresholds>;
+
+function hasPatchValues(patch?: LearnedPatch | null): patch is LearnedPatch {
+  return !!patch && Object.keys(patch).length > 0;
+}
+
+export function listProfiles(): SpeakerProfileSummary[] {
+  return state.profiles.map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+  }));
+}
+
+export function createProfile(name: string, patch?: LearnedPatch): SpeakerProfile {
+  const trimmed = (name || '').trim() || `Profile ${Date.now()}`;
+  return upsertSpeakerProfile({
+    id: '',
+    name: trimmed,
+    asrTweaks: hasPatchValues(patch) ? { ...patch } : undefined,
+  });
+}
+
+export function renameProfile(profileId: string, name: string): SpeakerProfile | undefined {
+  const profile = getProfileById(profileId);
+  if (!profile) return undefined;
+  const trimmed = (name || '').trim() || profile.name;
+  return upsertSpeakerProfile({
+    ...profile,
+    name: trimmed,
+  });
+}
+
+export function applyProfileToSlot(slot: SpeakerSlot, profileId: string | null): void {
+  setSpeakerBinding(slot, profileId);
+}
+
+export function getProfile(profileId: string | null): SpeakerProfile | undefined {
+  return getProfileById(profileId);
 }
 
 export function subscribeSpeakerBindings(

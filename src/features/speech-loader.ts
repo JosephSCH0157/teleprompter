@@ -10,6 +10,7 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../scroll/scroller';
+import { maybePromptSaveSpeakerProfiles } from '../ui/save-speaker-profiles-prompt';
 
 type AnyFn = (...args: any[]) => any;
 
@@ -679,8 +680,13 @@ function ensureSessionStopHooked(): void {
   if (sessionStopHooked) return;
   sessionStopHooked = true;
   if (typeof window === 'undefined') return;
-  window.addEventListener('tp:session:stop', () => {
+  window.addEventListener('tp:session:stop', (event) => {
     detachAsrScrollDriver();
+    const detail = (event as CustomEvent)?.detail || {};
+    const mode = typeof detail.mode === 'string' && detail.mode
+      ? detail.mode
+      : lastScrollMode || getScrollMode();
+    maybePromptSaveSpeakerProfiles(mode);
   }, TRANSCRIPT_EVENT_OPTIONS);
 }
 

@@ -1,6 +1,7 @@
 import type { AsrThresholds } from './asr-thresholds';
 import { DEFAULT_ASR_THRESHOLDS, normalizeThresholds } from './asr-thresholds';
 import { loadDevAsrThresholds } from '../dev/dev-thresholds';
+import type { SpeakerSlot } from '../types/speaker-profiles';
 import {
   getProfileById,
   getSpeakerBindings,
@@ -21,8 +22,11 @@ const PROFILE_TWEAK_KEYS: Array<keyof AsrThresholds> = [
   'anchorStreakNeeded',
 ];
 
+export type LearnedPatch = Partial<AsrThresholds>;
+
 let baseThresholds: AsrThresholds = normalizeThresholds({ ...DEFAULT_ASR_THRESHOLDS });
 let driverThresholds: AsrThresholds = baseThresholds;
+const sessionLearnedPatches: Partial<Record<SpeakerSlot, LearnedPatch>> = {};
 
 function broadcastThresholdUpdate() {
   if (typeof window === 'undefined') return;
@@ -85,9 +89,40 @@ function computeEffectiveThresholds(): AsrThresholds {
   });
 }
 
+function approxEqual(a: number | undefined, b: number | undefined, eps = 1e-6): boolean {
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  return Math.abs(a - b) <= eps;
+}
+
+function hasPatchValues(patch?: LearnedPatch | null): patch is LearnedPatch {
+  return !!patch && Object.keys(patch).length > 0;
+}
+
+function updateSessionPatch(slot: SpeakerSlot) {
+  const bindings = getSpeakerBindings();
+  const profileId = bindings[slot] || null;
+  const profile = getProfileById(profileId);
+  const patch: LearnedPatch = {};
+  for (const key of PROFILE_TWEAK_KEYS) {
+    const driverValue = driverThresholds[key];
+    if (!Number.isFinite(driverValue)) continue;
+    const baseValue = baseThresholds[key];
+    if (approxEqual(driverValue, baseValue)) continue;
+    const storedValue = profile?.asrTweaks?.[key];
+    if (typeof storedValue === 'number' && approxEqual(driverValue, storedValue)) continue;
+    patch[key] = driverValue;
+  }
+  if (hasPatchValues(patch)) {
+    sessionLearnedPatches[slot] = patch;
+  } else {
+    delete sessionLearnedPatches[slot];
+  }
+}
+
 function refreshEffectiveThresholds() {
   driverThresholds = computeEffectiveThresholds();
   broadcastThresholdUpdate();
+  updateSessionPatch(getActiveSpeakerSlot());
 }
 
 function applyDevOverrides() {
@@ -122,4 +157,14 @@ export function getEffectiveAsrThresholds(): AsrThresholds {
 
 export function getBaseAsrThresholds(): AsrThresholds {
   return baseThresholds;
+}
+
+export function getSessionLearnedPatches(): Partial<Record<SpeakerSlot, LearnedPatch>> {
+  return { ...sessionLearnedPatches };
+}
+
+export function clearSessionLearnedPatches(): void {
+  Object.keys(sessionLearnedPatches).forEach((slot) => {
+    delete sessionLearnedPatches[slot as SpeakerSlot];
+  });
 }
