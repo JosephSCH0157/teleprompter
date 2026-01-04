@@ -2367,19 +2367,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       resetLagRelock('out-of-band');
       return;
     }
-    if (manualAnchorPending && manualAnchorEnabled) {
-      const candidateLine = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
-      const candidateNeed = clamp(thresholds.candidateMinSim + MANUAL_ANCHOR_SIM_SLACK, 0, 1);
-      if (
-        candidateLine >= 0 &&
-        Math.abs(candidateLine - manualAnchorPending.targetIndex) <= MANUAL_ANCHOR_WINDOW_LINES &&
-        conf >= candidateNeed
-      ) {
-        if (adoptManualAnchorTruth(candidateLine, conf, scrollerForMatch)) {
-          return;
-        }
-      }
-    }
     const rawBestSim = conf;
     const candidateIdx = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
     const confirmingCurrentLine = candidateIdx >= 0 && candidateIdx === cursorLine;
@@ -2449,6 +2436,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let effectiveThreshold = requiredThreshold;
     const scrollerForMatch = getScroller();
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
+    if (manualAnchorPending && manualAnchorEnabled) {
+      const candidateLine = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
+      const candidateNeed = clamp(thresholds.candidateMinSim + MANUAL_ANCHOR_SIM_SLACK, 0, 1);
+      if (
+        candidateLine >= 0 &&
+        Math.abs(candidateLine - manualAnchorPending.targetIndex) <= MANUAL_ANCHOR_WINDOW_LINES &&
+        conf >= candidateNeed
+      ) {
+        if (adoptManualAnchorTruth(candidateLine, conf, scrollerForMatch)) {
+          return;
+        }
+      }
+    }
     const catchUpModeWasActive = catchUpModeUntil > now;
     const lowSimFloor = lagRelockActive ? DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR : DEFAULT_LOW_SIM_FLOOR;
     const delta = rawIdx - cursorLine;

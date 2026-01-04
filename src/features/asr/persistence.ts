@@ -11,6 +11,7 @@ export interface PersistedAsrSettings {
   threshold?: number;
   endpointingMs?: number;
   fillerFilter?: boolean;
+  manualAnchorAdoptEnabled?: boolean;
 }
 
 const STORAGE_KEY = 'tp_asr_settings_v1';
@@ -73,6 +74,10 @@ export function initAsrPersistence(): void {
       (store?.get('asr.filterFillers') as boolean | undefined) ??
       persisted?.fillerFilter ??
       true,
+    manualAnchorAdoptEnabled:
+      (store?.get('asr.manualAnchorAdoptEnabled') as boolean | undefined) ??
+      persisted?.manualAnchorAdoptEnabled ??
+      true,
   };
   try {
     speechStore.set(initialState);
@@ -90,6 +95,7 @@ export function initAsrPersistence(): void {
     try { store.set('asr.filterFillers', next.fillerFilter); } catch {}
     try { store.set('asr.threshold', next.threshold); } catch {}
     try { store.set('asr.endpointMs', next.endpointingMs); } catch {}
+    try { store.set('asr.manualAnchorAdoptEnabled', next.manualAnchorAdoptEnabled ?? true); } catch {}
   };
   syncToStore(initialState);
 
@@ -103,6 +109,7 @@ export function initAsrPersistence(): void {
         threshold: state.threshold,
         endpointingMs: state.endpointingMs,
         fillerFilter: state.fillerFilter,
+        manualAnchorAdoptEnabled: state.manualAnchorAdoptEnabled,
       };
       savePersistedAsrSettings(toSave);
       syncToStore(state);
