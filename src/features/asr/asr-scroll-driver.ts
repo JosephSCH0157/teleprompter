@@ -47,6 +47,12 @@ type PendingMatch = {
   matchId?: string;
   requiredThreshold?: number;
   topScores?: Array<{ idx: number; score: number }>;
+  recoveryDetails?: {
+    delta: number;
+    sim: number;
+    streak: number;
+    debt: number;
+  };
   tieGap?: number;
   stickinessApplied?: boolean;
 };
@@ -2041,6 +2047,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         jumpHistory.push(now);
       }
       noteCommit(prevLineIndex, targetLine, now);
+      if (pending.recoveryDetails && isDevMode()) {
+        const { delta: recDelta, sim: recSim, streak, debt } = pending.recoveryDetails;
+        const msg = `[ASR_RECOVERY] commit delta=${recDelta} sim=${formatLogScore(recSim)} streak=${streak} debt=${debt}`;
+        logDev(msg);
+        try {
+          window.toast?.(msg, { type: 'info', timeoutMs: 2200 });
+        } catch {
+          // ignore
+        }
+      }
       resetLowSimStreak();
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
@@ -2469,7 +2485,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (recoveryCandidate) {
       const recoveryNeed = Math.max(trustFloor, requiredThreshold - RECOVERY_SIM_SLACK);
       effectiveThreshold = Math.min(effectiveThreshold, recoveryNeed);
-      recoveryRelaxed = true;
       logDev('recovery relax', {
         delta,
         sim: conf,
@@ -2478,6 +2493,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         streak: behindDebtStreak,
       });
     }
+    const recoveryDetails = recoveryCandidate
+      ? {
+          delta,
+          sim: conf,
+          streak: behindDebtStreak,
+          debt: behindDebt,
+        }
+      : undefined;
     const scrollerForMatch = getScroller();
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
     if (manualAnchorPending && manualAnchorEnabled) {
@@ -3335,6 +3358,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       relockOverlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
       relockRepeat: relockRepeatCount || undefined,
       matchId,
+      recoveryDetails,
     });
     schedulePending();
   };
