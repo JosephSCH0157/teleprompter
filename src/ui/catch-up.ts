@@ -41,6 +41,16 @@ export function wireCatchUpButton(deps: CatchUpDeps): void {
   btn.dataset.wired = '1';
 
   btn.addEventListener('click', () => {
+    const manualPending = (window as any).__tpAsrManualAnchorPending;
+    if (manualPending) {
+      deps.devLog?.('[catchup] manual anchor pending, skipping catch-up', manualPending);
+      try {
+        window.toast?.('Manual re-anchor pending — say a phrase to confirm your position.', { type: 'info' });
+      } catch {
+        // ignore
+      }
+      return;
+    }
     const scroller = deps.getScroller();
     if (!scroller) return;
     const prevTop = scroller.scrollTop || 0;

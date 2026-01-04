@@ -235,6 +235,11 @@ const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
 const DEFAULT_FREEZE_LOW_SIM_WINDOW_MS = 5000;
 const EVENT_RING_MAX = 50;
 const EVENT_DUMP_COUNT = 12;
+const MANUAL_ANCHOR_MIN_SCROLL_PX = 400;
+const MANUAL_ANCHOR_MAX_SCROLL_WINDOW_MS = 1000;
+const MANUAL_ANCHOR_PENDING_TIMEOUT_MS = 5000;
+const MANUAL_ANCHOR_WINDOW_LINES = 10;
+const MANUAL_ANCHOR_SIM_SLACK = 0.03;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -773,6 +778,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let catchUpModeUntil = 0;
   const eventRing: AsrEventSnapshot[] = [];
   const guardCounts = new Map<string, number>();
+  let manualAnchorPending: { targetIndex: number; ts: number } | null = null;
+  let manualScrollLastTop = 0;
+  let manualScrollLastAt = 0;
+  let manualScrollListenerAttached = false;
+  let manualScrollHandler: ((event: Event) => void) | null = null;
+  let manualScrollToastAt = 0;
+  let lastProgrammaticScrollAt = 0;
 
   activeGuardCounts = guardCounts;
 
@@ -856,11 +868,141 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (scriptHashChanged) lastScriptHash = scriptHash;
   };
 
+  const manualScrollListenerOptions = { passive: true, capture: true };
+
+  const isManualAnchorAdoptEnabled = () => {
+    try {
+      const settings = getAsrSettings();
+      return settings.manualAnchorAdoptEnabled !== false;
+    } catch {
+      return true;
+    }
+  };
+
+  const updateManualAnchorGlobalState = () => {
+    try {
+      (window as any).__tpAsrManualAnchorPending = manualAnchorPending;
+    } catch {
+      // ignore
+    }
+  };
+
+  const rejectManualAnchorPending = (reason: string) => {
+    if (!manualAnchorPending) return;
+    logDev(`[ASR_ADOPT] rejected (${reason})`);
+    manualAnchorPending = null;
+    updateManualAnchorGlobalState();
+  };
+
+  const markProgrammaticScroll = () => {
+    lastProgrammaticScrollAt = Date.now();
+    const scroller = getScroller();
+    manualScrollLastTop = scroller?.scrollTop ?? manualScrollLastTop;
+    manualScrollLastAt = lastProgrammaticScrollAt;
+  };
+
+  const setManualAnchorPendingState = (targetIndex: number, now: number) => {
+    manualAnchorPending = { targetIndex, ts: now };
+    updateManualAnchorGlobalState();
+    logDev('[ASR_ADOPT] pending targetIndex=' + manualAnchorPending.targetIndex);
+    if (isDevMode() && now - manualScrollToastAt > 3000) {
+      manualScrollToastAt = now;
+      try {
+        window.toast?.('Manual reposition pending (waiting for local match)', { type: 'info', timeoutMs: 2000 });
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const handleManualScrollEvent = () => {
+    if (disposed) return;
+    if (!isManualAnchorAdoptEnabled()) return;
+    const mode = getScrollMode();
+    if (mode !== 'hybrid' && mode !== 'asr') return;
+    const now = Date.now();
+    if (now - lastProgrammaticScrollAt < 250) return;
+    const scroller = getScroller();
+    if (!scroller) return;
+    const currentTop = scroller.scrollTop || 0;
+    const delta = Math.abs(currentTop - manualScrollLastTop);
+    const windowMs = manualScrollLastAt ? now - manualScrollLastAt : Infinity;
+    manualScrollLastTop = currentTop;
+    manualScrollLastAt = now;
+    if (delta < MANUAL_ANCHOR_MIN_SCROLL_PX || windowMs > MANUAL_ANCHOR_MAX_SCROLL_WINDOW_MS) return;
+    const markerIdx = computeMarkerLineIndex(scroller);
+    if (!Number.isFinite(markerIdx) || markerIdx < 0) return;
+    const targetIndex = Math.max(0, Math.floor(markerIdx));
+    if (manualAnchorPending && Math.abs(manualAnchorPending.targetIndex - targetIndex) <= MANUAL_ANCHOR_WINDOW_LINES) {
+      manualAnchorPending.ts = now;
+      updateManualAnchorGlobalState();
+      return;
+    }
+    setManualAnchorPendingState(targetIndex, now);
+  };
+
+  const attachManualScrollWatcher = () => {
+    if (manualScrollListenerAttached) return;
+    manualScrollListenerAttached = true;
+    manualScrollHandler = handleManualScrollEvent;
+    try { document.addEventListener('scroll', manualScrollHandler, manualScrollListenerOptions); } catch {}
+    try { window.addEventListener('scroll', manualScrollHandler, manualScrollListenerOptions); } catch {}
+    manualScrollLastTop = getScroller()?.scrollTop ?? manualScrollLastTop;
+    manualScrollLastAt = Date.now();
+    lastProgrammaticScrollAt = manualScrollLastAt;
+  };
+
+  const detachManualScrollWatcher = () => {
+    if (!manualScrollListenerAttached || !manualScrollHandler) return;
+    manualScrollListenerAttached = false;
+    try { document.removeEventListener('scroll', manualScrollHandler, manualScrollListenerOptions); } catch {}
+    try { window.removeEventListener('scroll', manualScrollHandler, manualScrollListenerOptions); } catch {}
+    manualScrollHandler = null;
+  };
+
+  const adoptManualAnchorTruth = (lineIndex: number, sim: number, scroller: HTMLElement | null) => {
+    const normalized = Number.isFinite(lineIndex) ? Math.max(0, Math.floor(lineIndex)) : 0;
+    const now = Date.now();
+    manualAnchorPending = null;
+    updateManualAnchorGlobalState();
+    clearEvidenceBuffer('manual adopt');
+    resetLowSimStreak();
+    lowSimFreezeLogged = false;
+    strongHits.length = 0;
+    pendingMatch = null;
+    pendingSeq += 1;
+    lastLineIndex = normalized;
+    matchAnchorIdx = normalized;
+    lastEvidenceAt = now;
+    lastForwardCommitAt = now;
+    lastCommitAt = now;
+    lastSeekTs = now;
+    lastMoveAt = now;
+    lastIngestAt = now;
+    resyncUntil = 0;
+    resyncAnchorIdx = null;
+    resyncReason = null;
+    catchUpModeUntil = 0;
+    postCatchupUntil = 0;
+    postCatchupSamplesLeft = 0;
+    const scrollTop = scroller?.scrollTop ?? lastKnownScrollTop;
+    lastKnownScrollTop = scrollTop;
+    appliedTopPx = scrollTop;
+    pursuitActive = false;
+    pursuitTargetTop = null;
+    pursuitVel = 0;
+    logDev('[ASR_ADOPT] accepted bestIndex=' + normalized + ' sim=' + formatLogScore(sim));
+    setCurrentIndex(normalized, 'manualAdopt');
+    updateDebugState('manual-adopt');
+    return true;
+  };
+
   try {
     const hasScript = !!(getScriptRoot() || document.querySelector('.line'));
     if (hasScript) ensureAsrTuningProfile('reading');
   } catch {}
   applyTuningProfile(getActiveAsrTuningProfile());
+  attachManualScrollWatcher();
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
@@ -1469,6 +1611,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       appliedTopPx = applied;
       lastKnownScrollTop = applied;
       lastMoveAt = Date.now();
+      markProgrammaticScroll();
     }
     emitPursuitHud(err, pursuitVel, pursuitTargetTop, current);
     window.requestAnimationFrame(tickController);
@@ -1776,16 +1919,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           }
           lastBackRecoverIdx = targetLine;
           lastBackRecoverHitAt = now;
-          if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
-            const applied = applyCanonicalScrollTop(currentTop + deltaPx, {
-              scroller,
-              reason: 'asr-back-recovery',
-            });
-            lastKnownScrollTop = applied;
-            lastMoveAt = Date.now();
-            lastBackRecoverAt = now;
-            backRecoverStreak = 0;
-            logDev('back-recovery nudge', { px: deltaPx, conf, line: targetLine });
+            if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
+              const applied = applyCanonicalScrollTop(currentTop + deltaPx, {
+                scroller,
+                reason: 'asr-back-recovery',
+              });
+              lastKnownScrollTop = applied;
+              lastMoveAt = Date.now();
+              markProgrammaticScroll();
+              lastBackRecoverAt = now;
+              backRecoverStreak = 0;
+              logDev('back-recovery nudge', { px: deltaPx, conf, line: targetLine });
             updateDebugState('back-recovery');
           }
         } else {
@@ -2206,6 +2350,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ? Math.min(totalLines - 1, cursorLine + matchWindowAhead)
         : cursorLine + matchWindowAhead);
     const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
+    const manualAnchorEnabled = isManualAnchorAdoptEnabled();
+    if (manualAnchorPending && manualAnchorEnabled && now - manualAnchorPending.ts >= MANUAL_ANCHOR_PENDING_TIMEOUT_MS) {
+      rejectManualAnchorPending('no local evidence');
+    }
     if (!inBand) {
       warnGuard('match_out_of_band', [
         `current=${cursorLine}`,
@@ -2218,6 +2366,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       emitHudStatus('match_out_of_band', 'Out-of-band match ignored');
       resetLagRelock('out-of-band');
       return;
+    }
+    if (manualAnchorPending && manualAnchorEnabled) {
+      const candidateLine = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
+      const candidateNeed = clamp(thresholds.candidateMinSim + MANUAL_ANCHOR_SIM_SLACK, 0, 1);
+      if (
+        candidateLine >= 0 &&
+        Math.abs(candidateLine - manualAnchorPending.targetIndex) <= MANUAL_ANCHOR_WINDOW_LINES &&
+        conf >= candidateNeed
+      ) {
+        if (adoptManualAnchorTruth(candidateLine, conf, scrollerForMatch)) {
+          return;
+        }
+      }
     }
     const rawBestSim = conf;
     const candidateIdx = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
@@ -2999,12 +3160,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const scrollTopBefore = scroller?.scrollTop ?? 0;
         const targetTop = scroller ? resolveTargetTop(scroller, rawIdx) : null;
         if (scroller && targetTop != null) {
-          const applied = applyCanonicalScrollTop(targetTop, {
-            scroller,
-            reason: 'asr-behind-reanchor',
-          });
-          lastKnownScrollTop = applied;
-          lastMoveAt = Date.now();
+        const applied = applyCanonicalScrollTop(targetTop, {
+          scroller,
+          reason: 'asr-behind-reanchor',
+        });
+        lastKnownScrollTop = applied;
+        lastMoveAt = Date.now();
+        markProgrammaticScroll();
         }
         lastLineIndex = Math.max(0, Math.floor(rawIdx));
         matchAnchorIdx = lastLineIndex;
@@ -3169,6 +3331,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     try { window.removeEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
     try { window.removeEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
+    detachManualScrollWatcher();
+    manualAnchorPending = null;
+    updateManualAnchorGlobalState();
     if (activeGuardCounts === guardCounts) {
       activeGuardCounts = null;
     }
@@ -3224,6 +3389,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBufferChars = 0;
     consistencyEntries.length = 0;
     lastStuckDumpAt = 0;
+    manualAnchorPending = null;
+    updateManualAnchorGlobalState();
     setCurrentIndex(lastLineIndex, 'manualReset');
     updateDebugState('sync-index');
   };

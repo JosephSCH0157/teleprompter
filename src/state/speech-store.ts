@@ -10,6 +10,7 @@ export interface SpeechState {
   threshold: number;
   endpointingMs: number;
   fillerFilter: boolean;
+  manualAnchorAdoptEnabled: boolean;
 }
 
 type Subscriber = (next: SpeechState) => void;
@@ -21,6 +22,7 @@ const state: SpeechState = {
   threshold: 0.6,
   endpointingMs: 700,
   fillerFilter: true,
+  manualAnchorAdoptEnabled: true,
 };
 
 const subs = new Set<Subscriber>();
