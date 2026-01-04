@@ -235,6 +235,13 @@ const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
 const DEFAULT_FREEZE_LOW_SIM_WINDOW_MS = 5000;
 const EVENT_RING_MAX = 50;
 const EVENT_DUMP_COUNT = 12;
+const BEHIND_DEBT_WINDOW_LINES = 4;
+const BEHIND_DEBT_DECAY = 2;
+const BEHIND_DEBT_CAP = 200;
+const RECOVERY_BIG_JUMP_LINES = 15;
+const RECOVERY_SIM_MIN = 0.75;
+const RECOVERY_STREAK_REQUIRED = 3;
+const RECOVERY_SIM_SLACK = 0.05;
 const MANUAL_ANCHOR_MIN_SCROLL_PX = 400;
 const MANUAL_ANCHOR_MAX_SCROLL_WINDOW_MS = 1000;
 const MANUAL_ANCHOR_PENDING_TIMEOUT_MS = 5000;
@@ -634,6 +641,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastBehindStrongAt = 0;
   let behindStrongSince = 0;
   let behindStrongCount = 0;
+  let behindDebt = 0;
+  let behindDebtStreak = 0;
   let lastBehindRecoveryAt = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
@@ -894,6 +903,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     updateManualAnchorGlobalState();
   };
 
+  const primeRecoveryForManualAnchor = () => {
+    behindDebtStreak = Math.max(behindDebtStreak, RECOVERY_STREAK_REQUIRED);
+    behindDebt = Math.max(behindDebt, RECOVERY_BIG_JUMP_LINES);
+  };
+
   const markProgrammaticScroll = () => {
     lastProgrammaticScrollAt = Date.now();
     const scroller = getScroller();
@@ -905,6 +919,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     manualAnchorPending = { targetIndex, ts: now };
     updateManualAnchorGlobalState();
     logDev('[ASR_ADOPT] pending targetIndex=' + manualAnchorPending.targetIndex);
+    primeRecoveryForManualAnchor();
     if (isDevMode() && now - manualScrollToastAt > 3000) {
       manualScrollToastAt = now;
       try {
@@ -2413,6 +2428,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
     }
+    const delta = rawIdx - cursorLine;
+    const deltaAbs = Math.abs(delta);
+    if (delta >= BEHIND_DEBT_WINDOW_LINES) {
+      behindDebt = Math.min(BEHIND_DEBT_CAP, behindDebt + delta);
+      behindDebtStreak += 1;
+    } else {
+      behindDebt = Math.max(0, behindDebt - BEHIND_DEBT_DECAY);
+      if (deltaAbs <= BEHIND_DEBT_WINDOW_LINES) {
+        behindDebtStreak = Math.max(0, behindDebtStreak - 1);
+      }
+    }
     if (lagRelockActive && Number.isFinite(bestSpan) && bestSpan > 1) {
       const parts = [
         `Relock best=${rawIdx}`,
@@ -2434,6 +2460,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     const effectiveRawSim = rawScoreByIdx.get(rawIdx) ?? rawBestSim;
     let effectiveThreshold = requiredThreshold;
+    const trustFloor = Math.max(thresholds.candidateMinSim, thresholds.commitInterimMinSim - RECOVERY_SIM_SLACK);
+    const recoveryCandidate =
+      !noMatchFlag &&
+      delta >= RECOVERY_BIG_JUMP_LINES &&
+      conf >= RECOVERY_SIM_MIN &&
+      behindDebtStreak >= RECOVERY_STREAK_REQUIRED;
+    if (recoveryCandidate) {
+      const recoveryNeed = Math.max(trustFloor, requiredThreshold - RECOVERY_SIM_SLACK);
+      effectiveThreshold = Math.min(effectiveThreshold, recoveryNeed);
+      recoveryRelaxed = true;
+      logDev('recovery relax', {
+        delta,
+        sim: conf,
+        need: recoveryNeed,
+        debt: behindDebt,
+        streak: behindDebtStreak,
+      });
+    }
     const scrollerForMatch = getScroller();
     const scrollTopForMatch = scrollerForMatch?.scrollTop ?? 0;
     if (manualAnchorPending && manualAnchorEnabled) {
@@ -2451,8 +2495,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     const catchUpModeWasActive = catchUpModeUntil > now;
     const lowSimFloor = lagRelockActive ? DEFAULT_LAG_RELOCK_LOW_SIM_FLOOR : DEFAULT_LOW_SIM_FLOOR;
-    const delta = rawIdx - cursorLine;
-    const deltaAbs = Math.abs(delta);
     const postCatchupActive = isPostCatchupActive(now);
     if (postCatchupActive) {
       effectiveThreshold = Math.max(0.5, effectiveThreshold - POST_CATCHUP_DROP);
