@@ -145,16 +145,29 @@ function createAutoMotor() {
   return { setEnabled, setVelocity, tick };
 }
 
+function logHybridPaceTelemetry(payload) {
+  if (!isDevMode()) return;
+  try {
+    console.debug("[HYBRID_WPM]", payload);
+  } catch {}
+}
+
 // src/asr/v2/paceEngine.ts
 function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n));
 }
 function createPaceEngine() {
   let mode = "assist";
-  let caps = { minPxs: 10, maxPxs: 220, accelCap: 60, decayMs: 250 };
+  let caps = {
+    base: { minPxs: 8, maxPxs: 360 },
+    final: { minPxs: 10, maxPxs: 220 },
+    accelCap: 60,
+    decayMs: 250,
+  };
   let sens = 1;
   let _catchup = "off";
   let target = 0;
+  let baseTarget = 0;
   let lastUpdate = performance.now();
   let lastWpm;
   const DEAD_WPM = 8;
@@ -177,7 +190,23 @@ function createPaceEngine() {
     mode = m;
   }
   function setCaps(c) {
-    caps = { ...caps, ...c };
+    const { base, final, minPxs, maxPxs, accelCap, decayMs } = c;
+    if (base) {
+      caps.base = { ...caps.base, ...base };
+    }
+    if (final) {
+      caps.final = { ...caps.final, ...final };
+    }
+    if (typeof minPxs === "number") {
+      caps.base.minPxs = minPxs;
+      caps.final.minPxs = minPxs;
+    }
+    if (typeof maxPxs === "number") {
+      caps.base.maxPxs = maxPxs;
+      caps.final.maxPxs = maxPxs;
+    }
+    if (typeof accelCap === "number") caps.accelCap = accelCap;
+    if (typeof decayMs === "number") caps.decayMs = decayMs;
   }
   function setSensitivity(mult) {
     sens = clamp(mult, 0.5, 1.5);
@@ -193,7 +222,9 @@ function createPaceEngine() {
       const tgt = speaking2 ? SPEAKING_PXS : target * Math.pow(0.85, dt * (1e3 / caps.decayMs));
       const maxStep = caps.accelCap * dt;
       const next = target + clamp(tgt - target, -maxStep, maxStep);
-      target = clamp(next, caps.minPxs, caps.maxPxs);
+      const nextBase = clamp(next, caps.base.minPxs, caps.base.maxPxs);
+      baseTarget = nextBase;
+      target = clamp(baseTarget, caps.final.minPxs, caps.final.maxPxs);
       return;
     }
     let wpm = tempo.wpm;
@@ -208,11 +239,24 @@ function createPaceEngine() {
       const smoothed = target === 0 ? pxsRaw : ALPHA * pxsRaw + (1 - ALPHA) * target;
       const maxStep = caps.accelCap * dt;
       const next = target + clamp(smoothed - target, -maxStep, maxStep);
-      target = clamp(next, caps.minPxs, caps.maxPxs);
+      const nextBase = clamp(next, caps.base.minPxs, caps.base.maxPxs);
+      baseTarget = nextBase;
+      target = clamp(baseTarget, caps.final.minPxs, caps.final.maxPxs);
+      logHybridPaceTelemetry({
+        mode,
+        wpm,
+        pxsRaw: Number(pxsRaw.toFixed(2)),
+        smoothed: Number(smoothed.toFixed(2)),
+        baseTarget: Number(baseTarget.toFixed(2)),
+        finalTarget: Number(target.toFixed(2)),
+        baseCaps: { ...caps.base },
+        finalCaps: { ...caps.final },
+        accelCap: caps.accelCap,
+      });
     }
   }
   function getTargetPxs() {
-    return clamp(target, caps.minPxs, caps.maxPxs);
+    return clamp(target, caps.final.minPxs, caps.final.maxPxs);
   }
   return { setMode, setCaps, setSensitivity, setCatchupBias, consume, getTargetPxs };
 }
