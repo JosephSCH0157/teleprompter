@@ -154,6 +154,20 @@ function logHybridPaceTelemetry(payload) {
   } catch {}
 }
 
+function convertWpmToPxPerSec(targetWpm: number) {
+  try {
+    const doc = document.documentElement;
+    const cs = getComputedStyle(doc);
+    const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+    const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+    const lineHeightPx = fsPx * lhScale;
+    const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+    return (targetWpm / 60 / wpl) * lineHeightPx;
+  } catch {
+    return 0;
+  }
+}
+
 // src/asr/v2/paceEngine.ts
 function clamp(n, lo, hi) {
   return Math.min(hi, Math.max(lo, n));
@@ -352,27 +366,12 @@ function createOrchestrator() {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
       noteHybridSpeechActivity(ts);
-      markHybridOnScript();
+      _markHybridOnScript();
     });
   } catch {}
-  function convertWpmToPxPerSec(targetWpm: number) {
-    try {
-      const doc = document.documentElement;
-      const cs = getComputedStyle(doc);
-      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
-      const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
-      const lineHeightPx = fsPx * lhScale;
-      const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-      return (targetWpm / 60 / wpl) * lineHeightPx;
-    } catch {
-      return 0;
-    }
-  }
   try {
-    window.addEventListener("tp:asr:guard", (ev) => {
-      const detail = (ev as CustomEvent).detail || {};
-      const reason = detail.reason || detail.text || detail.key || "guard";
-      markHybridOffScript(reason);
+    window.addEventListener("tp:asr:guard", () => {
+      _markHybridOffScript();
     });
   } catch {}
   async function stop() {
@@ -847,7 +846,7 @@ function installScrollRouter(opts) {
     hybridMotor.setVelocityPxPerSec(effective);
     emitHybridSafety();
   }
-  function markHybridOffScript(reason?: string) {
+  function _markHybridOffScript() {
     if (state2.mode !== "hybrid") return;
     offScriptStreak += 1;
     onScriptStreak = 0;
@@ -858,7 +857,7 @@ function installScrollRouter(opts) {
       emitHybridSafety();
     }
   }
-  function markHybridOnScript() {
+  function _markHybridOnScript() {
     if (state2.mode !== "hybrid") return;
     onScriptStreak += 1;
     offScriptStreak = 0;
