@@ -337,16 +337,44 @@ function createOrchestrator() {
         }
       };
       const h = onErr;
-      window.addEventListener("tp:asr:error", h);
-      asrErrUnsub = () => {
-        try {
-          window.removeEventListener("tp:asr:error", h);
+    window.addEventListener("tp:asr:error", h);
+    asrErrUnsub = () => {
+      try {
+        window.removeEventListener("tp:asr:error", h);
         } catch {
         }
       };
     } catch {
     }
   }
+  try {
+    window.addEventListener("tp:asr:sync", (ev) => {
+      const detail = (ev as CustomEvent).detail || {};
+      const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
+      noteHybridSpeechActivity(ts);
+      markHybridOnScript();
+    });
+  } catch {}
+  function convertWpmToPxPerSec(targetWpm: number) {
+    try {
+      const doc = document.documentElement;
+      const cs = getComputedStyle(doc);
+      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+      const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
+      const lineHeightPx = fsPx * lhScale;
+      const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
+      return (targetWpm / 60 / wpl) * lineHeightPx;
+    } catch {
+      return 0;
+    }
+  }
+  try {
+    window.addEventListener("tp:asr:guard", (ev) => {
+      const detail = (ev as CustomEvent).detail || {};
+      const reason = detail.reason || detail.text || detail.key || "guard";
+      markHybridOffScript(reason);
+    });
+  } catch {}
   async function stop() {
     try {
       unsub?.();
@@ -401,6 +429,19 @@ const hybridMotor = createHybridWpmMotor({
     try { console.debug('[HybridMotor]', evt, data); } catch {}
   } : () => {},
 });
+const SILENCE_MS = 3000;
+const OFFSCRIPT_SLOW = 0.4;
+const OFFSCRIPT_ENTER = 2;
+const OFFSCRIPT_EXIT = 2;
+const RECOVERY_SCALE = 1;
+let hybridBasePxps = 0;
+let hybridScale = RECOVERY_SCALE;
+let hybridPausedBySilence = false;
+let hybridWantedRunning = false;
+let hybridSilenceTimeoutId: number | null = null;
+let lastSpeechAtMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+let offScriptStreak = 0;
+let onScriptStreak = 0;
 var isHybridBypass = () => {
   try {
     return localStorage.getItem("tp_hybrid_bypass") === "1";
@@ -755,6 +796,101 @@ function installScrollRouter(opts) {
       emitMotorState("hybridWpm", false);
     }
   }
+  function nowMs() {
+    if (typeof performance !== "undefined" && typeof performance.now === "function") {
+      return performance.now();
+    }
+    return Date.now();
+  }
+  function clearHybridSilenceTimer() {
+    if (hybridSilenceTimeoutId != null) {
+      clearTimeout(hybridSilenceTimeoutId);
+      hybridSilenceTimeoutId = null;
+    }
+  }
+  function handleHybridSilenceTimeout() {
+    hybridSilenceTimeoutId = null;
+    if (state2.mode !== "hybrid") return;
+    if (!hybridMotor.isRunning()) return;
+    hybridPausedBySilence = true;
+    hybridMotor.stop();
+    emitMotorState("hybridWpm", false);
+    emitHybridSafety();
+  }
+  function armHybridSilenceTimer() {
+    clearHybridSilenceTimer();
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    hybridSilenceTimeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), SILENCE_MS);
+  }
+  function noteHybridSpeechActivity(ts?: number) {
+    const now = typeof ts === "number" ? ts : nowMs();
+    lastSpeechAtMs = now;
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    clearHybridSilenceTimer();
+    armHybridSilenceTimer();
+    if (hybridPausedBySilence) {
+      hybridPausedBySilence = false;
+      emitHybridSafety();
+      try { applyGate(); } catch {}
+    }
+  }
+  function setHybridScale(nextScale: number) {
+    const clamped = Math.max(0, Math.min(nextScale, 1));
+    if (hybridScale === clamped) return false;
+    hybridScale = clamped;
+    applyHybridVelocity();
+    return true;
+  }
+  function applyHybridVelocity() {
+    const base = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
+    const effective = base * hybridScale;
+    hybridMotor.setVelocityPxPerSec(effective);
+    emitHybridSafety();
+  }
+  function markHybridOffScript(reason?: string) {
+    if (state2.mode !== "hybrid") return;
+    offScriptStreak += 1;
+    onScriptStreak = 0;
+    if (offScriptStreak >= OFFSCRIPT_ENTER) {
+      const changed = setHybridScale(OFFSCRIPT_SLOW);
+      if (!changed) emitHybridSafety();
+    } else {
+      emitHybridSafety();
+    }
+  }
+  function markHybridOnScript() {
+    if (state2.mode !== "hybrid") return;
+    onScriptStreak += 1;
+    offScriptStreak = 0;
+    if (onScriptStreak >= OFFSCRIPT_EXIT) {
+      const changed = setHybridScale(RECOVERY_SCALE);
+      if (!changed) emitHybridSafety();
+    } else {
+      emitHybridSafety();
+    }
+  }
+  function emitHybridSafety() {
+    try {
+      const payload = {
+        pausedBySilence: hybridPausedBySilence,
+        offScriptStreak,
+        onScriptStreak,
+        scale: hybridScale,
+        lastSpeechAtMs,
+      };
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("tp:hybridSafety", { detail: payload }));
+      }
+    } catch {}
+  }
+  function resetHybridSafetyState() {
+    offScriptStreak = 0;
+    onScriptStreak = 0;
+    hybridPausedBySilence = false;
+    clearHybridSilenceTimer();
+    setHybridScale(RECOVERY_SCALE);
+    emitHybridSafety();
+  }
   const AUTO_MIN = 1;
   const AUTO_MAX = 60;
   const AUTO_STEP_FINE = 1;
@@ -795,6 +931,8 @@ function installScrollRouter(opts) {
         hybridMotor.stop();
         emitMotorState("hybridWpm", false);
       }
+      clearHybridSilenceTimer();
+      resetHybridSafetyState();
       // All non-hybrid modes require both user intent AND speech to be active
       const want = !!userEnabled;
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
@@ -828,7 +966,11 @@ function installScrollRouter(opts) {
     const gateWanted = computeGateWanted();
     const phaseAllowed = canRunHybridMotor();
     const wantEnabled =
-      userEnabled && speechActive && phaseAllowed && (isHybridBypass() ? true : gateWanted);
+      userEnabled &&
+      speechActive &&
+      phaseAllowed &&
+      !hybridPausedBySilence &&
+      (isHybridBypass() ? true : gateWanted);
     const dueToGateSilence =
       userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted;
     const hybridRunning = hybridMotor.isRunning();
@@ -840,6 +982,7 @@ function installScrollRouter(opts) {
       if (!hybridRunning) {
         hybridMotor.start();
         emitMotorState("hybridWpm", true);
+        armHybridSilenceTimer();
       }
     } else {
       if (silenceTimer) {
@@ -857,6 +1000,7 @@ function installScrollRouter(opts) {
             if (!stillWantEnabled && hybridMotor.isRunning()) {
               hybridMotor.stop();
               emitMotorState("hybridWpm", false);
+              clearHybridSilenceTimer();
             }
           } catch {}
           silenceTimer = void 0;
@@ -864,6 +1008,7 @@ function installScrollRouter(opts) {
       } else if (hybridRunning) {
         hybridMotor.stop();
         emitMotorState("hybridWpm", false);
+        clearHybridSilenceTimer();
       }
     }
     const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Phase:${phaseAllowed ? "live" : "blocked"} \u2022 Speech:${speechActive ? "1" : "0"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
@@ -897,36 +1042,23 @@ function installScrollRouter(opts) {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
-            // In WPM mode, immediately update scroll speed based on new target WPM
-            if (state2.mode === 'wpm' || state2.mode === 'hybrid') {
+            const pxs = convertWpmToPxPerSec(val);
+            hybridBasePxps = pxs;
+            applyHybridVelocity();
+            if (state2.mode === 'wpm') {
               try {
-                // Calculate px/s from target WPM using typography settings
-                const cs = getComputedStyle(document.documentElement);
-                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
-                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
-                const lineHeightPx = fsPx * lhScale;
-                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-                const pxs = (val / 60 / wpl) * lineHeightPx;
-                
-                if (state2.mode === 'wpm') {
-                  // Update auto-scroll speed directly
-                  if (typeof auto.setSpeed === 'function') {
-                    auto.setSpeed(pxs);
+                if (typeof auto.setSpeed === 'function') {
+                  auto.setSpeed(pxs);
+                }
+                if (orchRunning) {
+                  const status = orch.getStatus();
+                  const detectedWpm = status.wpm;
+                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                    const sensitivity = val / detectedWpm;
+                    orch.setSensitivity(sensitivity);
+                  } else {
+                    orch.setSensitivity(1.0);
                   }
-                  
-                  // Also update orchestrator sensitivity if running
-                  if (orchRunning) {
-                    const status = orch.getStatus();
-                    const detectedWpm = status.wpm;
-                    if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                      const sensitivity = val / detectedWpm;
-                      orch.setSensitivity(sensitivity);
-                    } else {
-                      orch.setSensitivity(1.0);
-                    }
-                  }
-                } else {
-                  hybridMotor.setVelocityPxPerSec(pxs);
                 }
               } catch {
               }
@@ -939,7 +1071,7 @@ function installScrollRouter(opts) {
     
   // (Removed v1.7.1: dev-only polling shim for legacy select pokes — SSOT stable)
 
-    // Also handle input event for real-time WPM target updates
+  // Also handle input event for real-time WPM target updates
     document.addEventListener("input", (e) => {
       const t = e.target;
       if (t?.id === "wpmTarget") {
@@ -947,35 +1079,23 @@ function installScrollRouter(opts) {
           const val = Number(t.value);
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
-            if (state2.mode === 'wpm' || state2.mode === 'hybrid') {
+            const pxs = convertWpmToPxPerSec(val);
+            hybridBasePxps = pxs;
+            applyHybridVelocity();
+            if (state2.mode === 'wpm') {
               try {
-                // Calculate px/s from target WPM
-                const cs = getComputedStyle(document.documentElement);
-                const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
-                const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
-                const lineHeightPx = fsPx * lhScale;
-                const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-                const pxs = (val / 60 / wpl) * lineHeightPx;
-                
-                if (state2.mode === 'wpm') {
-                  // Update auto-scroll speed directly
-                  if (typeof auto.setSpeed === 'function') {
-                    auto.setSpeed(pxs);
+                if (typeof auto.setSpeed === 'function') {
+                  auto.setSpeed(pxs);
+                }
+                if (orchRunning) {
+                  const status = orch.getStatus();
+                  const detectedWpm = status.wpm;
+                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                    const sensitivity = val / detectedWpm;
+                    orch.setSensitivity(sensitivity);
+                  } else {
+                    orch.setSensitivity(1.0);
                   }
-                  
-                  // Also update orchestrator sensitivity if running
-                  if (orchRunning) {
-                    const status = orch.getStatus();
-                    const detectedWpm = status.wpm;
-                    if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                      const sensitivity = val / detectedWpm;
-                      orch.setSensitivity(sensitivity);
-                    } else {
-                      orch.setSensitivity(1.0);
-                    }
-                  }
-                } else {
-                  hybridMotor.setVelocityPxPerSec(pxs);
                 }
               } catch {
               }
@@ -1027,7 +1147,11 @@ function installScrollRouter(opts) {
       applyGate();
     });
     window.addEventListener("tp:vad", (e) => {
-      vadGate = !!(e && e.detail && e.detail.speaking);
+      const speaking = !!(e && e.detail && e.detail.speaking);
+      vadGate = speaking;
+      if (speaking) {
+        noteHybridSpeechActivity(nowMs());
+      }
       applyGate();
     });
   } catch {
@@ -1039,6 +1163,11 @@ function installScrollRouter(opts) {
         const on = !!(e && e.detail && (e.detail.on ?? e.detail.enabled));
         userIntentOn = on;
         userEnabled = !!on;
+        hybridWantedRunning = userEnabled;
+        if (!hybridWantedRunning) {
+          hybridPausedBySilence = false;
+          clearHybridSilenceTimer();
+        }
         applyGate();
       } catch {}
     });
@@ -1046,6 +1175,11 @@ function installScrollRouter(opts) {
     if (typeof pending === "boolean") {
       userIntentOn = pending;
       userEnabled = pending;
+      hybridWantedRunning = userEnabled;
+      if (!hybridWantedRunning) {
+        hybridPausedBySilence = false;
+        clearHybridSilenceTimer();
+      }
       applyGate();
       try {
         delete (window as any).__tpAutoIntentPending;
@@ -1054,21 +1188,22 @@ function installScrollRouter(opts) {
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;
+    hybridWantedRunning = true;
     try {
-      // For WPM mode, use baseline WPM to set initial speed
       if (state2.mode === "wpm") {
         const baselineWpm = parseFloat(localStorage.getItem("tp_baseline_wpm") || "120") || 120;
-        // Calculate approximate px/s from baseline WPM
-        const cs = getComputedStyle(document.documentElement);
-        const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
-        const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
-        const lineHeightPx = fsPx * lhScale;
-        const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-        const pxs = (baselineWpm / 60 / wpl) * lineHeightPx;
+        const pxs = convertWpmToPxPerSec(baselineWpm);
         auto.setSpeed?.(pxs);
       } else {
-        hybridMotor.setVelocityPxPerSec(getStoredSpeed());
+        auto.setSpeed?.(getStoredSpeed());
       }
+      const sliderInput = document.getElementById("wpmTarget") as HTMLInputElement | null;
+      const sliderVal = sliderInput ? Number(sliderInput.value) : NaN;
+      const sliderPx =
+        Number.isFinite(sliderVal) && sliderVal > 0 ? convertWpmToPxPerSec(sliderVal) : null;
+      const seedPx = sliderPx ?? getStoredSpeed();
+      hybridBasePxps = seedPx;
+      applyHybridVelocity();
     } catch {}
     applyGate();
   } else {
