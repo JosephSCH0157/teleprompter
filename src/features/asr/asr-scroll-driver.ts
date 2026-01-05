@@ -12,6 +12,8 @@ import {
 } from '../../scroll/scroller';
 import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
 
+// ASR Training rule: matching should be permissive; committing should be conservative.
+
 type DriverOptions = {
   /** Minimum forward line delta before issuing a seek. */
   minLineAdvance?: number;
@@ -178,10 +180,10 @@ const DEFAULT_BEHIND_RECOVERY_COOLDOWN_MS = 5000;
 const DEFAULT_AMBIGUITY_SIM_DELTA = 0.06;
 const DEFAULT_AMBIGUITY_NEAR_LINES = 6;
 const DEFAULT_AMBIGUITY_FAR_LINES = 20;
-const DEFAULT_MIN_TOKEN_COUNT = 6;
-const DEFAULT_MIN_EVIDENCE_CHARS = 40;
+const DEFAULT_MIN_TOKEN_COUNT = 3;
+const DEFAULT_MIN_EVIDENCE_CHARS = 20;
 const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
-const DEFAULT_INTERIM_STABLE_REPEATS = 2;
+const DEFAULT_INTERIM_STABLE_REPEATS = 1;
 const DEFAULT_FORWARD_TIE_EPS = 0.03;
 const DEFAULT_FORWARD_PROGRESS_WINDOW_MS = 4000;
 const DEFAULT_FORWARD_BIAS_RECENT_LINES = 6;
@@ -767,7 +769,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let interimHysteresisBonus = DEFAULT_INTERIM_HYSTERESIS_BONUS;
   let interimStableRepeats = DEFAULT_INTERIM_STABLE_REPEATS;
   let bufferMs = 0;
-  let allowShortEvidence = false;
+  let allowShortEvidence = true;
   let allowCatchup = false;
   let allowInterimCommit = true;
   let consistencyCount = 0;
@@ -785,6 +787,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const ambiguityNearLines = DEFAULT_AMBIGUITY_NEAR_LINES;
   const ambiguityFarLines = DEFAULT_AMBIGUITY_FAR_LINES;
   const strongHits: Array<{ ts: number; idx: number; conf: number; isFinal: boolean }> = [];
+  const pushStrongHit = (idx: number, conf: number, isFinal: boolean, ts: number) => {
+    if (!Number.isFinite(idx)) return;
+    strongHits.push({ ts, idx, conf, isFinal });
+    while (strongHits.length && strongHits[0].ts < ts - strongWindowMs) {
+      strongHits.shift();
+    }
+  };
   const evidenceEntries: EvidenceEntry[] = [];
   let evidenceText = '';
   let lastBufferChars = 0;
@@ -1869,14 +1878,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             ]);
             return;
           }
-          if (now - lastSameLineNudgeTs < sameLineThrottleMs) {
-            warnGuard('same_line_throttle', [
-              `line=${targetLine}`,
-              `since=${now - lastSameLineNudgeTs}`,
-              `throttle=${sameLineThrottleMs}`,
-            ]);
-            return;
-          }
+            if (now - lastSameLineNudgeTs < sameLineThrottleMs) {
+              warnGuard('same_line_throttle', [
+                `line=${targetLine}`,
+                `since=${now - lastSameLineNudgeTs}`,
+                `throttle=${sameLineThrottleMs}`,
+              ]);
+              pushStrongHit(targetLine, conf, isFinal, now);
+              recordConsistencyEntry({
+                ts: now,
+                idx: targetLine,
+                delta: targetLine - cursorLine,
+                sim: conf,
+                nearMarker: true,
+                isFinal,
+              });
+              return;
+            }
             if (deltaPx > creepNearPx) {
               const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
               const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
@@ -1984,6 +2002,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } else {
           emitHudStatus('no_evidence', 'Blocked: min evidence');
         }
+        return;
+      }
+
+      if (!isFinal && !interimEligible) {
         return;
       }
 
@@ -3311,10 +3333,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
 
-    strongHits.push({ ts: now, idx: rawIdx, conf, isFinal });
-    while (strongHits.length && strongHits[0].ts < now - strongWindowMs) {
-      strongHits.shift();
-    }
+    pushStrongHit(rawIdx, conf, isFinal, now);
     if (outrunCommit && strongHits.length > 1) {
       strongHits.splice(0, strongHits.length - 1);
       behindStrongCount = 0;
@@ -3333,11 +3352,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     const consistencyOk = allowShortEvidence && consistencyState.ok;
     const slamDunkFinal = isSlamDunkFinal(rawIdx, conf);
+    const finalEvidence = hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines;
+    const interimEvidence = hasPairEvidence || consistencyOk || bufferGrowing;
     const hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal
       ? true
-      : (isFinal
-        ? (hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines)
-        : ((hasPairEvidence || consistencyOk) && interimEligible));
+      : isFinal
+        ? finalEvidence
+        : interimEvidence;
     adoptPendingMatch({
       line: Math.max(0, Math.floor(rawIdx)),
       conf,
