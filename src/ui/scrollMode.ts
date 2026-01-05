@@ -60,15 +60,13 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       setRowVisibility(autoRow as HTMLElement | null, true);
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
       setRowVisibility(autoSpeedWrap as HTMLElement | null, false);
-      if (!asrLive) setRowVisibility(wpmRow as HTMLElement | null, true);
+      setRowVisibility(wpmRow as HTMLElement | null, true);
       setHelp('WPM mode uses this target pace to drive auto-scroll.');
       break;
     case 'hybrid':
-      // Treat UI like auto but with WPM target visible
-      setRowVisibility(autoRow as HTMLElement | null, true);
-      if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
-      setRowVisibility(autoSpeedWrap as HTMLElement | null, true);
-      if (!asrLive) setRowVisibility(wpmRow as HTMLElement | null, true);
+      setRowVisibility(autoRow as HTMLElement | null, false);
+      setRowVisibility(autoSpeedWrap as HTMLElement | null, false);
+      setRowVisibility(wpmRow as HTMLElement | null, true);
       setHelp('Hybrid keeps a WPM baseline while ASR can nudge ahead.');
       break;
     case 'asr':

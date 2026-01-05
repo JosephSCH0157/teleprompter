@@ -518,8 +518,8 @@ function applyMode(m) {
     const speedInput = document.getElementById('autoSpeed') as HTMLInputElement | null;
     const modeExplain = document.querySelector('[data-scroll-mode-explain]') as HTMLElement | null;
 
-    if (m === 'wpm') {
-      // Show WPM controls, hide manual speed controls
+    const isWpmLike = m === 'wpm' || m === 'hybrid';
+    if (isWpmLike) {
       if (wpmRow) {
         wpmRow.classList.remove('visually-hidden');
         wpmRow.removeAttribute('aria-hidden');
@@ -528,11 +528,15 @@ function applyMode(m) {
         autoRow.classList.add('visually-hidden');
         autoRow.setAttribute('aria-hidden', 'true');
       }
-      if (speedLabel) speedLabel.textContent = 'Target speed (WPM)';
-      if (speedHint) speedHint.textContent = 'Scroll speed is driven purely by this WPM value.';
-      if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = 'wpm'; }
+      if (m === 'wpm') {
+        if (speedLabel) speedLabel.textContent = 'Target speed (WPM)';
+        if (speedHint) speedHint.textContent = 'Scroll speed is driven purely by this WPM value.';
+      } else {
+        if (speedLabel) speedLabel.textContent = 'Baseline speed (WPM)';
+        if (speedHint) speedHint.textContent = 'Hybrid: uses this WPM as a floor; ASR can pull the text ahead as you speak.';
+      }
+      if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = m; }
     } else {
-      // Show manual speed controls, hide WPM controls
       if (wpmRow) {
         wpmRow.classList.add('visually-hidden');
         wpmRow.setAttribute('aria-hidden', 'true');
@@ -542,11 +546,7 @@ function applyMode(m) {
         autoRow.removeAttribute('aria-hidden');
       }
 
-      if (m === 'hybrid') {
-        if (speedLabel) speedLabel.textContent = 'Baseline speed (WPM)';
-        if (speedHint) speedHint.textContent = 'Hybrid: uses this WPM as a floor; ASR can pull the text ahead as you speak.';
-        if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = 'hybrid'; }
-      } else if (m === 'asr') {
+      if (m === 'asr') {
         if (speedLabel) speedLabel.textContent = 'Scroll speed';
         if (speedHint) speedHint.textContent = 'ASR-only: scroll position is driven by your voice; speed slider is ignored.';
         if (speedInput) { speedInput.disabled = true; speedInput.dataset.mode = 'asr'; }
