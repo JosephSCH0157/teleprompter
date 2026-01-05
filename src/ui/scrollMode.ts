@@ -1,5 +1,4 @@
 // UI helper for scroll mode select + auto/WPM/step controls.
-import { appStore } from '../state/app-store';
 type ScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal';
 
 function findAutoControls(root: ParentNode) {
@@ -36,7 +35,6 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
     autoToggle.disabled = false;
     autoToggle.textContent = 'Auto-scroll: Off';
   }
-  const asrLive = !!appStore.get?.('asrLive');
   setRowVisibility(autoRow as HTMLElement | null, true);
   setRowVisibility(autoSpeedWrap as HTMLElement | null, true);
   setRowVisibility(wpmRow as HTMLElement | null, false);
