@@ -1888,7 +1888,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               recordConsistencyEntry({
                 ts: now,
                 idx: targetLine,
-                delta: targetLine - cursorLine,
+                delta: targetLine - lastLineIndex,
                 sim: conf,
                 nearMarker: true,
                 isFinal,
@@ -2002,10 +2002,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } else {
           emitHudStatus('no_evidence', 'Blocked: min evidence');
         }
-        return;
-      }
-
-      if (!isFinal && !interimEligible) {
         return;
       }
 
