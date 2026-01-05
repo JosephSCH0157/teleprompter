@@ -65,7 +65,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       setRowVisibility(autoRow as HTMLElement | null, false);
       setRowVisibility(autoSpeedWrap as HTMLElement | null, false);
       setRowVisibility(wpmRow as HTMLElement | null, true);
-      setHelp('Hybrid keeps a WPM baseline while ASR can nudge ahead.');
+      setHelp('Hybrid (Performance) keeps a WPM baseline while ASR (Training) can nudge ahead.');
       break;
     case 'asr':
       setRowVisibility(autoRow as HTMLElement | null, false);
