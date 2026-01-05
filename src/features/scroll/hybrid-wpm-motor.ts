@@ -1,4 +1,4 @@
-import { Motor } from './motor';
+import type { Motor } from './motor';
 
 export type HybridWpmMotorDeps = {
   getWriter: () => { scrollTo: (top: number, opts: { behavior: ScrollBehavior }) => void };
