@@ -52,6 +52,14 @@ function bindInput(input: HTMLInputElement, api: ScrollSpeedApi) {
     if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
     api.setBaseSpeedPx(pxPerSec);
     if (wpm > 0) persistWpm(wpm);
+    try {
+      if (typeof window !== 'undefined') {
+        const detail = { wpm, pxPerSec };
+        window.dispatchEvent(new CustomEvent('tp:wpm:change', { detail }));
+      }
+    } catch {
+      /* ignore */
+    }
   };
 
   input.addEventListener('input', apply, { passive: true });

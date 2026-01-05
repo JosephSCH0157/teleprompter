@@ -1107,6 +1107,19 @@ function installScrollRouter(opts) {
   } catch {
   }
   try {
+    window.addEventListener("tp:wpm:change", (ev) => {
+      try {
+        const detail = (ev as CustomEvent).detail || {};
+        const pxs = Number(detail.pxPerSec);
+        if (!Number.isFinite(pxs)) return;
+        hybridBasePxps = pxs;
+        applyHybridVelocity();
+      } catch {
+      }
+    });
+  } catch {
+  }
+  try {
     document.addEventListener("keydown", (e) => {
       // In Rehearsal Mode, block router key behaviors (wheel-only)
       try { if (window.__TP_REHEARSAL) return; } catch {}
