@@ -1012,6 +1012,31 @@ function noteHybridSpeechActivity(ts?: number) {
     return clamped;
   };
   const nudgeSpeed = (delta) => setSpeed(getCurrentSpeed() + delta);
+
+  try {
+    if (typeof window !== 'undefined') {
+      const w = window as any;
+      if (!w.__scrollCtl) w.__scrollCtl = {};
+      w.__scrollCtl.setSpeed = (next: number) => {
+        try { setSpeed(next); } catch {}
+      };
+      w.__scrollCtl.stopAutoCatchup = () => {
+        try { auto?.stop?.(); } catch {}
+      };
+    }
+  } catch {}
+
+  try {
+    window.addEventListener('tp:autoSpeed', (ev) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail || {};
+        const raw = detail.pxPerSec ?? detail.px ?? detail.speed ?? detail.value;
+        const pxs = Number(raw);
+        if (!Number.isFinite(pxs)) return;
+        setSpeed(pxs);
+      } catch {}
+    });
+  } catch {}
   function applyGate() {
     if (state2.mode !== "hybrid") {
       if (silenceTimer) {
