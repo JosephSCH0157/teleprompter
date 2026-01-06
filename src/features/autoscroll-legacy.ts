@@ -106,7 +106,9 @@ function allowAuto(): boolean {
     const store = (window as any).__tpStore || appStore;
     const phase = store?.get?.('session.phase');
     const allow = store?.get?.('session.scrollAutoOnLive');
-    if (store?.get?.('asrLive')) return false;
+    const mode = String(store?.get?.('scrollMode') || '').toLowerCase();
+    const needsMic = mode === 'asr' || mode === 'hybrid';
+    if (needsMic && store?.get?.('asrLive')) return false;
     if (phase !== 'live') return false;
     return !!allow;
   } catch {

@@ -3,7 +3,6 @@ const AUTO_DEFAULT_SPEED = 21;
 const AUTO_MIN_SPEED = 1;
 const AUTO_MAX_SPEED = 60;
 const AUTO_STEP_FINE = 1;
-const AUTO_STEP_COARSE = 5;
 
 function clampSpeed(value: number): number {
   if (!Number.isFinite(value)) return AUTO_DEFAULT_SPEED;

@@ -1012,6 +1012,7 @@ function noteHybridSpeechActivity(ts?: number) {
     return clamped;
   };
   const nudgeSpeed = (delta) => setSpeed(getCurrentSpeed() + delta);
+  setSpeed(getStoredSpeed());
 
   try {
     if (typeof window !== 'undefined') {
@@ -1049,16 +1050,15 @@ function noteHybridSpeechActivity(ts?: number) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
-    // All non-hybrid modes require both user intent AND speech to be active
-    const want = !!userEnabled;
-    const autoPxPerSec = getCurrentSpeed();
-    const autoBlocked = want ? "none" : "blocked:userIntentOff";
-    try {
-      console.info(
-        `[scroll-router] applyGate mode=${state2.mode} shouldRun=${want} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
-      );
-    } catch {}
-    if (typeof auto.setEnabled === "function") auto.setEnabled(want);
+      const want = !!userEnabled;
+      const autoPxPerSec = getCurrentSpeed();
+      const autoBlocked = want ? "none" : "blocked:userIntentOff";
+      try {
+        console.info(
+          `[scroll-router] applyGate mode=${state2.mode} shouldRun=${want} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+        );
+      } catch {}
+      if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
