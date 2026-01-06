@@ -5,7 +5,8 @@ import {
   type RecordReason,
 } from '../state/session';
 import { computeAsrReadiness } from '../asr/readiness';
-import { wantsAutoRecord as wantsAutoRecordStore } from '../recording/wantsAutoRecord';
+import { wantsAutoRecord } from '../recording/wantsAutoRecord';
+import { listRecorders } from '../recording/recorderRegistry';
 import {
   normalizeScrollMode,
   shouldAutoStartForMode,
@@ -69,17 +70,20 @@ function hasCameraActive(): boolean {
 
 function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason } {
   try {
-    const autoRecord = wantsAutoRecord();
-    const mode = String(appStore.get('scrollMode') || '').toLowerCase();
+    const recordingEnabled = wantsAutoRecord();
+    const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
+    const inRehearsal = mode === 'rehearsal';
 
-    if (!autoRecord) return { recordOnLive: false, reason: 'manual' };
-    if (mode === 'step' || mode === 'rehearsal') {
-      return { recordOnLive: false, reason: 'disabled' };
+    if (inRehearsal) {
+      return { recordOnLive: false, reason: 'rehearsal-mode' };
     }
-    if (!hasMicDevice()) {
-      return { recordOnLive: false, reason: 'no-mic' };
+
+    if (!recordingEnabled) {
+      return { recordOnLive: false, reason: 'disabled-by-settings' };
     }
-    if (!hasCameraActive()) {
+
+    const needsCamera = !!appStore.get('obsEnabled');
+    if (needsCamera && !hasCameraActive()) {
       try {
         window.dispatchEvent(
           new CustomEvent('tp:session:warning', {
@@ -92,8 +96,17 @@ function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason
       } catch {
         // ignore
       }
-      return { recordOnLive: false, reason: 'no-camera' as RecordReason };
+      return { recordOnLive: false, reason: 'no-camera' };
     }
+
+    if (!hasMicDevice()) {
+      return { recordOnLive: false, reason: 'no-mic' };
+    }
+
+    if (listRecorders().length === 0) {
+      return { recordOnLive: false, reason: 'recorder-not-ready' };
+    }
+
     return { recordOnLive: true, reason: 'auto' };
   } catch {
     return { recordOnLive: false, reason: 'error' };

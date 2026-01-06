@@ -6,7 +6,11 @@ export type RecordReason =
   | 'auto'
   | 'manual'
   | 'disabled'
+  | 'disabled-by-settings'
+  | 'rehearsal-mode'
+  | 'no-camera'
   | 'no-mic'
+  | 'recorder-not-ready'
   | 'error'
   | null;
 
