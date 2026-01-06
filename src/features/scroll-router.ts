@@ -143,6 +143,8 @@ function createFeatureSynth() {
 function createAutoMotor() {
   const brain = getScrollBrain();
   const timed = createTimedEngine(brain);
+  let enabled = false;
+  let currentSpeed = 0;
 
   function setEnabled(on) {
     try {
@@ -151,21 +153,40 @@ function createAutoMotor() {
       } else {
         timed.disable();
       }
+      enabled = !!on;
+    } catch {
+    }
+  }
+
+  function setSpeed(pxs) {
+    const next = typeof pxs === 'number' ? pxs : Number(pxs);
+    currentSpeed = Number.isFinite(next) ? next : 0;
+    try {
+      timed.setSpeedPxPerSec(currentSpeed);
     } catch {
     }
   }
 
   function setVelocity(pxs) {
-    try {
-      timed.setSpeedPxPerSec(pxs);
-    } catch {
-    }
+    setSpeed(pxs);
+  }
+
+  function toggle() {
+    setEnabled(!enabled);
+  }
+
+  function stop() {
+    setEnabled(false);
+  }
+
+  function getState() {
+    return { enabled, speed: currentSpeed };
   }
 
   function tick(_now) {
   }
 
-  return { setEnabled, setVelocity, tick };
+  return { setEnabled, setSpeed, setVelocity, stop, toggle, getState, tick };
 }
 
 function logHybridPaceTelemetry(payload) {
@@ -1348,6 +1369,17 @@ function noteHybridSpeechActivity(ts?: number) {
   } catch {
   }
 }
+
+try {
+  if (typeof window !== 'undefined') {
+    const auto = createAutoMotor();
+    installScrollRouter({ auto });
+    try {
+      (window as any).__tpAuto = auto;
+    } catch {}
+  }
+} catch {}
+
 export {
     installScrollRouter
 };
