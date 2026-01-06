@@ -138,16 +138,5 @@ export function installWpmSpeedBridge(options: WpmBridgeOptions) {
     window.addEventListener('tp:settings:open', schedule, { passive: true });
     document.addEventListener('tp:feature:init', schedule as EventListener, { capture: true });
 
-    const handleAutoSpeed = (ev: Event) => {
-      const detail = (ev as CustomEvent).detail || {};
-      let delta = 0;
-      if (typeof detail.deltaPx === 'number') delta = detail.deltaPx;
-      else if (typeof detail.delta === 'number') delta = detail.delta;
-      else if (typeof detail.stepPx === 'number') delta = detail.stepPx;
-      if (!delta || !Number.isFinite(delta)) return;
-      api.onManualSpeedAdjust(delta);
-    };
-
-    window.addEventListener('tp:autoSpeed', handleAutoSpeed as EventListener, { passive: true });
   }
 }

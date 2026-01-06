@@ -41,19 +41,6 @@ export function createTimedEngine(brain: ScrollBrain): TimedScrollEngine {
     brain.setTargetSpeed(Number.isFinite(v) ? v : DEFAULT_SPEED_PX_PER_SEC);
   };
 
-  // Sync with UI auto-speed events
-  try {
-    window.addEventListener('tp:autoSpeed', (ev: Event) => {
-      const detail = (ev as CustomEvent<{ speed?: number }>).detail || {};
-      if (typeof detail.speed === 'number') {
-        speed = clampSpeed(detail.speed);
-        if (active) apply();
-      }
-    });
-  } catch {
-    /* ignore */
-  }
-
   return {
     enable: () => {
       active = true;
