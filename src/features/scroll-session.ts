@@ -23,41 +23,28 @@ try {
 
 let asrOffLogged = false;
 
-function startAutoScroll(): void {
+function dispatchAutoIntent(enabled: boolean): void {
   try {
-    const auto: any = (window as any).__tpAuto;
-    if (auto && typeof auto.startFromPreroll === 'function') {
-      try { console.debug('[scroll-session] requesting auto start (startFromPreroll)'); } catch {}
-      auto.startFromPreroll({ source: 'session' });
-      return;
-    }
-    if (typeof (window as any).startAutoScroll === 'function') {
-      try { console.debug('[scroll-session] requesting auto start (startAutoScroll)'); } catch {}
-      (window as any).startAutoScroll();
-      return;
-    }
-    if (auto && typeof auto.setEnabled === 'function') {
-      try { console.debug('[scroll-session] requesting auto start (setEnabled)'); } catch {}
-      auto.setEnabled(true);
-    }
+    window.dispatchEvent(new CustomEvent('tp:auto:intent', {
+      detail: { enabled, reason: 'session' },
+    }));
   } catch {
     // ignore
   }
 }
 
+function startAutoScroll(): void {
+  try {
+    console.debug('[scroll-session] dispatching tp:auto:intent (start)');
+  } catch {}
+  dispatchAutoIntent(true);
+}
+
 function stopAutoScroll(): void {
   try {
-    const auto: any = (window as any).__tpAuto;
-    if (typeof (window as any).stopAutoScroll === 'function') {
-      (window as any).stopAutoScroll();
-      return;
-    }
-    if (auto && typeof auto.setEnabled === 'function') {
-      auto.setEnabled(false);
-    }
-  } catch {
-    // ignore
-  }
+    console.debug('[scroll-session] dispatching tp:auto:intent (stop)');
+  } catch {}
+  dispatchAutoIntent(false);
 }
 
 function maybeStartOnLive(phase: SessionPhase): void {
@@ -72,6 +59,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
   const session = getSession();
   const rawMode = appStore.get('scrollMode') as string | undefined;
   const canonicalMode = normalizeScrollMode(rawMode);
+  const canonicalModeStr = String(canonicalMode);
   try {
     console.debug('[ASR] live entered', {
       mode: canonicalMode,
@@ -84,8 +72,8 @@ function maybeStartOnLive(phase: SessionPhase): void {
 
   const brain = String(appStore.get('scrollBrain') || '').toLowerCase();
   const shouldStartSpeech =
-    session.asrArmed &&
-    (canonicalMode === 'asr' || canonicalMode === 'hybrid' || brain === 'asr');
+    canonicalModeStr === 'hybrid' ||
+    (session.asrArmed && (canonicalMode === 'asr' || brain === 'asr'));
   if (shouldStartSpeech) {
     try { console.debug('[ASR] about to call startSpeech/startBackend', { mode: canonicalMode, reason: 'live-enter' }); } catch {}
     void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode });

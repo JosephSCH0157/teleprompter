@@ -727,6 +727,17 @@ function installScrollRouter(opts) {
   let gatePref = getUiPrefs().hybridGate;
   let speechActive = false;
   let asrSilent = true;
+  function setAutoIntentState(on: boolean) {
+    userIntentOn = on;
+    userEnabled = on;
+    hybridWantedRunning = on;
+    if (!hybridWantedRunning) {
+      hybridPausedBySilence = false;
+      clearHybridSilenceTimer();
+    }
+    persistStoredAutoEnabled(on);
+    try { applyGate(); } catch {}
+  }
   try {
     window.addEventListener("tp:speech-state", (e) => {
       try {
@@ -1216,31 +1227,33 @@ function noteHybridSpeechActivity(ts?: number) {
   try {
     window.addEventListener("tp:autoIntent", (e) => {
       try {
-        const on = !!(e && e.detail && (e.detail.on ?? e.detail.enabled));
-        userIntentOn = on;
-        userEnabled = !!on;
-        hybridWantedRunning = userEnabled;
-        if (!hybridWantedRunning) {
-          hybridPausedBySilence = false;
-          clearHybridSilenceTimer();
-        }
-        applyGate();
+        const detail = (e as CustomEvent)?.detail || {};
+        const on = !!(detail.on ?? detail.enabled);
+        setAutoIntentState(on);
       } catch {}
     });
     const pending = (window as any).__tpAutoIntentPending;
     if (typeof pending === "boolean") {
-      userIntentOn = pending;
-      userEnabled = pending;
-      hybridWantedRunning = userEnabled;
-      if (!hybridWantedRunning) {
-        hybridPausedBySilence = false;
-        clearHybridSilenceTimer();
-      }
-      applyGate();
+      setAutoIntentState(pending);
       try {
         delete (window as any).__tpAutoIntentPending;
       } catch {}
     }
+  } catch {}
+  try {
+    window.addEventListener("tp:auto:intent", (e) => {
+      try {
+        const detail = (e as CustomEvent)?.detail || {};
+        const enabled =
+          typeof detail.enabled === "boolean"
+            ? detail.enabled
+            : typeof detail.on === "boolean"
+              ? detail.on
+              : undefined;
+        if (typeof enabled !== "boolean") return;
+        setAutoIntentState(enabled);
+      } catch {}
+    });
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;
