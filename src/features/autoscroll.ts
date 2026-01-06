@@ -5,6 +5,7 @@ type AnyFn = (...args: any[]) => any;
 
 import { getScrollWriter } from '../scroll/scroll-writer';
 import { appStore } from '../state/app-store';
+import { persistStoredAutoEnabled, readStoredAutoEnabled } from './scroll/auto-state';
 
 function isDisplayWindow(): boolean {
   try {
@@ -21,6 +22,27 @@ function isDisplayWindow(): boolean {
 const AUTO_MIN_SPEED = 0.1;
 const AUTO_SCROLL_START_SPEED = 21;
 const AUTO_SCROLL_MODES = new Set(['timed', 'wpm', 'hybrid', 'auto']);
+
+const AUTO_MODE_NAME = 'auto';
+let startTraceLogged = false;
+
+function getCurrentScrollMode(): string {
+  try {
+    const mode = (appStore.get?.('scrollMode') as string | undefined) || '';
+    return mode.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function isDevMode(): boolean {
+  try {
+    const w = window as any;
+    return !!w?.__TP_DEV || !!w?.__TP_DEV1;
+  } catch {
+    return false;
+  }
+}
 
 export interface AutoScrollController {
   bindUI(toggleEl: HTMLElement | null, speedInput: HTMLInputElement | null): void;
@@ -204,6 +226,11 @@ function hud(tag: string, data?: unknown): void {
 
 function tick(now: number) {
   if (!active) return;
+  const mode = getCurrentScrollMode();
+  if (mode !== AUTO_MODE_NAME) {
+    stop();
+    return;
+  }
 
   if (isAsrLive()) {
     haltAutoForAsr('tick');
@@ -299,6 +326,17 @@ function start() {
   }
   if (active) return;
 
+  const mode = getCurrentScrollMode();
+  if (isDevMode() && !startTraceLogged) {
+    startTraceLogged = true;
+    try { console.debug('[AUTO] start() mode=' + mode, new Error().stack); } catch {}
+  }
+  if (mode !== AUTO_MODE_NAME) {
+    try { persistStoredAutoEnabled(false); } catch {}
+    stop();
+    return;
+  }
+
   const viewer = getViewer?.();
   if (!viewer) {
     try { console.warn('[auto-scroll] viewer not found, will still arm loop'); } catch {}
@@ -320,6 +358,7 @@ function start() {
 
   attachMomentaryKeys();
   rafId = requestAnimationFrame(tick);
+  persistStoredAutoEnabled(true);
 }
 
 function stop() {
@@ -336,6 +375,7 @@ function stop() {
 
   updateToggleLabel();
   hud('auto:stop');
+  try { persistStoredAutoEnabled(false); } catch {}
 
   try {
     window.tpArmWatchdog?.(false);

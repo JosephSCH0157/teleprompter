@@ -3,6 +3,7 @@ export {};
 
 import { getScrollWriter } from '../scroll/scroll-writer';
 import { createHybridWpmMotor } from './scroll/hybrid-wpm-motor';
+import { persistStoredAutoEnabled } from './scroll/auto-state';
 import { appStore } from '../state/app-store';
 
 // src/asr/v2/adapters/vad.ts
@@ -555,6 +556,10 @@ function hybridHandleDb(db, auto) {
   else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
 function applyMode(m) {
+  stopAllMotors(`mode switch to ${m}`);
+  if (m !== 'auto') {
+    persistStoredAutoEnabled(false);
+  }
   state2.mode = m;
   persistMode();
   viewer = document.getElementById("viewer");
