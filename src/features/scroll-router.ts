@@ -786,6 +786,7 @@ function installScrollRouter(opts) {
     if (enabledNow) {
       try {
         auto.setEnabled?.(false);
+        auto.stop?.();
       } catch {}
       enabledNow = false;
       emitMotorState("auto", false);
@@ -960,6 +961,7 @@ function noteHybridSpeechActivity(ts?: number) {
     if (enabledNow) {
       try {
         auto.setEnabled?.(false);
+        auto.stop?.();
       } catch {}
       enabledNow = false;
       emitMotorState("auto", false);
