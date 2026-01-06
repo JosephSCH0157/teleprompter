@@ -493,6 +493,25 @@ var DEFAULTS = {
 };
 var state2 = { ...DEFAULTS };
 var viewer = null;
+function ensureViewerElement() {
+  if (!viewer) {
+    try {
+      viewer = document.getElementById('viewer');
+    } catch {
+      viewer = null;
+    }
+  }
+  return viewer;
+}
+function hasScrollableTarget() {
+  const el = ensureViewerElement();
+  if (!el) return false;
+  try {
+    return el.scrollHeight > el.clientHeight;
+  } catch {
+    return true;
+  }
+}
 const scrollWriter = getScrollWriter();
 const hybridMotor = createHybridWpmMotor({
   getWriter: () => scrollWriter,
@@ -789,6 +808,16 @@ function installScrollRouter(opts) {
   let gatePref = getUiPrefs().hybridGate;
   let speechActive = false;
   let asrSilent = true;
+  let sessionIntentOn = false;
+  let sessionPhase = 'idle';
+  try {
+    const storedPhase = appStore.get?.('session.phase');
+    if (storedPhase) {
+      sessionPhase = String(storedPhase);
+    }
+  } catch {
+    // ignore
+  }
   function setAutoIntentState(on: boolean) {
     userIntentOn = on;
     userEnabled = on;
@@ -799,6 +828,9 @@ function installScrollRouter(opts) {
     }
     persistStoredAutoEnabled(on);
     try { applyGate(); } catch {}
+  }
+  function isSessionLive() {
+    return sessionIntentOn && sessionPhase === 'live';
   }
   try {
     window.addEventListener("tp:speech-state", (e) => {
@@ -1050,17 +1082,30 @@ function noteHybridSpeechActivity(ts?: number) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
-      const want = !!userEnabled;
       const autoPxPerSec = getCurrentSpeed();
-      const autoBlocked = want ? "none" : "blocked:userIntentOff";
+      const sessionActive = isSessionLive();
+      const viewerReady = hasScrollableTarget();
+      let autoBlocked = "blocked:sessionOff";
+      if (!sessionActive) {
+        autoBlocked = "blocked:sessionOff";
+      } else if (!userEnabled) {
+        autoBlocked = "blocked:userIntentOff";
+      } else if (!viewerReady) {
+        autoBlocked = "blocked:noScrollTarget";
+      } else if (!Number.isFinite(autoPxPerSec) || autoPxPerSec <= 0) {
+        autoBlocked = "blocked:pxZero";
+      } else {
+        autoBlocked = "none";
+      }
+      const want = autoBlocked === "none";
       try {
         console.info(
-          `[scroll-router] applyGate mode=${state2.mode} shouldRun=${want} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+          `[scroll-router] applyGate mode=${state2.mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} shouldRun=${want} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
         );
       } catch {}
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
-      const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
+      const detail2 = `Mode: ${state2.mode} \u2022 Session:${sessionPhase} \u2022 Intent:${sessionIntentOn ? "on" : "off"} \u2022 User:${userEnabled ? "On" : "Off"}`;
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
       emitMotorState("auto", enabledNow);
       try { emitAutoState(); } catch {}
@@ -1175,7 +1220,9 @@ function noteHybridSpeechActivity(ts?: number) {
   try {
     if (typeof appStore.subscribe === "function") {
       appStore.subscribe("session.phase", (phase) => {
-        if (phase !== "live") {
+        sessionPhase = String(phase || "idle");
+        if (sessionPhase !== "live") {
+          sessionIntentOn = false;
           stopAllMotors("phase change");
         }
         applyGate();
@@ -1368,12 +1415,29 @@ function noteHybridSpeechActivity(ts?: number) {
         setAutoIntentState(enabled);
         try {
           console.info(
-            `[scroll-router] tp:auto:intent mode=${state2.mode} enabled=${enabled} userEnabled=${userEnabled} hybridWantedRunning=${hybridWantedRunning}`,
+          `[scroll-router] tp:auto:intent mode=${state2.mode} enabled=${enabled} userEnabled=${userEnabled} hybridWantedRunning=${hybridWantedRunning}`,
           );
         } catch {}
       } catch {}
     });
     try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
+  } catch {}
+  try {
+    window.addEventListener("tp:session:intent", (e) => {
+      try {
+        const detail = (e as CustomEvent)?.detail || {};
+        const active = detail.active === true;
+        if (sessionIntentOn === active) return;
+        sessionIntentOn = active;
+        try {
+          console.info(
+            `[scroll-router] tp:session:intent active=${active} mode=${detail.mode || state2.mode} reason=${detail.reason || 'unknown'}`,
+          );
+        } catch {}
+        applyGate();
+      } catch {}
+    });
+    try { console.info('[scroll-router] tp:session:intent listener installed'); } catch {}
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;

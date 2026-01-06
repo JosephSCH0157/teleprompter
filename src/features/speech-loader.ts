@@ -164,6 +164,21 @@ function getScrollMode(): string {
   } catch {}
   return '';
 }
+function dispatchSessionIntent(active: boolean, detail?: { source?: string; reason?: string; mode?: string; phase?: string }): void {
+  try {
+    const payload: Record<string, unknown> = {
+      active,
+      source: detail?.source,
+      reason: detail?.reason,
+      mode: detail?.mode ?? getScrollMode(),
+      phase: detail?.phase,
+      intentSource: 'session-intent',
+    };
+    window.dispatchEvent(new CustomEvent('tp:session:intent', { detail: payload }));
+  } catch {
+    // ignore
+  }
+}
 function rememberMode(mode: string): void {
   if (typeof mode === 'string') {
     lastScrollMode = mode;
@@ -1111,18 +1126,26 @@ export function installSpeech(): void {
           const session = getSession();
           if (session.phase === 'preroll' || session.phase === 'live') {
             try { console.debug('[session/stop] click in phase=', session.phase); } catch {}
+            const stopIntent = { source: 'recBtn', phase: session.phase, reason: 'session-stop' };
+            dispatchSessionIntent(false, stopIntent);
             try { setSessionPhase('wrap'); } catch {}
             try {
               window.dispatchEvent(
-                new CustomEvent('tp:session:stop', { detail: { source: 'recBtn', phase: session.phase } }),
+                new CustomEvent('tp:session:stop', {
+                  detail: { ...stopIntent, intentSource: 'session-intent' },
+                }),
               );
             } catch {}
             return;
           }
           try { console.debug('[session/start] phase', session.phase, '→ preroll'); } catch {}
+          const startIntent = { source: 'recBtn', reason: 'session-start' };
+          dispatchSessionIntent(true, startIntent);
           try {
             window.dispatchEvent(
-              new CustomEvent('tp:session:start', { detail: { source: 'recBtn' } }),
+              new CustomEvent('tp:session:start', {
+                detail: { ...startIntent, intentSource: 'session-intent' },
+              }),
             );
           } catch {}
           try { setSessionPhase('preroll'); } catch {}
