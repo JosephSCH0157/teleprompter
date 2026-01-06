@@ -2,6 +2,8 @@
 export {};
 
 import { getScrollWriter } from '../scroll/scroll-writer';
+import { createTimedEngine } from '../scroll/autoscroll';
+import { getScrollBrain } from '../scroll/brain-access';
 import { createHybridWpmMotor } from './scroll/hybrid-wpm-motor';
 import { persistStoredAutoEnabled } from './scroll/auto-state';
 import { appStore } from '../state/app-store';
@@ -130,21 +132,30 @@ function createFeatureSynth() {
 
 // src/asr/v2/motor.ts
 function createAutoMotor() {
-  const Auto = window.__tpAuto || window.Auto || {};
+  const brain = getScrollBrain();
+  const timed = createTimedEngine(brain);
+
   function setEnabled(on) {
     try {
-      (Auto.setEnabled ?? Auto.toggle)?.(on);
+      if (on) {
+        timed.enable();
+      } else {
+        timed.disable();
+      }
     } catch {
     }
   }
+
   function setVelocity(pxs) {
     try {
-      Auto.setSpeed?.(pxs);
+      timed.setSpeedPxPerSec(pxs);
     } catch {
     }
   }
+
   function tick(_now) {
   }
+
   return { setEnabled, setVelocity, tick };
 }
 
