@@ -118,29 +118,38 @@ export function applyCanonicalScrollTop(
     // ignore
   }
   try {
+    let actualTop = target;
+    try {
+      actualTop = scroller.scrollTop || target;
+    } catch {
+      // ignore
+    }
+    const ratio = max > 0 ? actualTop / max : 0;
+    const cursorLine = computeAnchorLineIndex(scroller);
+
+    const payload = {
+      type: 'scroll',
+      top: actualTop,
+      ratio,
+      anchorRatio: ratio,
+      cursorLine: cursorLine ?? undefined,
+    };
+
     const send =
       (window as any).sendToDisplay ||
       (window as any).__tpSendToDisplay ||
       (window as any).__tpDisplay?.sendToDisplay;
     if (typeof send === 'function') {
-      const ratio = max > 0 ? target / max : 0;
-      const cursorLine = computeAnchorLineIndex(scroller);
-      send({
-        type: 'scroll',
-        top: target,
-        ratio,
-        anchorRatio: ratio,
-        cursorLine: cursorLine ?? undefined,
-      });
+      send(payload);
     } else {
       const displayWin = (window as any).__tpDisplayWindow as Window | null | undefined;
       if (displayWin && !displayWin.closed && typeof displayWin.postMessage === 'function') {
-        displayWin.postMessage({ type: 'scroll', top: target }, '*');
+        displayWin.postMessage(payload, '*');
       } else if (typeof BroadcastChannel !== 'undefined') {
         if (!displayScrollChannel) {
           try { displayScrollChannel = new BroadcastChannel('tp_display'); } catch {}
         }
-        try { displayScrollChannel?.postMessage({ type: 'scroll', top: target }); } catch {}
+        try { displayScrollChannel?.postMessage(payload); } catch {}
       }
     }
   } catch {
