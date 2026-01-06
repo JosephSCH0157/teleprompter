@@ -632,6 +632,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let pursuitVel = 0;
     let pursuitLastTs = 0;
     let pursuitActive = false;
+  function applyScrollWithHybridGuard(
+    targetTop: number,
+    opts: { scroller?: HTMLElement | null; reason?: string },
+  ): number {
+    const scroller = opts.scroller ?? getScroller();
+    const payload = { ...opts, scroller };
+    if (isHybridMode()) {
+      logDev('hybrid blocked scroll', payload);
+      return scroller?.scrollTop ?? lastKnownScrollTop;
+    }
+    return applyCanonicalScrollTop(targetTop, payload);
+  }
   let lastEvidenceAt = 0;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
@@ -1636,8 +1648,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (move < minStepPx) move = Math.min(err, minStepPx);
     move = Math.min(err, move);
 
-    if (move > 0) {
-      const applied = applyCanonicalScrollTop(current + move, { scroller, reason: 'asr-tick' });
+      if (move > 0) {
+        const applied = applyScrollWithHybridGuard(current + move, { scroller, reason: 'asr-tick' });
       appliedTopPx = applied;
       lastKnownScrollTop = applied;
       lastMoveAt = Date.now();
@@ -1958,11 +1970,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           }
           lastBackRecoverIdx = targetLine;
           lastBackRecoverHitAt = now;
-            if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
-              const applied = applyCanonicalScrollTop(currentTop + deltaPx, {
-                scroller,
-                reason: 'asr-back-recovery',
-              });
+              if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
+                const applied = applyScrollWithHybridGuard(currentTop + deltaPx, {
+                  scroller,
+                  reason: 'asr-back-recovery',
+                });
               lastKnownScrollTop = applied;
               lastMoveAt = Date.now();
               markProgrammaticScroll();
@@ -3243,10 +3255,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const scrollTopBefore = scroller?.scrollTop ?? 0;
         const targetTop = scroller ? resolveTargetTop(scroller, rawIdx) : null;
         if (scroller && targetTop != null) {
-        const applied = applyCanonicalScrollTop(targetTop, {
-          scroller,
-          reason: 'asr-behind-reanchor',
-        });
+          const applied = applyScrollWithHybridGuard(targetTop, {
+            scroller,
+            reason: 'asr-behind-reanchor',
+          });
         lastKnownScrollTop = applied;
         lastMoveAt = Date.now();
         markProgrammaticScroll();

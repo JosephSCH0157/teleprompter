@@ -103,6 +103,27 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
   }
 }
 
+let lastEmittedWpm = Number.NaN;
+let lastEmittedPxPerSec = Number.NaN;
+
+function emitWpmChange(wpm: number, pxPerSec: number): void {
+  const nextWpm = Number.isFinite(wpm) ? wpm : Number.NaN;
+  const nextPx = Number.isFinite(pxPerSec) ? pxPerSec : Number.NaN;
+  if (nextWpm === lastEmittedWpm && nextPx === lastEmittedPxPerSec) return;
+  lastEmittedWpm = nextWpm;
+  lastEmittedPxPerSec = nextPx;
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:wpm:change', {
+        detail: { wpm: nextWpm, pxPerSec: nextPx },
+      }),
+    );
+  } catch {
+    // ignore dispatch errors
+  }
+}
+
 export function initWpmBindings(root: Document | HTMLElement = document): void {
   const anyWin = window as any;
   const store = anyWin.__tpStore;
@@ -119,6 +140,7 @@ export function initWpmBindings(root: Document | HTMLElement = document): void {
     if (wpmPxChip) {
       wpmPxChip.textContent = `${pxPerSec.toFixed(1)} px/s`;
     }
+    emitWpmChange(wpm, pxPerSec);
   };
 
   wpmInput.addEventListener('change', () => {

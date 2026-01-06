@@ -710,6 +710,7 @@ function installScrollRouter(opts) {
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
   let speechActive = false;
+  let asrSilent = true;
   try {
     window.addEventListener("tp:speech-state", (e) => {
       try {
@@ -821,12 +822,13 @@ function installScrollRouter(opts) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     hybridSilenceTimeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), SILENCE_MS);
   }
-  function noteHybridSpeechActivity(ts?: number) {
-    const now = typeof ts === "number" ? ts : nowMs();
-    lastSpeechAtMs = now;
-    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-    clearHybridSilenceTimer();
-    armHybridSilenceTimer();
+function noteHybridSpeechActivity(ts?: number) {
+  const now = typeof ts === "number" ? ts : nowMs();
+  asrSilent = false;
+  lastSpeechAtMs = now;
+  if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+  clearHybridSilenceTimer();
+  armHybridSilenceTimer();
     if (hybridPausedBySilence) {
       hybridPausedBySilence = false;
       emitHybridSafety();
@@ -964,14 +966,18 @@ function installScrollRouter(opts) {
     }
     const gateWanted = computeGateWanted();
     const phaseAllowed = canRunHybridMotor();
+    const asrLocked = !isHybridBypass() && asrSilent;
     const wantEnabled =
       userEnabled &&
       speechActive &&
       phaseAllowed &&
       !hybridPausedBySilence &&
-      (isHybridBypass() ? true : gateWanted);
+      (isHybridBypass() ? true : gateWanted) &&
+      !asrLocked;
     const dueToGateSilence =
-      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted;
+      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted && !asrSilent;
+    const dueToAsrSilence =
+      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && asrSilent;
     const hybridRunning = hybridMotor.isRunning();
     if (wantEnabled) {
       if (silenceTimer) {
@@ -988,7 +994,12 @@ function installScrollRouter(opts) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      if (dueToGateSilence && hybridRunning) {
+      if (dueToAsrSilence && hybridRunning) {
+        hybridMotor.stop();
+        emitMotorState("hybridWpm", false);
+        clearHybridSilenceTimer();
+        emitHybridSafety();
+      } else if (dueToGateSilence && hybridRunning) {
         silenceTimer = setTimeout(() => {
           try {
             const stillGateWanted = computeGateWanted();
@@ -1116,6 +1127,21 @@ function installScrollRouter(opts) {
         applyHybridVelocity();
       } catch {
       }
+    });
+  } catch {
+  }
+  try {
+    window.addEventListener("tp:asr:silence", (ev) => {
+      try {
+        const detail = (ev as CustomEvent).detail || {};
+        const silent = !!detail.silent;
+        const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
+        asrSilent = silent;
+        if (!silent) {
+          noteHybridSpeechActivity(ts);
+        }
+        applyGate();
+      } catch {}
     });
   } catch {
   }
