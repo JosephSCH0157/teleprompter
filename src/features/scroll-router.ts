@@ -1232,6 +1232,7 @@ function noteHybridSpeechActivity(ts?: number) {
         setAutoIntentState(on);
       } catch {}
     });
+    try { console.info('[scroll-router] tp:autoIntent listener installed'); } catch {}
     const pending = (window as any).__tpAutoIntentPending;
     if (typeof pending === "boolean") {
       setAutoIntentState(pending);
@@ -1254,6 +1255,7 @@ function noteHybridSpeechActivity(ts?: number) {
         setAutoIntentState(enabled);
       } catch {}
     });
+    try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;
