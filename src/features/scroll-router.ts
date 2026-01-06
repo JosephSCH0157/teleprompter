@@ -962,9 +962,16 @@ function noteHybridSpeechActivity(ts?: number) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
-      // All non-hybrid modes require both user intent AND speech to be active
-      const want = !!userEnabled;
-      if (typeof auto.setEnabled === "function") auto.setEnabled(want);
+    // All non-hybrid modes require both user intent AND speech to be active
+    const want = !!userEnabled;
+    const autoPxPerSec = getCurrentSpeed();
+    const autoBlocked = want ? "none" : "blocked:userIntentOff";
+    try {
+      console.info(
+        `[scroll-router] applyGate mode=${state2.mode} shouldRun=${want} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+      );
+    } catch {}
+    if (typeof auto.setEnabled === "function") auto.setEnabled(want);
       enabledNow = want;
       const detail2 = `Mode: ${state2.mode} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Speech:${speechActive ? "1" : "0"}`;
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
@@ -1003,6 +1010,25 @@ function noteHybridSpeechActivity(ts?: number) {
       !hybridPausedBySilence &&
       (isHybridBypass() ? true : gateWanted) &&
       !asrLocked;
+    const baseHybridPxPerSec = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
+    const hybridPxPerSec = baseHybridPxPerSec * hybridScale;
+    let hybridBlockedReason = "none";
+    if (!userEnabled) {
+      hybridBlockedReason = "blocked:userOff";
+    } else if (!speechActive) {
+      hybridBlockedReason = "blocked:speech";
+    } else if (!phaseAllowed) {
+      hybridBlockedReason = "blocked:livePhase";
+    } else if (!isHybridBypass() && !gateWanted) {
+      hybridBlockedReason = "blocked:hybridGate";
+    } else if (asrLocked) {
+      hybridBlockedReason = "blocked:asrSilent";
+    }
+    try {
+      console.info(
+        `[scroll-router] applyGate mode=hybrid shouldRun=${wantEnabled} pxPerSec=${hybridPxPerSec} blocked=${hybridBlockedReason}`,
+      );
+    } catch {}
     const dueToGateSilence =
       userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted && !asrSilent;
     const dueToAsrSilence =
@@ -1253,6 +1279,11 @@ function noteHybridSpeechActivity(ts?: number) {
               : undefined;
         if (typeof enabled !== "boolean") return;
         setAutoIntentState(enabled);
+        try {
+          console.info(
+            `[scroll-router] tp:auto:intent mode=${state2.mode} enabled=${enabled} userEnabled=${userEnabled} hybridWantedRunning=${hybridWantedRunning}`,
+          );
+        } catch {}
       } catch {}
     });
     try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
