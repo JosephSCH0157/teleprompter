@@ -1,4 +1,5 @@
 import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
+import './scroll/adapter';
 import './features/scroll-router';
 
 function isDisplayContext(): boolean {

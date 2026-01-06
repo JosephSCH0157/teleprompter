@@ -8,6 +8,38 @@ import { createHybridWpmMotor } from './scroll/hybrid-wpm-motor';
 import { persistStoredAutoEnabled } from './scroll/auto-state';
 import { appStore } from '../state/app-store';
 
+const isDevMode = (() => {
+  let cache: boolean | null = null;
+  return () => {
+    if (cache !== null) return cache;
+    try {
+      if (typeof window === 'undefined') {
+        cache = false;
+        return cache;
+      }
+      const params = new URLSearchParams(window.location.search || '');
+      if (params.has('dev')) {
+        cache = true;
+        return cache;
+      }
+      const storage = window.localStorage;
+      if (storage?.getItem('tp_dev_mode') === '1') {
+        cache = true;
+        return cache;
+      }
+      const w = window as any;
+      if (w.__TP_DEV || w.__TP_DEV1) {
+        cache = true;
+        return cache;
+      }
+    } catch {
+      // ignore
+    }
+    cache = false;
+    return cache;
+  };
+})();
+
 if (typeof window !== 'undefined') {
   try {
     (window as any).__tp_router_probe = 'scroll-router loaded';
