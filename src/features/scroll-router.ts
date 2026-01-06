@@ -8,6 +8,15 @@ import { createHybridWpmMotor } from './scroll/hybrid-wpm-motor';
 import { persistStoredAutoEnabled } from './scroll/auto-state';
 import { appStore } from '../state/app-store';
 
+if (typeof window !== 'undefined') {
+  try {
+    (window as any).__tp_router_probe = 'scroll-router loaded';
+    console.info('[router-probe] scroll-router loaded');
+  } catch {
+    // ignore
+  }
+}
+
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
   let ready = false;
