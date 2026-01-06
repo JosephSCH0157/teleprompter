@@ -5,7 +5,7 @@ type AnyFn = (...args: any[]) => any;
 
 import { getScrollWriter } from '../scroll/scroll-writer';
 import { appStore } from '../state/app-store';
-import { persistStoredAutoEnabled, readStoredAutoEnabled } from './scroll/auto-state';
+import { persistStoredAutoEnabled } from './scroll/auto-state';
 
 function isDisplayWindow(): boolean {
   try {
