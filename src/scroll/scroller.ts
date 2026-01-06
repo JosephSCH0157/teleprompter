@@ -73,6 +73,20 @@ export function getPrimaryScroller(): HTMLElement | null {
   return getScrollContainer() || getViewerElement();
 }
 
+function isDisplayWindow(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('display') === '1') return true;
+    const path = (window.location.pathname || '').toLowerCase();
+    if (path.includes('display')) return true;
+    if ((window as any).__TP_FORCE_DISPLAY) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 function isDevScrollSync(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -144,4 +158,26 @@ export function applyCanonicalScrollTop(
     }
   }
   return target;
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    const w = window as any;
+
+    if (!isDisplayWindow()) {
+      w.__tpScrollWrite = {
+        scrollTo(top: number) {
+          applyCanonicalScrollTop(top, { reason: 'writer:scrollTo' });
+        },
+        scrollBy(delta: number) {
+          const sc =
+            resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
+          const cur = sc ? (sc.scrollTop || 0) : 0;
+          applyCanonicalScrollTop(cur + (Number(delta) || 0), { reason: 'writer:scrollBy' });
+        },
+      };
+    }
+  } catch {
+    // ignore
+  }
 }
