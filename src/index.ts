@@ -1,5 +1,25 @@
 import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 
+function isDisplayContext(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('display') === '1') return true;
+    const path = (window.location.pathname || '').toLowerCase();
+    if (path.endsWith('/display.html') || path === '/display.html') return true;
+    if ((window as any).__TP_FORCE_DISPLAY) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function ensureDisplayMode(): void {
+  if (!isDisplayContext()) return;
+  try {
+    (window as any).__TP_FORCE_DISPLAY = true;
+  } catch {}
+}
+
 function shouldBypassAuth(): boolean {
   try {
     const search = String(window.location.search || '');
@@ -43,11 +63,14 @@ async function gateAuth(): Promise<boolean> {
 }
 
 (async () => {
+  ensureDisplayMode();
+  if (isDisplayContext()) return;
   const ok = await gateAuth();
   if (!ok) return;
   await import('./index-app');
 })().catch((err) => {
   try { console.error('[TP-BOOT] preflight failed', err); } catch {}
+  if (isDisplayContext()) return;
   if (shouldGateAuth()) {
     try {
       const loginUrl = `/login?redirect=${encodeURIComponent(getRedirectTarget())}`;
