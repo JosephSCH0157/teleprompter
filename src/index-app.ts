@@ -1843,6 +1843,18 @@ export async function boot() {
 										document.getElementById('viewer');
 									const msg = `[SCROLL] initOnce: scroll-router (viewer=${!!viewer})`;
 									try { console.info(msg); } catch {}
+									try { console.warn('[AUTO_INTENT] INLINE_WIRE about to addEventListener tp:auto:intent'); } catch {}
+									try {
+										window.addEventListener('tp:auto:intent', (e: any) => {
+											try { console.warn('[AUTO_INTENT] INLINE recv', e?.detail); } catch {}
+										});
+									} catch {}
+									try {
+										document.addEventListener('tp:auto:intent', (e: any) => {
+											try { console.warn('[AUTO_INTENT] INLINE recv (document)', e?.detail); } catch {}
+										});
+									} catch {}
+									try { console.warn('[AUTO_INTENT] INLINE_WIRE done'); } catch {}
 									return viewer;
 								});
 								initScrollRouter();
