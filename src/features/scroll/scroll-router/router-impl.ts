@@ -278,6 +278,13 @@ function createAutoMotor() {
   function stop() {
     setEnabled(false);
   }
+  function start() {
+    if (enabled) return;
+    setEnabled(true);
+  }
+  function isRunning() {
+    return enabled;
+  }
 
   function getState() {
     return { enabled, speed: currentSpeed };
@@ -286,7 +293,7 @@ function createAutoMotor() {
   function tick(_now) {
   }
 
-  return { setEnabled, setSpeed, setVelocity, stop, toggle, getState, tick };
+  return { setEnabled, setSpeed, setVelocity, stop, toggle, getState, tick, start, isRunning };
 }
 
 function logHybridPaceTelemetry(payload) {
@@ -996,6 +1003,11 @@ function installScrollRouter(opts) {
       const pxs = Number(pxPerSec) || 0;
       if (decision === 'motor-start-request') {
         try { auto.setSpeed?.(pxs); } catch {}
+        try {
+          if (!auto.isRunning?.()) {
+            auto.start?.();
+          }
+        } catch {}
         try { auto.setEnabled?.(true); } catch {}
         enabledNow = true;
         try { emitMotorState('auto', true); } catch {}
