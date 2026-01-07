@@ -839,6 +839,9 @@ function applyMode(m) {
 }
 function installScrollRouter(opts) {
   const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  if (!viewer && hostEl) {
+    viewer = hostEl;
+  }
   function setProcessorAndFlush() {
     autoIntentProcessor = handleAutoIntent;
     console.warn('[AUTO_INTENT] processor assigned', { hasPending: !!pendingAutoIntentDetail });
@@ -865,9 +868,6 @@ function installScrollRouter(opts) {
   try {
     window.__tpScrollRouterTsActive = true;
   } catch {
-  }
-  if (hostEl) {
-    viewer = hostEl;
   }
   restoreMode();
   applyMode(state2.mode);
