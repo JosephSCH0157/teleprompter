@@ -978,12 +978,12 @@ function installScrollRouter(opts) {
       setAutoIntentState(enabled);
       const brain = String(appStore.get('scrollBrain') || 'auto');
       const decision = enabled ? 'motor-start-request' : 'motor-stop-request';
+      const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
+      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       try {
         console.info(
           `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
         );
-        const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
-        const currentPhase = String(appStore.get('session.phase') || sessionPhase);
         console.warn(
           '[AUTO_INTENT]',
           'mode=', state2.mode,
@@ -993,6 +993,19 @@ function installScrollRouter(opts) {
           'userEnabled=', userEnabled,
         );
       } catch {}
+      const pxs = Number(pxPerSec) || 0;
+      if (decision === 'motor-start-request') {
+        try { auto.setSpeed?.(pxs); } catch {}
+        try { auto.setEnabled?.(true); } catch {}
+        enabledNow = true;
+        try { emitMotorState('auto', true); } catch {}
+        try { emitAutoState(); } catch {}
+      } else {
+        try { auto.setEnabled?.(false); } catch {}
+        enabledNow = false;
+        try { emitMotorState('auto', false); } catch {}
+        try { emitAutoState(); } catch {}
+      }
     } catch {}
   }
   autoIntentProcessor = (detail) => {
