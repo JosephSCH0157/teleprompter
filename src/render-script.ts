@@ -1,7 +1,7 @@
 // src/render-script.ts
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
-import { installScrollRouter, createAutoMotor } from './features/scroll-router';
+import { installScrollRouter, createAutoMotor } from './features/scroll/scroll-router';
 
 function _escapeHtml(input: string): string {
   return String(input || '')

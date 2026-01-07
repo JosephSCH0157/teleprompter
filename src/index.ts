@@ -1,6 +1,6 @@
 import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 import './scroll/adapter';
-import './features/scroll-router';
+import './features/scroll/scroll-router';
 
 function isDisplayContext(): boolean {
   try {

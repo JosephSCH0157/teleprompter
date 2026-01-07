@@ -1,12 +1,12 @@
 // @ts-nocheck
 export {};
 
-import { getScrollWriter } from '../scroll/scroll-writer';
-import { createTimedEngine } from '../scroll/autoscroll';
-import { getScrollBrain } from '../scroll/brain-access';
-import { createHybridWpmMotor } from './scroll/hybrid-wpm-motor';
-import { persistStoredAutoEnabled } from './scroll/auto-state';
-import { appStore } from '../state/app-store';
+import { getScrollWriter } from '../../../scroll/scroll-writer';
+import { createTimedEngine } from '../../../scroll/autoscroll';
+import { getScrollBrain } from '../../../scroll/brain-access';
+import { createHybridWpmMotor } from '../hybrid-wpm-motor';
+import { persistStoredAutoEnabled } from '../auto-state';
+import { appStore } from '../../../state/app-store';
 
 const isDevMode = (() => {
   let cache: boolean | null = null;
