@@ -77,6 +77,7 @@ import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
+import { triggerWireAutoIntentListener } from './features/scroll-router';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
 import './dev/asr-thresholds-panel';
@@ -1855,6 +1856,9 @@ export async function boot() {
 										});
 									} catch {}
 									try { console.warn('[AUTO_INTENT] INLINE_WIRE done'); } catch {}
+									try { console.warn('[AUTO_INTENT] index-app about to call scrollRouter.wireAutoIntentListener'); } catch {}
+									try { triggerWireAutoIntentListener(); } catch {}
+									try { console.warn('[AUTO_INTENT] index-app returned from wireAutoIntentListener'); } catch {}
 									return viewer;
 								});
 								initScrollRouter();

@@ -51,6 +51,13 @@ if (typeof window !== 'undefined') {
 
 const AUTO_INTENT_WIRE_STAMP = 'v2026-01-07c';
 let autoIntentListenerWired = false;
+let registeredWireAutoIntentListener: (() => void) | null = null;
+
+export function triggerWireAutoIntentListener(): void {
+  try {
+    registeredWireAutoIntentListener?.();
+  } catch {}
+}
 
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
@@ -882,6 +889,7 @@ function installScrollRouter(opts) {
     } catch {}
   }
 
+  registeredWireAutoIntentListener = wireAutoIntentListener;
   try { console.warn('[AUTO_INTENT] about to call wireAutoIntentListener()'); } catch {}
   wireAutoIntentListener();
   try { console.warn('[AUTO_INTENT] returned from wireAutoIntentListener()'); } catch {}
@@ -1546,5 +1554,5 @@ try {
 } catch {}
 
 export {
-    installScrollRouter
+    installScrollRouter,
 };
