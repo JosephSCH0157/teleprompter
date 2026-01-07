@@ -736,10 +736,17 @@ function hybridHandleDb(db, auto) {
   else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
 function applyMode(m) {
+  const currentAutoEnabled = (() => {
+    try {
+      return !!opts.auto.getState?.().enabled;
+    } catch {
+      return false;
+    }
+  })();
   try {
     try { console.debug("[ScrollRouter] stopAllMotors", `mode switch to ${m}`); } catch {}
   } catch {}
-  if (enabledNow) {
+  if (currentAutoEnabled) {
     try {
       auto.setEnabled?.(false);
       auto.stop?.();
