@@ -1427,6 +1427,16 @@ function noteHybridSpeechActivity(ts?: number) {
           console.info(
             `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
           );
+          const pxPerSec = typeof getCurrentSpeed === "function" ? getCurrentSpeed() : undefined;
+          const currentPhase = String(appStore.get("session.phase") || sessionPhase);
+          console.warn(
+            "[AUTO_INTENT]",
+            "mode=", state2.mode,
+            "enabled=", enabled,
+            "pxPerSec=", pxPerSec,
+            "sessionPhase=", currentPhase,
+            "userEnabled=", userEnabled,
+          );
         } catch {}
       } catch {}
     });
