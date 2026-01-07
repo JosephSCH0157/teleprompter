@@ -132,7 +132,9 @@ export function renderScript(text: string, container?: HTMLElement | null): void
           const auto = createAutoMotor();
           try { console.info('ABOUT TO CALL installScrollRouter'); } catch {}
           try {
-            installScrollRouter({ auto, viewer: true, hostEl: root });
+            const viewerEl = document.getElementById('viewer') as HTMLElement | null;
+            const hostEl = viewerEl || root;
+            installScrollRouter({ auto, viewer: !!viewerEl, hostEl });
             try { console.info('RETURNED FROM installScrollRouter'); } catch {}
           } catch (err) {
             try { console.warn('INSTALL FAILED', err); } catch {}
