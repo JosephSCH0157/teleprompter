@@ -258,9 +258,6 @@ function createAutoMotor() {
   let lastTs = 0;
   let lastTickMoved = false;
   let carry = 0;
-  let rafId: number | null = null;
-  let lastTs = 0;
-  let lastTickMoved = false;
 
   function setEnabled(on) {
     try {
