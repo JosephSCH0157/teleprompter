@@ -1151,9 +1151,6 @@ function installScrollRouter(opts) {
   }
 
   try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
-  function isSessionLive() {
-    return sessionIntentOn && sessionPhase === 'live';
-  }
   try {
     window.addEventListener("tp:speech-state", (e) => {
       try {
