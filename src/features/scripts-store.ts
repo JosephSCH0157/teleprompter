@@ -26,6 +26,12 @@ import { debugLog, hudLog } from '../env/logging';
 
 const scriptsById = new Map<string, ScriptRecord>();
 const mappedHandles = new Map<string, MappedHandle>();
+let lastSyncFingerprint = '';
+const computeFingerprint = (entries: { id: string }[]) =>
+  entries
+    .map((e) => String(e.id || ''))
+    .sort()
+    .join('|');
 
 async function ensureReadPermission(handle: FileSystemHandle): Promise<boolean> {
   try {
@@ -138,6 +144,12 @@ export const ScriptStore = {
   },
 
   syncMapped(entries: { id: string; title: string; handle: FileSystemHandle }[]): void {
+    const fingerprint = computeFingerprint(entries);
+    if (fingerprint && fingerprint === lastSyncFingerprint) {
+      debugLog('[SCRIPT-STORE] syncMapped skipped (unchanged)', { fingerprint, count: entries.length });
+      return;
+    }
+    lastSyncFingerprint = fingerprint;
     debugLog('[SCRIPT-STORE] syncMapped entries', entries);
     mappedHandles.clear();
 

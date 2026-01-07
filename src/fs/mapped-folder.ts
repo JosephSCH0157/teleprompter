@@ -17,6 +17,7 @@ const STORAGE_KEY = 'tp_mapped_folder_bcast';
 let _dir: FileSystemDirectoryHandle | null = null;
 let _bc: BroadcastChannel | null = null;
 const _listeners = new Set<(_h: FileSystemDirectoryHandle | null, _why: 'init'|'pick'|'clear'|'sync'|'error') => void>();
+let _initPromise: Promise<void> | null = null;
 
 // ---------------- IndexedDB helpers ----------------
 function openDB(): Promise<IDBDatabase> {
@@ -105,21 +106,31 @@ export function refreshMappedFolder(): void {
 }
 
 export async function initMappedFolder(): Promise<void> {
-  try {
-    // Best-effort: request persistent storage once so directory handles survive eviction
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
     try {
-      const FLAG = 'tp_persist_req_v1';
-      if (!(localStorage.getItem(FLAG) === '1') && (navigator as any)?.storage?.persist) {
-        (navigator as any).storage.persist().then((ok: boolean) => {
-          try { localStorage.setItem(FLAG, ok ? '1' : '0'); } catch {}
-        }).catch(() => { try { localStorage.setItem(FLAG, '0'); } catch {} });
-      }
-    } catch {}
+      // Best-effort: request persistent storage once so directory handles survive eviction
+      try {
+        const FLAG = 'tp_persist_req_v1';
+        if (!(localStorage.getItem(FLAG) === '1') && (navigator as any)?.storage?.persist) {
+          (navigator as any).storage.persist().then((ok: boolean) => {
+            try { localStorage.setItem(FLAG, ok ? '1' : '0'); } catch {}
+          }).catch(() => { try { localStorage.setItem(FLAG, '0'); } catch {} });
+        }
+      } catch {}
 
-    const h = await idbGet<FileSystemDirectoryHandle>(KEY);
-    if (h && await verifyPermission(h, 'read')) { _dir = h; ensureBroadcast(); emit('init'); return; }
-  } catch {}
-  _dir = null; ensureBroadcast(); emit('init');
+      const h = await idbGet<FileSystemDirectoryHandle>(KEY);
+      if (h && await verifyPermission(h, 'read')) { _dir = h; ensureBroadcast(); emit('init'); return; }
+    } catch {}
+    _dir = null; ensureBroadcast(); emit('init');
+  })();
+  try {
+    await _initPromise;
+  } catch (err) {
+    _initPromise = null;
+    throw err;
+  }
+  return _initPromise;
 }
 
 export async function pickMappedFolder(): Promise<boolean> {

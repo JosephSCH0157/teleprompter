@@ -36,6 +36,26 @@ function getFolderPickerEnvironmentHint(): string {
 }
 
 const SUPPORTED_EXT = /\.(docx|doc|txt|md)$/i;
+const shouldTraceMappedFolder = (() => {
+  let cache: boolean | null = null;
+  return () => {
+    if (cache !== null) return cache;
+    try {
+      const w = window as any;
+      cache = !!(w.__TP_DEV || w.__TP_DEV1 || /dev=1/.test(location.search || ''));
+    } catch {
+      cache = false;
+    }
+    return cache;
+  };
+})();
+const fingerprintNames = (entries: { name: string }[]) =>
+  entries
+    .map((e) => String(e?.name || ''))
+    .sort()
+    .join('|');
+let lastPopulateFingerprint = '';
+let lastFallbackFingerprint = '';
 function isSupportedScriptName(name: string): boolean {
   const lower = (name || '').toLowerCase().trim();
   if (!lower) return false;
@@ -253,15 +273,29 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       try { sel.setAttribute('aria-busy','true'); } catch {}
       if ('showDirectoryPicker' in window) {
         const entries = await listScripts();
-        populateSelect(entries);
-        _lastCount = entries.length;
-        try { announceCount(_lastCount); } catch {}
+        const entriesFingerprint = fingerprintNames(entries);
+        if (!entriesFingerprint || entriesFingerprint !== lastPopulateFingerprint) {
+          lastPopulateFingerprint = entriesFingerprint;
+          populateSelect(entries);
+          _lastCount = entries.length;
+          try { announceCount(_lastCount); } catch {}
+        } else {
+          try { hudLog('folder:populate:skip', { fingerprint: entriesFingerprint, count: entries.length }); } catch {}
+        }
       }
     } catch {}
     finally { try { sel.setAttribute('aria-busy','false'); } catch {} }
   }
 
 function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
+  const fingerprint = fingerprintNames(entries);
+  if (fingerprint && fingerprint === lastPopulateFingerprint) {
+    if (shouldTraceMappedFolder()) {
+      debugLog('[MAPPED-FOLDER] populateSelect skipped duplicate', { fingerprint, count: entries.length });
+    }
+    return;
+  }
+  if (fingerprint) lastPopulateFingerprint = fingerprint;
   try {
     sel.innerHTML = '';
     const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
@@ -284,14 +318,14 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         return;
     }
     sel.disabled = false;
-    for (const e of entries) {
-      try {
-        debugLog('[MAPPED-FOLDER] seen entry', {
-          name: e.name,
-          allowed: isSupportedScriptName(e.name),
-        });
-      } catch {}
-      if (!isSupportedScriptName(e.name)) continue;
+      for (const e of entries) {
+        if (shouldTraceMappedFolder()) {
+          debugLog('[MAPPED-FOLDER] seen entry', {
+            name: e.name,
+            allowed: isSupportedScriptName(e.name),
+          });
+        }
+        if (!isSupportedScriptName(e.name)) continue;
       const opt = new Option(e.name, e.name) as HTMLOptionElement & {
         __fileHandle?: FileSystemFileHandle;
         __file?: File;
@@ -301,17 +335,22 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { opt._handle = e.handle; } catch {}
       try { opt.__fileHandle = e.handle; } catch {}
       try { mappedEntries.push({ id: e.name, title: e.name, handle: e.handle }); } catch {}
-      try {
-        debugLog('[MAPPED-FOLDER] option created', {
-          id: e.name,
-          label: e.name,
-          hasHandle: !!e.handle,
-          hasFile: false,
+        if (shouldTraceMappedFolder()) {
+          debugLog('[MAPPED-FOLDER] option created', {
+            id: e.name,
+            label: e.name,
+            hasHandle: !!e.handle,
+            hasFile: false,
+          });
+        }
+        sel.append(opt);
+      }
+      if (shouldTraceMappedFolder()) {
+        debugLog('[MAPPED-FOLDER] syncing mapped entries', {
+          count: mappedEntries.length,
+          sample: mappedEntries.slice(0, 3),
         });
-      } catch {}
-      sel.append(opt);
-    }
-      try { debugLog('[MAPPED-FOLDER] syncing mapped entries', { count: mappedEntries.length }); } catch {}
+      }
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: mappedEntries.length, selectId: sel.id } })); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
@@ -345,12 +384,14 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       sel.innerHTML = '';
       const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
       try { sel.setAttribute('aria-busy','true'); } catch {}
-      const filtered = files.filter(f => {
+    const filtered = files.filter(f => {
+      if (shouldTraceMappedFolder()) {
         try {
           debugLog('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
         } catch {}
-        return isSupportedScriptName(f.name);
-      }).sort((a,b)=>a.name.localeCompare(b.name));
+      }
+      return isSupportedScriptName(f.name);
+    }).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
         try { ScriptStore.syncMapped([]); } catch {}
         if (sel.id === 'scriptSelectSidebar') {
@@ -367,6 +408,14 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         try { announceCount(0); } catch {}
         return;
       }
+    const fallbackFingerprint = fingerprintNames(filtered.map((f) => ({ name: f.name })));
+    if (fallbackFingerprint && fallbackFingerprint === lastFallbackFingerprint) {
+      if (shouldTraceMappedFolder()) {
+        debugLog('[MAPPED-FOLDER] populateSelectFromFiles skipped duplicate', { fingerprint: fallbackFingerprint, count: filtered.length });
+      }
+      return;
+    }
+    lastFallbackFingerprint = fallbackFingerprint;
     sel.disabled = false;
     for (const f of filtered) {
       const opt = new Option(f.name, f.name) as HTMLOptionElement & {
@@ -378,17 +427,21 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { opt._file = f; } catch {}
       try { opt.__file = f; } catch {}
       try { mappedEntries.push({ id: f.name, title: f.name, handle: f as any }); } catch {}
-      try {
-        debugLog('[MAPPED-FOLDER] option created', {
-          id: f.name,
-          label: f.name,
-          hasHandle: false,
-          hasFile: true,
-        });
-      } catch {}
+      if (shouldTraceMappedFolder()) {
+        try {
+          debugLog('[MAPPED-FOLDER] option created', {
+            id: f.name,
+            label: f.name,
+            hasHandle: false,
+            hasFile: true,
+          });
+        } catch {}
+      }
       sel.append(opt);
     }
-      try { debugLog('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length }); } catch {}
+      if (shouldTraceMappedFolder()) {
+        debugLog('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length });
+      }
       try { ScriptStore.syncMapped(mappedEntries); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
       hudLog('folder:mapped', { count: filtered.length });
