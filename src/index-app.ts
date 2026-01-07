@@ -2114,10 +2114,10 @@ try {
 								rebindFolderControls();
 								window.addEventListener('tp:settings-folder:ready', () => { try { rebindFolderControls(); } catch {}; }, { capture: true });
 							} catch {}
-							try { bindPermissionButton('#recheckFolderBtn'); } catch {}
-							try {
-								const exportBtn = document.getElementById('btnExportSettings') as HTMLButtonElement | null;
-								if (exportBtn && exportBtn.dataset.settingsExportWired !== '1') {
+          try { bindPermissionButton('#recheckFolderBtn'); } catch {}
+          try {
+            const exportBtn = document.getElementById('btnExportSettings') as HTMLButtonElement | null;
+            if (exportBtn && exportBtn.dataset.settingsExportWired !== '1') {
 									exportBtn.dataset.settingsExportWired = '1';
 									exportBtn.addEventListener('click', () => {
 										try { triggerSettingsDownload(); } catch (err) { try { console.error('[settings-export] click error', err); } catch {} }
@@ -2131,9 +2131,12 @@ try {
 									importBtn.addEventListener('click', () => {
 										try { triggerSettingsImport(); } catch (err) { try { console.error('[settings-import] click error', err); } catch {} }
 									});
-								}
-							} catch {}
-						});
+            }
+          } catch {}
+          try {
+            window.addEventListener('tp:settings:open', () => { try { refreshScriptsSidebar(); } catch {} }, { passive: true });
+          } catch {}
+        });
 					} catch {}
 
 					// Settings/Help overlay wiring is now owned by the centralized binder (ui-binds.ts)
