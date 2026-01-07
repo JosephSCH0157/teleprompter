@@ -58,6 +58,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
       setRowVisibility(autoRow as HTMLElement | null, true);
       if (autoSpeedLabel) autoSpeedLabel.textContent = 'Auto-scroll (WPM)';
       setRowVisibility(autoSpeedWrap as HTMLElement | null, false);
+      setRowVisibility(autoRow as HTMLElement | null, false);
       setRowVisibility(wpmRow as HTMLElement | null, true);
       setHelp('WPM mode uses this target pace to drive auto-scroll.');
       break;
