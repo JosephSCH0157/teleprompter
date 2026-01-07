@@ -1255,9 +1255,10 @@ function noteHybridSpeechActivity(ts?: number) {
       resetHybridSafetyState();
       const autoPxPerSec = getCurrentSpeed();
       const sessionActive = isSessionLive();
+      const allowSessionByIntent = sessionActive || userEnabled;
       const viewerReady = hasScrollableTarget();
       let autoBlocked = "blocked:sessionOff";
-      if (!sessionActive) {
+      if (!allowSessionByIntent) {
         autoBlocked = "blocked:sessionOff";
       } else if (!userEnabled) {
         autoBlocked = "blocked:userIntentOff";
