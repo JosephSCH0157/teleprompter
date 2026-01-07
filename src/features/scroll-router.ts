@@ -917,14 +917,8 @@ function installScrollRouter(opts) {
     persistStoredAutoEnabled(on);
     try { applyGate(); } catch {}
   }
-  function processAutoIntent(detail: any) {
+  function handleAutoIntent(detail: any) {
     try {
-      console.warn('[AUTO_INTENT] PROCESS enter', {
-        detail,
-        mode: state2.mode,
-        pxPerSec: typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined,
-        sessionPhase,
-      });
       const enabled =
         typeof detail.enabled === 'boolean'
           ? detail.enabled
@@ -952,7 +946,20 @@ function installScrollRouter(opts) {
       } catch {}
     } catch {}
   }
-  autoIntentProcessor = processAutoIntent;
+  autoIntentProcessor = (detail) => {
+    console.warn('[AUTO_INTENT] PROCESS enter', {
+      detail,
+      mode: state2.mode,
+      pxPerSec: typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined,
+      sessionPhase,
+    });
+    try {
+      handleAutoIntent(detail);
+    } catch (err) {
+      console.error('[AUTO_INTENT] PROCESS crash', err);
+      throw err;
+    }
+  };
   console.warn('[AUTO_INTENT] processor assigned', { hasPending: !!pendingAutoIntentDetail });
   if (pendingAutoIntentDetail) {
     console.warn('[AUTO_INTENT] flushing pending', pendingAutoIntentDetail);
