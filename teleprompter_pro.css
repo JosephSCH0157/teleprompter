@@ -245,6 +245,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
         font-size:15px;
         cursor:ew-resize;
     }
+    #autoRow{
+        font-size:1.2rem;
+        align-items:center;
+        gap:6px;
+    }
+    #autoRow .chip{
+        min-width:48px;
+        font-size:1.2rem;
+        padding:10px 16px;
+    }
+    #autoToggle{
+        font-size:1.15rem;
+        padding:10px 18px;
+    }
     button:disabled{opacity:.5;cursor:not-allowed}
     /* Emphasized primary action button */
     .btn-primary{font-size:16px;padding:10px 14px;border-radius:12px;font-weight:600}
