@@ -1,6 +1,7 @@
 // src/render-script.ts
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
+import { installScrollRouter, createAutoMotor } from './features/scroll-router';
 
 function _escapeHtml(input: string): string {
   return String(input || '')
@@ -66,6 +67,8 @@ function resolveSpeakerTag(tag: string): SpeakerKey | null {
   return null;
 }
 
+let viewerScrollRouterInstalled = false;
+
 export function renderScript(text: string, container?: HTMLElement | null): void {
   const raw = String(text ?? '');
   try { (window as any).__tpRawScript = raw; } catch {}
@@ -121,6 +124,14 @@ export function renderScript(text: string, container?: HTMLElement | null): void
         `paddingTop=${padTarget}`,
         `scrollPaddingTop=${scrollPadTarget}`,
       ].join(' '));
+      if (!viewerScrollRouterInstalled && viewer) {
+        try {
+          const auto = createAutoMotor();
+          installScrollRouter({ auto, viewer: true });
+          try { (window as any).__tpAuto = auto; } catch {}
+          viewerScrollRouterInstalled = true;
+        } catch {}
+      }
     } catch {}
   } catch {}
 
