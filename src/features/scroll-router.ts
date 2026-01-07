@@ -53,13 +53,17 @@ const AUTO_INTENT_WIRE_STAMP = 'v2026-01-07c';
 export const __AUTO_INTENT_WIRE_SENTINEL = 'scroll-router-wire-v1';
 let autoIntentListenerWired = false;
 let autoIntentProcessor: ((detail: any) => void) | null = null;
+let pendingAutoIntentDetail: any | null = null;
 
 function onAutoIntent(e: Event) {
   const detail = (e as CustomEvent)?.detail || {};
   try {
     console.warn('[AUTO_INTENT] recv', { detail });
   } catch {}
-  if (!autoIntentProcessor) return;
+  if (!autoIntentProcessor) {
+    pendingAutoIntentDetail = detail;
+    return;
+  }
   try {
     autoIntentProcessor(detail);
   } catch {}
@@ -886,6 +890,12 @@ function installScrollRouter(opts) {
   }
   function processAutoIntent(detail: any) {
     try {
+      console.warn('[AUTO_INTENT] PROCESS enter', {
+        detail,
+        mode: state2.mode,
+        pxPerSec: typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined,
+        sessionPhase,
+      });
       const enabled =
         typeof detail.enabled === 'boolean'
           ? detail.enabled
@@ -914,6 +924,14 @@ function installScrollRouter(opts) {
     } catch {}
   }
   autoIntentProcessor = processAutoIntent;
+  if (pendingAutoIntentDetail) {
+    try {
+      processAutoIntent(pendingAutoIntentDetail);
+    } catch {
+      // ignore
+    }
+    pendingAutoIntentDetail = null;
+  }
 
   try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   function isSessionLive() {
