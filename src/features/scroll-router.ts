@@ -791,6 +791,20 @@ function applyMode(m) {
 }
 function installScrollRouter(opts) {
   const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  function setProcessorAndFlush() {
+    autoIntentProcessor = processAutoIntent;
+    console.warn('[AUTO_INTENT] processor assigned', { hasPending: !!pendingAutoIntentDetail });
+    if (pendingAutoIntentDetail) {
+      console.warn('[AUTO_INTENT] flushing pending', pendingAutoIntentDetail);
+      try {
+        processAutoIntent(pendingAutoIntentDetail);
+      } catch {
+        // ignore
+      }
+      pendingAutoIntentDetail = null;
+    }
+  }
+  setProcessorAndFlush();
   try {
     console.warn('[SCROLL_ROUTER] installScrollRouter ENTER', {
       viewerInstance: viewerInstallFlag,
