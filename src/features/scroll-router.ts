@@ -1098,9 +1098,17 @@ function noteHybridSpeechActivity(ts?: number) {
         autoBlocked = "none";
       }
       const want = autoBlocked === "none";
+      const prevEnabled = enabledNow;
+      const action = want
+        ? prevEnabled
+          ? "MOTOR_ALREADY_RUNNING"
+          : "MOTOR_START"
+        : prevEnabled
+          ? "MOTOR_STOP"
+          : "MOTOR_IGNORED_OFF";
       try {
         console.info(
-          `[scroll-router] applyGate mode=${state2.mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} shouldRun=${want} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+          `[scroll-router] ${action} mode=${state2.mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn ? "on" : "off"} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
         );
       } catch {}
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
@@ -1413,9 +1421,11 @@ function noteHybridSpeechActivity(ts?: number) {
               : undefined;
         if (typeof enabled !== "boolean") return;
         setAutoIntentState(enabled);
+        const brain = String(appStore.get("scrollBrain") || "auto");
+        const decision = enabled ? "motor-start-request" : "motor-stop-request";
         try {
           console.info(
-          `[scroll-router] tp:auto:intent mode=${state2.mode} enabled=${enabled} userEnabled=${userEnabled} hybridWantedRunning=${hybridWantedRunning}`,
+            `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
           );
         } catch {}
       } catch {}

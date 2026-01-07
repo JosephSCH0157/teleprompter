@@ -12,28 +12,6 @@ import {
   shouldAutoStartForMode,
 } from './scroll/scroll-mode-utils';
 
-function wantsAutoRecord(): boolean {
-  try {
-    const w = window as any;
-    if (w.__tpRecording && typeof w.__tpRecording.wantsAuto === 'function') {
-      return !!w.__tpRecording.wantsAuto();
-    }
-    if (w.__tpStore && typeof w.__tpStore.get === 'function') {
-      const v = w.__tpStore.get('autoRecord');
-      if (typeof v === 'boolean') return v;
-    }
-  } catch (e) {
-    try {
-      if ((window as any).__TP_DEV) console.warn('[rec] wantsAutoRecord() failed, defaulting to false', e);
-    } catch {}
-  }
-  try {
-    return wantsAutoRecordStore();
-  } catch {
-    return false;
-  }
-}
-
 function computeScrollAutoOnLive(): boolean {
   try {
     const mode = appStore.get('scrollMode') as string | undefined;
@@ -68,9 +46,9 @@ function hasCameraActive(): boolean {
   return false;
 }
 
-function computeRecordArmOnLive(): { recordOnLive: boolean; reason: RecordReason } {
+function computeRecordArmOnLive(recordingEnabledOverride?: boolean): { recordOnLive: boolean; reason: RecordReason } {
   try {
-    const recordingEnabled = wantsAutoRecord();
+    const recordingEnabled = typeof recordingEnabledOverride === 'boolean' ? recordingEnabledOverride : wantsAutoRecord();
     const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
     const inRehearsal = mode === 'rehearsal';
 
@@ -135,7 +113,8 @@ function computeAsrArmed(desired: boolean): boolean {
 function snapshotPreroll(): void {
   const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
   const scrollAutoOnLive = computeScrollAutoOnLive();
-  const { recordOnLive, reason } = computeRecordArmOnLive();
+  const autoRecordEnabled = wantsAutoRecord();
+  const { recordOnLive, reason } = computeRecordArmOnLive(autoRecordEnabled);
   const asrDesired = computeAsrDesired();
   const asrArmed = computeAsrArmed(asrDesired);
   const autoRecord = !!appStore.get('autoRecord');
@@ -144,6 +123,11 @@ function snapshotPreroll(): void {
   appStore.set('session.scrollAutoOnLive', scrollAutoOnLive);
   appStore.set('session.recordOnLive', recordOnLive);
   appStore.set('session.recordReason', reason);
+  try {
+    console.debug('[session/preroll] recording arm', { autoRecordEnabled, recordOnLive, reason });
+  } catch {
+    // ignore
+  }
   appStore.set('session.asrDesired', asrDesired);
   appStore.set('session.asrArmed', asrArmed);
   appStore.set('session.asrReady', asrArmed);

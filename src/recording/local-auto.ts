@@ -109,14 +109,6 @@
   async function start(): Promise<void> {
     if (active) return;
     try {
-      const armed =
-        typeof (window as any).wantsAutoRecord === 'function'
-          ? !!(window as any).wantsAutoRecord()
-          : !!((window as any).__tpStore && (window as any).__tpStore.get && (window as any).__tpStore.get('autoRecord'));
-      if (!armed) {
-        try { console.log('[core-recorder] start skipped: autoRecord disabled'); } catch {}
-        return;
-      }
       if (mustSkipForMode()) {
         try { console.log('[core-recorder] start skipped: rehearsal mode'); } catch {}
         return;
@@ -124,7 +116,6 @@
 
       try {
         console.log('[core-recorder] start', {
-          armed,
           mode: (window as any).__tpStore?.get?.('scrollMode') || null,
         });
       } catch {}
