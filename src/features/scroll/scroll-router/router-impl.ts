@@ -1401,7 +1401,6 @@ function noteHybridSpeechActivity(ts?: number) {
       appStore.subscribe("session.phase", (phase) => {
         sessionPhase = String(phase || "idle");
         if (sessionPhase !== "live") {
-          sessionIntentOn = false;
           stopAllMotors("phase change");
         }
         applyGate();
@@ -1581,18 +1580,16 @@ function noteHybridSpeechActivity(ts?: number) {
     }
   } catch {}
   try {
-    window.addEventListener("tp:session:intent", (e) => {
+      window.addEventListener("tp:session:intent", (e) => {
       try {
         const detail = (e as CustomEvent)?.detail || {};
         const active = detail.active === true;
-        if (sessionIntentOn === active) return;
-        sessionIntentOn = active;
         try {
           console.info(
             `[scroll-router] tp:session:intent active=${active} mode=${detail.mode || state2.mode} reason=${detail.reason || 'unknown'}`,
           );
         } catch {}
-        applyGate();
+        setAutoIntentState(active);
       } catch {}
     });
     try { console.info('[scroll-router] tp:session:intent listener installed'); } catch {}
