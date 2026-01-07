@@ -791,6 +791,13 @@ function applyMode(m) {
 }
 function installScrollRouter(opts) {
   try {
+    console.warn('[SCROLL_ROUTER] installScrollRouter ENTER', {
+      viewer: !!viewer,
+      mode: state2.mode,
+      autoIntentProcessorExists: !!autoIntentProcessor,
+    });
+  } catch {}
+  try {
     window.__tpScrollRouterTsActive = true;
   } catch {
   }
