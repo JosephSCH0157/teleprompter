@@ -865,7 +865,12 @@ function installScrollRouter(opts) {
   };
 
   function wireAutoIntentListener() {
-    if (autoIntentListenerWired) return;
+    if (autoIntentListenerWired) {
+      try {
+        console.warn('[AUTO_INTENT] already wired', AUTO_INTENT_WIRE_STAMP);
+      } catch {}
+      return;
+    }
     autoIntentListenerWired = true;
     window.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
     try {
@@ -877,7 +882,9 @@ function installScrollRouter(opts) {
     } catch {}
   }
 
+  try { console.warn('[AUTO_INTENT] about to call wireAutoIntentListener()'); } catch {}
   wireAutoIntentListener();
+  try { console.warn('[AUTO_INTENT] returned from wireAutoIntentListener()'); } catch {}
   try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   function isSessionLive() {
     return sessionIntentOn && sessionPhase === 'live';
