@@ -879,12 +879,16 @@ function installScrollRouter(opts) {
   };
 
   function wireAutoIntentListener() {
+    try {
+      console.warn('[AUTO_INTENT] TRIGGER step=1 pre-guard', { stamp: AUTO_INTENT_WIRE_STAMP, already: autoIntentListenerWired });
+    } catch {}
     if (autoIntentListenerWired) {
       try {
-        console.warn('[AUTO_INTENT] already wired', AUTO_INTENT_WIRE_STAMP);
+        console.warn('[AUTO_INTENT] TRIGGER step=2 alreadyWired=true; skipping', { stamp: AUTO_INTENT_WIRE_STAMP });
       } catch {}
       return;
     }
+    try { console.warn('[AUTO_INTENT] TRIGGER step=3 wiring now'); } catch {}
     autoIntentListenerWired = true;
     window.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
     try {
@@ -894,12 +898,13 @@ function installScrollRouter(opts) {
       document.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
       console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'document' });
     } catch {}
+    try { console.warn('[AUTO_INTENT] TRIGGER step=4 wired ok'); } catch {}
     try {
       const counts = [
         (getEventListeners?.(window)?.['tp:auto:intent']?.length ?? 'noAPI'),
         (getEventListeners?.(document)?.['tp:auto:intent']?.length ?? 'noAPI'),
       ];
-      console.warn('[AUTO_INTENT] wired counts', counts);
+      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
     } catch {}
   }
 
