@@ -77,7 +77,12 @@ import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
-import { triggerWireAutoIntentListener, __AUTO_INTENT_WIRE_SENTINEL } from './features/scroll-router';
+import {
+  triggerWireAutoIntentListener,
+  __AUTO_INTENT_WIRE_SENTINEL,
+  installScrollRouter,
+  createAutoMotor,
+} from './features/scroll-router';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
 import './dev/asr-thresholds-panel';
@@ -1844,6 +1849,11 @@ export async function boot() {
 										document.getElementById('viewer');
 									const msg = `[SCROLL] initOnce: scroll-router (viewer=${!!viewer})`;
 									try { console.info(msg); } catch {}
+									try {
+										const auto = createAutoMotor();
+										installScrollRouter({ auto });
+										try { (window as any).__tpAuto = auto; } catch {}
+									} catch {}
 									try { console.warn('[AUTO_INTENT] INLINE_WIRE about to addEventListener tp:auto:intent'); } catch {}
 									try {
 										window.addEventListener('tp:auto:intent', (e: any) => {

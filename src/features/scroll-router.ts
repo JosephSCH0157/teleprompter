@@ -1595,16 +1595,7 @@ function noteHybridSpeechActivity(ts?: number) {
   }
 }
 
-try {
-  if (typeof window !== 'undefined') {
-    const auto = createAutoMotor();
-    installScrollRouter({ auto });
-    try {
-      (window as any).__tpAuto = auto;
-    } catch {}
-  }
-} catch {}
-
 export {
     installScrollRouter,
+    createAutoMotor,
 };
