@@ -1618,6 +1618,9 @@ function noteHybridSpeechActivity(ts?: number) {
         if (!Number.isFinite(pxs)) return;
         hybridBasePxps = pxs;
         applyHybridVelocity();
+        if (state2.mode === "wpm") {
+          try { auto.setSpeed?.(pxs); } catch {}
+        }
       } catch {
       }
     });
