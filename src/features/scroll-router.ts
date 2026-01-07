@@ -50,12 +50,19 @@ if (typeof window !== 'undefined') {
 }
 
 const AUTO_INTENT_WIRE_STAMP = 'v2026-01-07c';
+export const __AUTO_INTENT_WIRE_SENTINEL = 'scroll-router-wire-v1';
 let autoIntentListenerWired = false;
 let registeredWireAutoIntentListener: (() => void) | null = null;
 
 export function triggerWireAutoIntentListener(): void {
   try {
+    console.warn('[AUTO_INTENT] triggerWireAutoIntentListener ENTER', __AUTO_INTENT_WIRE_SENTINEL);
+  } catch {}
+  try {
     registeredWireAutoIntentListener?.();
+  } catch {}
+  try {
+    console.warn('[AUTO_INTENT] triggerWireAutoIntentListener EXIT', __AUTO_INTENT_WIRE_SENTINEL);
   } catch {}
 }
 
@@ -886,6 +893,13 @@ function installScrollRouter(opts) {
     try {
       document.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
       console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'document' });
+    } catch {}
+    try {
+      const counts = [
+        (getEventListeners?.(window)?.['tp:auto:intent']?.length ?? 'noAPI'),
+        (getEventListeners?.(document)?.['tp:auto:intent']?.length ?? 'noAPI'),
+      ];
+      console.warn('[AUTO_INTENT] wired counts', counts);
     } catch {}
   }
 
