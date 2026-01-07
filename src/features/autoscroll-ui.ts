@@ -106,6 +106,17 @@ function initAutoControls(): void {
       const next = Number(speedInput.value) || currentSpeed;
       handleSpeedChange(next);
     }, { capture: true });
+    speedInput.addEventListener(
+      'wheel',
+      (ev) => {
+        ev.preventDefault();
+        const delta = ev.deltaY || ev.deltaX || 0;
+        if (!delta) return;
+        const direction = delta > 0 ? -AUTO_STEP_FINE : AUTO_STEP_FINE;
+        adjustSpeed(direction);
+      },
+      { passive: false, capture: true },
+    );
   }
 
   const adjustSpeed = (delta: number) => {
