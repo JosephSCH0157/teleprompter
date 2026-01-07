@@ -77,7 +77,7 @@ import { initRecPillsDisplay, initRecPillsMain } from './features/rec-pills';
 import './recording/local-auto'; // ensure core recorder bridge is loaded
 import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
-import { triggerWireAutoIntentListener, __AUTO_INTENT_WIRE_SENTINEL } from './features/scroll/scroll-router';
+import { triggerWireAutoIntentListener, __AUTO_INTENT_WIRE_SENTINEL, ROUTER_STAMP } from './features/scroll/scroll-router';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
 import './dev/ci-mocks';
 import './dev/asr-thresholds-panel';
@@ -139,6 +139,8 @@ function installFatalGuards(): void {
 
 installFatalGuards();
 import { bootstrap } from './boot/boot';
+
+try { console.warn('[ROUTER_STAMP] index-app', ROUTER_STAMP); } catch {}
 
 // Idempotent init guard for feature initializers (prevents double-init as we migrate)
 export function initOnce<T extends (..._args: any[]) => any>(name: string, fn: T): T {

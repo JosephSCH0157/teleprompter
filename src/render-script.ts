@@ -1,7 +1,9 @@
 // src/render-script.ts
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
-import { installScrollRouter, createAutoMotor } from './features/scroll/scroll-router';
+import { installScrollRouter, createAutoMotor, ROUTER_STAMP } from './features/scroll/scroll-router';
+
+try { console.warn('[ROUTER_STAMP] render-script', ROUTER_STAMP); } catch {}
 
 function _escapeHtml(input: string): string {
   return String(input || '')
@@ -128,10 +130,19 @@ export function renderScript(text: string, container?: HTMLElement | null): void
         try { console.warn('[SCROLL_ROUTER] render-script installing router now'); } catch {}
         try {
           const auto = createAutoMotor();
-          installScrollRouter({ auto, viewer: true, hostEl: root });
+          try { console.info('ABOUT TO CALL installScrollRouter'); } catch {}
+          try {
+            installScrollRouter({ auto, viewer: true, hostEl: root });
+            try { console.info('RETURNED FROM installScrollRouter'); } catch {}
+          } catch (err) {
+            try { console.warn('INSTALL FAILED', err); } catch {}
+            throw err;
+          }
           try { (window as any).__tpAuto = auto; } catch {}
           viewerScrollRouterInstalled = true;
-        } catch {}
+        } catch (err) {
+          try { console.warn('[SCROLL_ROUTER] render-script install aborted', err); } catch {}
+        }
       }
     } catch {}
   } catch {}

@@ -40,6 +40,12 @@ const isDevMode = (() => {
   };
 })();
 
+;(globalThis as any).__tp_router_stamp = ((globalThis as any).__tp_router_stamp ?? 0) + 1;
+try {
+  console.warn('[ROUTER_STAMP]', (globalThis as any).__tp_router_stamp);
+} catch {}
+export const ROUTER_STAMP = (globalThis as any).__tp_router_stamp;
+
 if (typeof window !== 'undefined') {
   try {
     (window as any).__tp_router_probe = 'scroll-router loaded';
