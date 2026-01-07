@@ -703,6 +703,26 @@ function holdCreepStop() {
 }
 var speaking = false;
 var gateTimer;
+function stopAllMotors(reason) {
+  try {
+    if (reason) {
+      try { console.debug("[ScrollRouter] stopAllMotors", reason); } catch {}
+    }
+  } catch {}
+  if (enabledNow) {
+    try {
+      auto.setEnabled?.(false);
+      auto.stop?.();
+    } catch {}
+    enabledNow = false;
+    emitMotorState("auto", false);
+  }
+  const wasHybridRunning = hybridMotor.isRunning();
+  hybridMotor.stop();
+  if (wasHybridRunning) {
+    emitMotorState("hybridWpm", false);
+  }
+}
 function setSpeaking(on, auto) {
   if (on === speaking) return;
   speaking = on;
@@ -1045,26 +1065,6 @@ function installScrollRouter(opts) {
       return !!allow;
     } catch {
       return false;
-    }
-  }
-  function stopAllMotors(reason) {
-    try {
-      if (reason) {
-        try { console.debug("[ScrollRouter] stopAllMotors", reason); } catch {}
-      }
-    } catch {}
-    if (enabledNow) {
-      try {
-        auto.setEnabled?.(false);
-        auto.stop?.();
-      } catch {}
-      enabledNow = false;
-      emitMotorState("auto", false);
-    }
-    const wasHybridRunning = hybridMotor.isRunning();
-    hybridMotor.stop();
-    if (wasHybridRunning) {
-      emitMotorState("hybridWpm", false);
     }
   }
   function nowMs() {
