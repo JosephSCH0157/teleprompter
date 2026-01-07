@@ -958,6 +958,7 @@ function installScrollRouter(opts) {
     userIntentOn = on;
     userEnabled = on;
     hybridWantedRunning = on;
+    sessionIntentOn = on;
     if (!hybridWantedRunning) {
       hybridPausedBySilence = false;
       clearHybridSilenceTimer();
@@ -1253,12 +1254,10 @@ function noteHybridSpeechActivity(ts?: number) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
-      const autoPxPerSec = getCurrentSpeed();
-      const sessionActive = isSessionLive();
-      const allowSessionByIntent = sessionActive || userEnabled;
       const viewerReady = hasScrollableTarget();
+      const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
-      if (!allowSessionByIntent) {
+      if (sessionBlocked) {
         autoBlocked = "blocked:sessionOff";
       } else if (!userEnabled) {
         autoBlocked = "blocked:userIntentOff";
