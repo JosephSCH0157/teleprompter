@@ -1279,7 +1279,7 @@ function noteHybridSpeechActivity(ts?: number) {
           : "MOTOR_IGNORED_OFF";
       try {
         console.info(
-          `[scroll-router] ${action} mode=${state2.mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn ? "on" : "off"} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+          `[scroll-router] ${action} mode=${state2.mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
         );
       } catch {}
       if (typeof auto.setEnabled === "function") auto.setEnabled(want);
