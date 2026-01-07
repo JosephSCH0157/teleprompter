@@ -611,7 +611,11 @@ function createOrchestrator() {
   } catch {}
   try {
     window.addEventListener("tp:asr:guard", () => {
-      _markHybridOffScript();
+      try {
+        if (typeof _markHybridOffScript === "function") {
+          _markHybridOffScript();
+        }
+      } catch {}
     });
   } catch {}
   async function stop() {
