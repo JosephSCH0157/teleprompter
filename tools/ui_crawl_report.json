@@ -810,6 +810,14 @@
       }
     },
     {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+      "location": {
+        "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
+        "lineNumber": 6
+      }
+    },
+    {
       "type": "log",
       "text": "[ASR] legacy state built JSHandle@object",
       "location": {
@@ -866,14 +874,6 @@
     {
       "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-      "location": {
-        "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
-        "lineNumber": 6
-      }
-    },
-    {
-      "type": "warning",
-      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: WebSocket is closed before the connection is established.",
       "location": {
         "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
         "lineNumber": 6
@@ -1116,9 +1116,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "e3a998b5a6ea067aa10b525a2fbbbcaee89e40e8",
+      "gitSha": "90e0545d1a55e4bba4a6232ebdca58b165c7978d",
       "branch": "main",
-      "buildTime": "2026-01-07T01:38:52.596Z"
+      "buildTime": "2026-01-07T01:46:07.855Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

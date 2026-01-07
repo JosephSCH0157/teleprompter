@@ -1442,10 +1442,10 @@ function noteHybridSpeechActivity(ts?: number) {
       } catch {}
     };
     window.addEventListener("tp:auto:intent", handleAutoIntent as EventListener);
-    console.warn('[AUTO_INTENT] listener wired', { target: 'window' });
+    console.warn('[AUTO_INTENT] listener wired v2026-01-07c', { target: 'window' });
     try {
       document.addEventListener("tp:auto:intent", handleAutoIntent as EventListener);
-      console.warn('[AUTO_INTENT] listener wired', { target: 'document' });
+      console.warn('[AUTO_INTENT] listener wired v2026-01-07c', { target: 'document' });
     } catch {}
     try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   } catch {}
