@@ -49,6 +49,9 @@ if (typeof window !== 'undefined') {
   }
 }
 
+const AUTO_INTENT_WIRE_STAMP = 'v2026-01-07c';
+let autoIntentListenerWired = false;
+
 // src/asr/v2/adapters/vad.ts
 function createVadEventAdapter() {
   let ready = false;
@@ -829,6 +832,53 @@ function installScrollRouter(opts) {
     persistStoredAutoEnabled(on);
     try { applyGate(); } catch {}
   }
+  const handleAutoIntent = (e: Event) => {
+    try {
+      const detail = (e as CustomEvent)?.detail || {};
+      console.warn('[AUTO_INTENT] recv', { detail });
+      const enabled =
+        typeof detail.enabled === 'boolean'
+          ? detail.enabled
+          : typeof detail.on === 'boolean'
+            ? detail.on
+            : undefined;
+      if (typeof enabled !== 'boolean') return;
+      setAutoIntentState(enabled);
+      const brain = String(appStore.get('scrollBrain') || 'auto');
+      const decision = enabled ? 'motor-start-request' : 'motor-stop-request';
+      try {
+        console.info(
+          `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
+        );
+        const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
+        const currentPhase = String(appStore.get('session.phase') || sessionPhase);
+        console.warn(
+          '[AUTO_INTENT]',
+          'mode=', state2.mode,
+          'enabled=', enabled,
+          'pxPerSec=', pxPerSec,
+          'sessionPhase=', currentPhase,
+          'userEnabled=', userEnabled,
+        );
+      } catch {}
+    } catch {}
+  };
+
+  function wireAutoIntentListener() {
+    if (autoIntentListenerWired) return;
+    autoIntentListenerWired = true;
+    window.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
+    try {
+      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window' });
+    } catch {}
+    try {
+      document.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
+      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'document' });
+    } catch {}
+  }
+
+  wireAutoIntentListener();
+  try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   function isSessionLive() {
     return sessionIntentOn && sessionPhase === 'live';
   }
@@ -1408,46 +1458,6 @@ function noteHybridSpeechActivity(ts?: number) {
         delete (window as any).__tpAutoIntentPending;
       } catch {}
     }
-  } catch {}
-  try {
-    const handleAutoIntent = (e: Event) => {
-      try {
-        const detail = (e as CustomEvent)?.detail || {};
-        console.warn("[AUTO_INTENT] recv", { detail });
-        const enabled =
-          typeof detail.enabled === "boolean"
-            ? detail.enabled
-            : typeof detail.on === "boolean"
-              ? detail.on
-              : undefined;
-        if (typeof enabled !== "boolean") return;
-        setAutoIntentState(enabled);
-        const brain = String(appStore.get("scrollBrain") || "auto");
-        const decision = enabled ? "motor-start-request" : "motor-stop-request";
-        try {
-          console.info(
-            `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
-          );
-          const pxPerSec = typeof getCurrentSpeed === "function" ? getCurrentSpeed() : undefined;
-          const currentPhase = String(appStore.get("session.phase") || sessionPhase);
-          console.warn(
-            "[AUTO_INTENT]",
-            "mode=", state2.mode,
-            "enabled=", enabled,
-            "pxPerSec=", pxPerSec,
-            "sessionPhase=", currentPhase,
-            "userEnabled=", userEnabled,
-          );
-        } catch {}
-      } catch {}
-    };
-    window.addEventListener("tp:auto:intent", handleAutoIntent as EventListener);
-    console.warn('[AUTO_INTENT] listener wired v2026-01-07c', { target: 'window' });
-    try {
-      document.addEventListener("tp:auto:intent", handleAutoIntent as EventListener);
-      console.warn('[AUTO_INTENT] listener wired v2026-01-07c', { target: 'document' });
-    } catch {}
-    try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   } catch {}
   try {
     window.addEventListener("tp:session:intent", (e) => {
