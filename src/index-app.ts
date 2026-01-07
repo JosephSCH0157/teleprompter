@@ -1851,7 +1851,7 @@ export async function boot() {
 									try { console.info(msg); } catch {}
 									try {
 										const auto = createAutoMotor();
-										installScrollRouter({ auto });
+										installScrollRouter({ auto, viewer: true });
 										try { (window as any).__tpAuto = auto; } catch {}
 									} catch {}
 									try { console.warn('[AUTO_INTENT] INLINE_WIRE about to addEventListener tp:auto:intent'); } catch {}
