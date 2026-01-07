@@ -127,7 +127,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       if (!viewerScrollRouterInstalled && viewer) {
         try {
           const auto = createAutoMotor();
-          installScrollRouter({ auto, viewer: true });
+          installScrollRouter({ auto, viewer: true, hostEl: root });
           try { (window as any).__tpAuto = auto; } catch {}
           viewerScrollRouterInstalled = true;
         } catch {}

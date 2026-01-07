@@ -790,11 +790,12 @@ function applyMode(m) {
   }
 }
 function installScrollRouter(opts) {
-  const { auto, viewer: viewerInstallFlag = false } = opts;
+  const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
   try {
     console.warn('[SCROLL_ROUTER] installScrollRouter ENTER', {
       viewerInstance: viewerInstallFlag,
       viewerEl: !!viewer,
+      hostEl: hostEl ? (hostEl.id || hostEl.className || hostEl.tagName) : null,
       mode: state2.mode,
       autoIntentProcessorExists: !!autoIntentProcessor,
     });
@@ -802,6 +803,9 @@ function installScrollRouter(opts) {
   try {
     window.__tpScrollRouterTsActive = true;
   } catch {
+  }
+  if (hostEl) {
+    viewer = hostEl;
   }
   restoreMode();
   applyMode(state2.mode);
