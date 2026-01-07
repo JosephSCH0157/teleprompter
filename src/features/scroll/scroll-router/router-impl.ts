@@ -703,7 +703,7 @@ function holdCreepStop() {
 }
 var speaking = false;
 var gateTimer;
-function stopAllMotors(reason) {
+function stopAllMotors(reason: string) {
   try {
     if (reason) {
       try { console.debug("[ScrollRouter] stopAllMotors", reason); } catch {}
