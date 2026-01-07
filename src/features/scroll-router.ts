@@ -52,15 +52,41 @@ if (typeof window !== 'undefined') {
 const AUTO_INTENT_WIRE_STAMP = 'v2026-01-07c';
 export const __AUTO_INTENT_WIRE_SENTINEL = 'scroll-router-wire-v1';
 let autoIntentListenerWired = false;
-let registeredWireAutoIntentListener: (() => void) | null = null;
 
 export function triggerWireAutoIntentListener(): void {
   try {
     console.warn('[AUTO_INTENT] triggerWireAutoIntentListener ENTER', __AUTO_INTENT_WIRE_SENTINEL);
   } catch {}
   try {
-    registeredWireAutoIntentListener?.();
+    console.warn('[AUTO_INTENT] TRIGGER body reached', { stamp: AUTO_INTENT_WIRE_STAMP, already: autoIntentListenerWired });
   } catch {}
+  if (autoIntentListenerWired) {
+    try {
+      console.warn('[AUTO_INTENT] TRIGGER step=2 alreadyWired=true; skipping', { stamp: AUTO_INTENT_WIRE_STAMP });
+    } catch {}
+  } else {
+    try { console.warn('[AUTO_INTENT] TRIGGER step=3 wiring now'); } catch {}
+    autoIntentListenerWired = true;
+    window.addEventListener('tp:auto:intent', _handleAutoIntent as EventListener);
+    document.addEventListener('tp:auto:intent', _handleAutoIntent as EventListener);
+    try {
+      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window+document' });
+    } catch {}
+    try { console.warn('[AUTO_INTENT] TRIGGER step=4 wired ok'); } catch {}
+    try {
+      const counts = [
+        (getEventListeners?.(window)?.['tp:auto:intent']?.length ?? 'noAPI'),
+        (getEventListeners?.(document)?.['tp:auto:intent']?.length ?? 'noAPI'),
+      ];
+      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
+    } catch {}
+    try {
+      window.dispatchEvent(
+        new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'wire-selftest' } }),
+      );
+    } catch {}
+    try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window+document)'); } catch {}
+  }
   try {
     console.warn('[AUTO_INTENT] triggerWireAutoIntentListener EXIT', __AUTO_INTENT_WIRE_SENTINEL);
   } catch {}
@@ -846,7 +872,7 @@ function installScrollRouter(opts) {
     persistStoredAutoEnabled(on);
     try { applyGate(); } catch {}
   }
-  const handleAutoIntent = (e: Event) => {
+  const _handleAutoIntent = (e: Event) => {
     try {
       const detail = (e as CustomEvent)?.detail || {};
       console.warn('[AUTO_INTENT] recv', { detail });
@@ -878,40 +904,6 @@ function installScrollRouter(opts) {
     } catch {}
   };
 
-  function wireAutoIntentListener() {
-    try {
-      console.warn('[AUTO_INTENT] TRIGGER step=1 pre-guard', { stamp: AUTO_INTENT_WIRE_STAMP, already: autoIntentListenerWired });
-    } catch {}
-    if (autoIntentListenerWired) {
-      try {
-        console.warn('[AUTO_INTENT] TRIGGER step=2 alreadyWired=true; skipping', { stamp: AUTO_INTENT_WIRE_STAMP });
-      } catch {}
-      return;
-    }
-    try { console.warn('[AUTO_INTENT] TRIGGER step=3 wiring now'); } catch {}
-    autoIntentListenerWired = true;
-    window.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
-    try {
-      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window' });
-    } catch {}
-    try {
-      document.addEventListener('tp:auto:intent', handleAutoIntent as EventListener);
-      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'document' });
-    } catch {}
-    try { console.warn('[AUTO_INTENT] TRIGGER step=4 wired ok'); } catch {}
-    try {
-      const counts = [
-        (getEventListeners?.(window)?.['tp:auto:intent']?.length ?? 'noAPI'),
-        (getEventListeners?.(document)?.['tp:auto:intent']?.length ?? 'noAPI'),
-      ];
-      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
-    } catch {}
-  }
-
-  registeredWireAutoIntentListener = wireAutoIntentListener;
-  try { console.warn('[AUTO_INTENT] about to call wireAutoIntentListener()'); } catch {}
-  wireAutoIntentListener();
-  try { console.warn('[AUTO_INTENT] returned from wireAutoIntentListener()'); } catch {}
   try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   function isSessionLive() {
     return sessionIntentOn && sessionPhase === 'live';
