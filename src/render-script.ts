@@ -136,7 +136,6 @@ export function renderScript(text: string, container?: HTMLElement | null): void
             try { console.info('RETURNED FROM installScrollRouter'); } catch {}
           } catch (err) {
             try { console.warn('INSTALL FAILED', err); } catch {}
-            throw err;
           }
           try { (window as any).__tpAuto = auto; } catch {}
           viewerScrollRouterInstalled = true;
