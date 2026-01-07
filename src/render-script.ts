@@ -125,6 +125,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
         `scrollPaddingTop=${scrollPadTarget}`,
       ].join(' '));
       if (!viewerScrollRouterInstalled && viewer) {
+        try { console.warn('[SCROLL_ROUTER] render-script installing router now'); } catch {}
         try {
           const auto = createAutoMotor();
           installScrollRouter({ auto, viewer: true, hostEl: root });
