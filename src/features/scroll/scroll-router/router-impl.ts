@@ -60,6 +60,15 @@ export const __AUTO_INTENT_WIRE_SENTINEL = 'scroll-router-wire-v1';
 let autoIntentListenerWired = false;
 let autoIntentProcessor: ((detail: any) => void) | null = null;
 let pendingAutoIntentDetail: any | null = null;
+let scrollerEl: HTMLElement | null = null;
+let scrollWriteWarned = false;
+function warnScrollWrite(payload: Record<string, unknown>) {
+  if (scrollWriteWarned) return;
+  scrollWriteWarned = true;
+  try {
+    console.warn('[AUTO] SCROLL_WRITE_FAILED', payload);
+  } catch {}
+}
 
 function onAutoIntent(e: Event) {
   const detail = (e as CustomEvent)?.detail || {};
@@ -245,6 +254,9 @@ function createAutoMotor() {
   const timed = createTimedEngine(brain);
   let enabled = false;
   let currentSpeed = 0;
+  let rafId: number | null = null;
+  let lastTs = 0;
+  let lastTickMoved = false;
 
   function setEnabled(on) {
     try {
@@ -272,18 +284,77 @@ function createAutoMotor() {
   }
 
   function toggle() {
-    setEnabled(!enabled);
+    if (enabled) {
+      stop();
+    } else {
+      start();
+    }
+  }
+
+  function cancelTick() {
+    if (rafId != null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(rafId);
+    }
+    rafId = null;
+  }
+
+  function scheduleTick() {
+    if (rafId != null) return;
+    lastTs = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+    rafId = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(motorTick) : null;
+  }
+
+  function motorTick(ts: number) {
+    rafId = null;
+    if (!enabled) return;
+    const now = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : ts || Date.now();
+    const dtSec = lastTs ? Math.max(0, (now - lastTs) / 1000) : 0;
+    lastTs = now;
+    const pxPerSec = currentSpeed;
+    const el = scrollerEl;
+    if (!el || !Number.isFinite(dtSec) || dtSec <= 0 || pxPerSec <= 0) {
+      scheduleTick();
+      return;
+    }
+    const room = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
+    if (room <= 0) {
+      scheduleTick();
+      return;
+    }
+    const before = el.scrollTop || 0;
+    const next = Math.min(room, before + pxPerSec * dtSec);
+    el.scrollTop = next;
+    const after = el.scrollTop || 0;
+    if (after > before) {
+      lastTickMoved = true;
+    } else {
+      warnScrollWrite({
+        id: el.id,
+        className: el.className,
+        before,
+        after,
+        room,
+        overflowY: getComputedStyle(el).overflowY,
+        position: getComputedStyle(el).position,
+      });
+    }
+    scheduleTick();
   }
 
   function stop() {
     setEnabled(false);
+    cancelTick();
   }
+
   function start() {
     if (enabled) return;
     setEnabled(true);
+    lastTickMoved = false;
+    scheduleTick();
   }
+
   function isRunning() {
-    return enabled;
+    return enabled && lastTickMoved;
   }
 
   function getState() {
@@ -291,6 +362,7 @@ function createAutoMotor() {
   }
 
   function tick(_now) {
+    motorTick(_now);
   }
 
   return { setEnabled, setSpeed, setVelocity, stop, toggle, getState, tick, start, isRunning };
@@ -848,6 +920,16 @@ function installScrollRouter(opts) {
   const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
   if (!viewer && hostEl) {
     viewer = hostEl;
+  }
+  if (hostEl instanceof HTMLElement) {
+    scrollerEl = hostEl;
+  }
+  if (!scrollerEl) {
+    scrollerEl = document.querySelector<HTMLElement>('#viewer') || document.querySelector<HTMLElement>('#script');
+  }
+  if (!scrollerEl) {
+    const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
+    scrollerEl = fallback;
   }
   function setProcessorAndFlush() {
     autoIntentProcessor = handleAutoIntent;
