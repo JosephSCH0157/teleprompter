@@ -1410,9 +1410,10 @@ function noteHybridSpeechActivity(ts?: number) {
     }
   } catch {}
   try {
-    window.addEventListener("tp:auto:intent", (e) => {
+    const handleAutoIntent = (e: Event) => {
       try {
         const detail = (e as CustomEvent)?.detail || {};
+        console.warn("[AUTO_INTENT] recv", { detail });
         const enabled =
           typeof detail.enabled === "boolean"
             ? detail.enabled
@@ -1439,7 +1440,13 @@ function noteHybridSpeechActivity(ts?: number) {
           );
         } catch {}
       } catch {}
-    });
+    };
+    window.addEventListener("tp:auto:intent", handleAutoIntent as EventListener);
+    console.warn('[AUTO_INTENT] listener wired', { target: 'window' });
+    try {
+      document.addEventListener("tp:auto:intent", handleAutoIntent as EventListener);
+      console.warn('[AUTO_INTENT] listener wired', { target: 'document' });
+    } catch {}
     try { console.info('[scroll-router] tp:auto:intent listener installed'); } catch {}
   } catch {}
   try {
