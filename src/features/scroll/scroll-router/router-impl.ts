@@ -736,7 +736,22 @@ function hybridHandleDb(db, auto) {
   else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
 function applyMode(m) {
-  stopAllMotors(`mode switch to ${m}`);
+  try {
+    try { console.debug("[ScrollRouter] stopAllMotors", `mode switch to ${m}`); } catch {}
+  } catch {}
+  if (enabledNow) {
+    try {
+      auto.setEnabled?.(false);
+      auto.stop?.();
+    } catch {}
+    enabledNow = false;
+    emitMotorState("auto", false);
+  }
+  const wasHybridRunning = hybridMotor.isRunning();
+  hybridMotor.stop();
+  if (wasHybridRunning) {
+    emitMotorState("hybridWpm", false);
+  }
   if (m !== 'auto') {
     persistStoredAutoEnabled(false);
   }
