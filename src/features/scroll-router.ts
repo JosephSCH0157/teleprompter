@@ -60,11 +60,14 @@ function onAutoIntent(e: Event) {
   try {
     console.warn('[AUTO_INTENT] recv', { detail });
   } catch {}
-  if (!autoIntentProcessor) {
+  const hasProcessor = !!autoIntentProcessor;
+  console.warn('[AUTO_INTENT] onAutoIntent route', { hasProcessor, buffered: !hasProcessor });
+  if (!hasProcessor) {
     pendingAutoIntentDetail = detail;
     return;
   }
   try {
+    console.warn('[AUTO_INTENT] onAutoIntent calling processor');
     autoIntentProcessor(detail);
   } catch {}
 }
@@ -924,7 +927,9 @@ function installScrollRouter(opts) {
     } catch {}
   }
   autoIntentProcessor = processAutoIntent;
+  console.warn('[AUTO_INTENT] processor assigned', { hasPending: !!pendingAutoIntentDetail });
   if (pendingAutoIntentDetail) {
+    console.warn('[AUTO_INTENT] flushing pending', pendingAutoIntentDetail);
     try {
       processAutoIntent(pendingAutoIntentDetail);
     } catch {
