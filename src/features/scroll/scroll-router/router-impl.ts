@@ -257,6 +257,10 @@ function createAutoMotor() {
   let rafId: number | null = null;
   let lastTs = 0;
   let lastTickMoved = false;
+  let carry = 0;
+  let rafId: number | null = null;
+  let lastTs = 0;
+  let lastTickMoved = false;
 
   function setEnabled(on) {
     try {
@@ -316,13 +320,25 @@ function createAutoMotor() {
       scheduleTick();
       return;
     }
+    const style = getComputedStyle(el);
+    if (!/(auto|scroll)/.test(style.overflowY || '')) {
+      scheduleTick();
+      return;
+    }
     const room = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
     if (room <= 0) {
       scheduleTick();
       return;
     }
+    carry += pxPerSec * dtSec;
+    const step = Math.trunc(carry);
+    if (step <= 0) {
+      scheduleTick();
+      return;
+    }
+    carry -= step;
     const before = el.scrollTop || 0;
-    const next = Math.min(room, before + pxPerSec * dtSec);
+    const next = Math.min(room, before + step);
     el.scrollTop = next;
     const after = el.scrollTop || 0;
     if (after > before) {
@@ -334,8 +350,8 @@ function createAutoMotor() {
         before,
         after,
         room,
-        overflowY: getComputedStyle(el).overflowY,
-        position: getComputedStyle(el).position,
+        overflowY: style.overflowY,
+        position: style.position,
       });
     }
     scheduleTick();
@@ -350,7 +366,13 @@ function createAutoMotor() {
     if (enabled) return;
     setEnabled(true);
     lastTickMoved = false;
-    scheduleTick();
+    carry = 0;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!enabled) return;
+        scheduleTick();
+      });
+    });
   }
 
   function isRunning() {

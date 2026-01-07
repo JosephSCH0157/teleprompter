@@ -246,6 +246,10 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   }
 
   try { root.appendChild(frag); } catch {}
+  try {
+    const placeholder = viewer?.querySelector<HTMLElement>('.empty-msg');
+    if (placeholder) placeholder.remove();
+  } catch {}
   try { (root as any).dataset.lineCount = String(renderedLineIndex); } catch {}
   try { root.scrollTop = 0; } catch {}
 
