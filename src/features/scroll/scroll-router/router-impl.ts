@@ -1511,6 +1511,7 @@ function installScrollRouter(opts) {
     const gateWanted = computeGateWanted();
     const phaseAllowed = canRunHybridMotor();
     const wantEnabled =
+      hybridWantedRunning &&
       userEnabled &&
       speechActive &&
       phaseAllowed &&
@@ -1526,13 +1527,12 @@ function installScrollRouter(opts) {
     } else if (!isHybridBypass() && !gateWanted) {
       hybridBlockedReason = "blocked:hybridGate";
     }
-    const dueToGateSilence =
-      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted;
-    const dueToAsrSilence =
-      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && hybridSilence.pausedBySilence;
+    const silencePaused = hybridSilence.pausedBySilence;
+    if (silencePaused) {
+      hybridBlockedReason = "blocked:silence";
+    }
     const hybridRunning = hybridMotor.isRunning();
     const guardSlowActive = hybridSilence.offScriptActive;
-    const silencePaused = hybridSilence.pausedBySilence;
     const effectivePxPerSec = silencePaused
       ? 0
       : baseHybridPxPerSec * (guardSlowActive ? OFFSCRIPT_SLOW : 1);
@@ -1593,37 +1593,14 @@ function installScrollRouter(opts) {
         } catch {}
       }
       armHybridSilenceTimer();
-    } else {
+    } else if (hybridRunning) {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      if (dueToAsrSilence && hybridRunning) {
-        hybridMotor.stop();
-        emitMotorState("hybridWpm", false);
-        clearHybridSilenceTimer();
-        emitHybridSafety();
-      } else if (dueToGateSilence && hybridRunning) {
-        silenceTimer = setTimeout(() => {
-          try {
-            const stillGateWanted = computeGateWanted();
-            const stillPhaseAllowed = canRunHybridMotor();
-            const stillWantEnabled =
-              userEnabled && speechActive && stillPhaseAllowed &&
-              (isHybridBypass() ? true : stillGateWanted);
-            if (!stillWantEnabled && hybridMotor.isRunning()) {
-              hybridMotor.stop();
-              emitMotorState("hybridWpm", false);
-              clearHybridSilenceTimer();
-            }
-          } catch {}
-          silenceTimer = void 0;
-        }, DEFAULTS.hybrid.silenceStopMs);
-      } else if (hybridRunning) {
-        hybridMotor.stop();
-        emitMotorState("hybridWpm", false);
-        clearHybridSilenceTimer();
-      }
+      hybridMotor.stop();
+      emitMotorState("hybridWpm", false);
+      clearHybridSilenceTimer();
     }
     const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Phase:${phaseAllowed ? "live" : "blocked"} \u2022 Speech:${speechActive ? "1" : "0"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
     const chipState = userEnabled ? (hybridMotor.isRunning() ? "on" : "paused") : "manual";
