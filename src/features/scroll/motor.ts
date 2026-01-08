@@ -1,5 +1,10 @@
+export type MotorStartResult = {
+  started: boolean;
+  reason?: string;
+};
+
 export interface Motor {
-  start(): void;
+  start(): MotorStartResult;
   stop(): void;
   setVelocityPxPerSec(pxPerSec: number): void;
   isRunning(): boolean;

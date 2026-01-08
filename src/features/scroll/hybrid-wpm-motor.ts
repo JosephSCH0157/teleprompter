@@ -1,4 +1,4 @@
-import type { Motor } from './motor';
+import type { Motor, MotorStartResult } from './motor';
 
 export type HybridWpmMotorDeps = {
   getWriter: () => { scrollTo: (top: number, opts: { behavior: ScrollBehavior }) => void };
@@ -99,12 +99,17 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
   };
 
   return {
-    start() {
-      if (running) return;
+    start(): MotorStartResult {
+      if (running || rafId != null) {
+        return { started: false, reason: "already-running" };
+      }
       running = true;
+      loggedFirstMove = false;
+      lastMoveAtMs = 0;
       lastNow = now();
       rafId = raf(tick);
       log('start', { velocityPxPerSec });
+      return { started: true };
     },
     stop() {
       if (!running) return;
@@ -114,6 +119,8 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
         rafId = null;
       }
       lastNow = null;
+      loggedFirstMove = false;
+      lastMoveAtMs = 0;
       log('stop', {});
     },
     setVelocityPxPerSec(pxPerSec: number) {

@@ -694,6 +694,7 @@ const OFFSCRIPT_SLOW = 0.35;
 const OFFSCRIPT_ENTER = 2;
 const OFFSCRIPT_EXIT = 2;
 const RECOVERY_SCALE = 1;
+let lastHybridGateFingerprint: string | null = null;
 let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
 let hybridWantedRunning = false;
@@ -1496,6 +1497,7 @@ function installScrollRouter(opts) {
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
       emitMotorState("auto", enabledNow);
       try { emitAutoState(); } catch {}
+      lastHybridGateFingerprint = null;
       return;
     }
     const computeGateWanted = () => {
@@ -1553,6 +1555,7 @@ function installScrollRouter(opts) {
     }
     const shouldRunHybrid = wantEnabled && !silencePaused && effectivePxPerSec >= 1;
     const viewerEl = viewer;
+    const guardSlowActive = hybridSilence.offScriptActive;
     const snap = {
       mode: state2.mode,
       phase: sessionPhase,
@@ -1583,9 +1586,29 @@ function installScrollRouter(opts) {
         movedRecently: hybridMotor.movedRecently(),
       },
     };
-    try {
-      console.warn("[HYBRID] gate", snap);
-    } catch {}
+    const fingerprintParts = [
+      state2.mode,
+      sessionPhase,
+      hybridWantedRunning ? "1" : "0",
+      userEnabled ? "1" : "0",
+      speechActive ? "1" : "0",
+      gatePref,
+      gateWanted ? "1" : "0",
+      phaseAllowed ? "1" : "0",
+      guardSlowActive ? "1" : "0",
+      silencePaused ? "1" : "0",
+      hybridRunning ? "1" : "0",
+      shouldRunHybrid ? "1" : "0",
+      Number.isFinite(effectivePxPerSec) ? effectivePxPerSec.toFixed(1) : "0",
+      Number.isFinite(hybridBasePxps) ? hybridBasePxps.toFixed(0) : "0",
+    ];
+    const gateFingerprint = fingerprintParts.join("|");
+    if (gateFingerprint !== lastHybridGateFingerprint) {
+      lastHybridGateFingerprint = gateFingerprint;
+      try {
+        console.warn("[HYBRID] gate", snap);
+      } catch {}
+    }
     if (silencePaused) {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
@@ -1612,13 +1635,12 @@ function installScrollRouter(opts) {
             scrollWriter: !!scrollWriter,
           });
         } catch {}
-        hybridMotor.start();
-        try {
-          console.info('[HYBRID] start result', {
-            isRunningAfter: hybridMotor.isRunning(),
-            pxPerSec: effectivePxPerSec,
-          });
-        } catch {}
+        const startResult = hybridMotor.start();
+        if (!startResult.started) {
+          try {
+            console.debug('[HYBRID] start suppressed', startResult);
+          } catch {}
+        }
       }
       armHybridSilenceTimer();
     } else if (hybridRunning) {
