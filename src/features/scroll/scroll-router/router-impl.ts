@@ -608,10 +608,26 @@ function createOrchestrator() {
     } catch {
     }
   }
+  const noteHybridSpeechActivity = (ts?: number) => {
+    const now = typeof ts === "number" ? ts : nowMs();
+    asrSilent = false;
+    lastSpeechAtMs = now;
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    clearHybridSilenceTimer();
+    armHybridSilenceTimer();
+    if (hybridPausedBySilence) {
+      hybridPausedBySilence = false;
+      emitHybridSafety();
+      try { applyGate(); } catch {}
+    }
+  };
   try {
     window.addEventListener("tp:asr:sync", (ev) => {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
+      try {
+        console.warn('[HYBRID] typeof noteHybridSpeechActivity =', typeof noteHybridSpeechActivity);
+      } catch {}
       noteHybridSpeechActivity(ts);
       markHybridOnScriptFn?.();
     });
@@ -1248,19 +1264,6 @@ function installScrollRouter(opts) {
     clearHybridSilenceTimer();
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     hybridSilenceTimeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), SILENCE_MS);
-  }
-function noteHybridSpeechActivity(ts?: number) {
-  const now = typeof ts === "number" ? ts : nowMs();
-  asrSilent = false;
-  lastSpeechAtMs = now;
-  if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-  clearHybridSilenceTimer();
-  armHybridSilenceTimer();
-    if (hybridPausedBySilence) {
-      hybridPausedBySilence = false;
-      emitHybridSafety();
-      try { applyGate(); } catch {}
-    }
   }
   function setHybridScale(nextScale: number) {
     const clamped = Math.max(0, Math.min(nextScale, 1));
