@@ -688,10 +688,7 @@ const OFFSCRIPT_EXIT = 2;
 const RECOVERY_SCALE = 1;
 let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
-let hybridPausedBySilence = false;
 let hybridWantedRunning = false;
-let hybridSilenceTimeoutId: number | null = null;
-let lastSpeechAtMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
 let offScriptStreak = 0;
 let onScriptStreak = 0;
 var isHybridBypass = () => {
@@ -1045,7 +1042,13 @@ function installScrollRouter(opts) {
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
   let speechActive = false;
-  let asrSilent = true;
+  const hybridSilence = {
+    asrSilent: true,
+    lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+    pausedBySilence: false,
+    timeoutId: null as number | null,
+    erroredOnce: false,
+  };
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
   try {
@@ -1062,7 +1065,7 @@ function installScrollRouter(opts) {
     hybridWantedRunning = on;
     sessionIntentOn = on;
     if (!hybridWantedRunning) {
-      hybridPausedBySilence = false;
+      hybridSilence.pausedBySilence = false;
       clearHybridSilenceTimer();
     }
     persistStoredAutoEnabled(on);
@@ -1208,16 +1211,16 @@ function installScrollRouter(opts) {
     }
   }
   function clearHybridSilenceTimer() {
-    if (hybridSilenceTimeoutId != null) {
-      clearTimeout(hybridSilenceTimeoutId);
-      hybridSilenceTimeoutId = null;
+    if (hybridSilence.timeoutId != null) {
+      try { window.clearTimeout(hybridSilence.timeoutId); } catch {}
+      hybridSilence.timeoutId = null;
     }
   }
   function handleHybridSilenceTimeout() {
-    hybridSilenceTimeoutId = null;
+    hybridSilence.timeoutId = null;
     if (state2.mode !== "hybrid") return;
     if (!hybridMotor.isRunning()) return;
-    hybridPausedBySilence = true;
+    hybridSilence.pausedBySilence = true;
     hybridMotor.stop();
     emitMotorState("hybridWpm", false);
     emitHybridSafety();
@@ -1225,30 +1228,50 @@ function installScrollRouter(opts) {
   function armHybridSilenceTimer() {
     clearHybridSilenceTimer();
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-    hybridSilenceTimeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), SILENCE_MS);
+    hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), SILENCE_MS);
   }
   function noteHybridSpeechActivity(ts?: number) {
     const now = typeof ts === "number" ? ts : nowMs();
-    asrSilent = false;
-    lastSpeechAtMs = now;
+    hybridSilence.asrSilent = false;
+    hybridSilence.lastSpeechAtMs = now;
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     clearHybridSilenceTimer();
     armHybridSilenceTimer();
-    if (hybridPausedBySilence) {
-      hybridPausedBySilence = false;
+    if (hybridSilence.pausedBySilence) {
+      hybridSilence.pausedBySilence = false;
       emitHybridSafety();
       try { applyGate(); } catch {}
     }
   }
+  const handleHybridFatalOnce = (err: unknown) => {
+    if (hybridSilence.erroredOnce) return;
+    hybridSilence.erroredOnce = true;
+    try { console.error('[HYBRID] disabling due to handler error', err); } catch {}
+    try { clearHybridSilenceTimer(); } catch {}
+    try { hybridWantedRunning = false; } catch {}
+    try { stopAllMotors('hybrid guard fatal'); } catch {}
+    try { emitHybridSafety(); } catch {}
+    try { applyMode('wpm'); } catch {}
+    try {
+      if ((window as any).toast) {
+        (window as any).toast('Hybrid disabled after runtime error');
+      }
+    } catch {}
+  };
   try {
     window.addEventListener("tp:asr:sync", (ev) => {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
+      if (state2.mode !== "hybrid") return;
       try {
         console.warn('[HYBRID] typeof noteHybridSpeechActivity =', typeof noteHybridSpeechActivity);
       } catch {}
-      noteHybridSpeechActivity(ts);
-      markHybridOnScriptFn?.();
+      try {
+        noteHybridSpeechActivity(ts);
+        markHybridOnScriptFn?.();
+      } catch (err) {
+        handleHybridFatalOnce(err);
+      }
     });
   } catch {}
   try {
@@ -1304,13 +1327,13 @@ function installScrollRouter(opts) {
   markHybridOnScriptFn = _markHybridOnScript;
   function emitHybridSafety() {
     try {
-      const payload = {
-        pausedBySilence: hybridPausedBySilence,
-        offScriptStreak,
-        onScriptStreak,
-        scale: hybridScale,
-        lastSpeechAtMs,
-      };
+    const payload = {
+      pausedBySilence: hybridSilence.pausedBySilence,
+      offScriptStreak,
+      onScriptStreak,
+      scale: hybridScale,
+      lastSpeechAtMs: hybridSilence.lastSpeechAtMs,
+    };
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("tp:hybridSafety", { detail: payload }));
       }
@@ -1319,7 +1342,7 @@ function installScrollRouter(opts) {
   function resetHybridSafetyState() {
     offScriptStreak = 0;
     onScriptStreak = 0;
-    hybridPausedBySilence = false;
+    hybridSilence.pausedBySilence = false;
     clearHybridSilenceTimer();
     setHybridScale(RECOVERY_SCALE);
     emitHybridSafety();
@@ -1451,12 +1474,12 @@ function installScrollRouter(opts) {
     }
     const gateWanted = computeGateWanted();
     const phaseAllowed = canRunHybridMotor();
-    const asrLocked = !isHybridBypass() && asrSilent;
+    const asrLocked = !isHybridBypass() && hybridSilence.asrSilent;
     const wantEnabled =
       userEnabled &&
       speechActive &&
       phaseAllowed &&
-      !hybridPausedBySilence &&
+      !hybridSilence.pausedBySilence &&
       (isHybridBypass() ? true : gateWanted) &&
       !asrLocked;
     const baseHybridPxPerSec = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
@@ -1479,9 +1502,9 @@ function installScrollRouter(opts) {
       );
     } catch {}
     const dueToGateSilence =
-      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted && !asrSilent;
+      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted && !hybridSilence.asrSilent;
     const dueToAsrSilence =
-      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && asrSilent;
+      userEnabled && speechActive && phaseAllowed && !isHybridBypass() && hybridSilence.asrSilent;
     const hybridRunning = hybridMotor.isRunning();
     if (wantEnabled) {
       if (silenceTimer) {
@@ -1644,7 +1667,7 @@ function installScrollRouter(opts) {
         const detail = (ev as CustomEvent).detail || {};
         const silent = !!detail.silent;
         const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
-        asrSilent = silent;
+        hybridSilence.asrSilent = silent;
         if (!silent) {
           noteHybridSpeechActivity(ts);
         }
