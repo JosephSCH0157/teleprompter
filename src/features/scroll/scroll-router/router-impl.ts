@@ -681,8 +681,16 @@ const hybridMotor = createHybridWpmMotor({
     try { console.debug('[HybridMotor]', evt, data); } catch {}
   } : () => {},
 });
+try {
+  (window as any).__tpHybridMotor = hybridMotor;
+} catch {}
+function refreshHybridWriter() {
+  try {
+    hybridMotor.setWriter(viewer ?? scrollerEl ?? null);
+  } catch {}
+}
 const SILENCE_MS = 3000;
-const OFFSCRIPT_SLOW = 0.4;
+const OFFSCRIPT_SLOW = 0.35;
 const OFFSCRIPT_ENTER = 2;
 const OFFSCRIPT_EXIT = 2;
 const RECOVERY_SCALE = 1;
@@ -854,6 +862,7 @@ function applyMode(m) {
   state2.mode = m;
   persistMode();
   viewer = document.getElementById("viewer");
+  refreshHybridWriter();
   
   // Toggle UI controls based on mode
   try {
@@ -941,6 +950,7 @@ function installScrollRouter(opts) {
     const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
     scrollerEl = fallback;
   }
+  refreshHybridWriter();
   function setProcessorAndFlush() {
     autoIntentProcessor = handleAutoIntent;
     console.warn('[AUTO_INTENT] processor assigned', { hasPending: !!pendingAutoIntentDetail });
@@ -1227,13 +1237,14 @@ function installScrollRouter(opts) {
   }
   function handleHybridSilenceTimeout() {
     hybridSilence.timeoutId = null;
-    if (state2.mode !== "hybrid") return;
-    if (!hybridMotor.isRunning()) return;
-    hybridSilence.pausedBySilence = true;
-    hybridMotor.stop();
-    emitMotorState("hybridWpm", false);
-    emitHybridSafety();
-  }
+  if (state2.mode !== "hybrid") return;
+  if (!hybridMotor.isRunning()) return;
+  hybridSilence.pausedBySilence = true;
+  hybridMotor.stop();
+  emitMotorState("hybridWpm", false);
+  emitHybridSafety();
+  try { applyGate(); } catch {}
+}
   function armHybridSilenceTimer() {
     clearHybridSilenceTimer();
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
@@ -1243,15 +1254,15 @@ function installScrollRouter(opts) {
     const now = typeof ts === "number" ? ts : nowMs();
     hybridSilence.asrSilent = false;
     hybridSilence.lastSpeechAtMs = now;
-    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-    clearHybridSilenceTimer();
-    armHybridSilenceTimer();
-    if (hybridSilence.pausedBySilence) {
-      hybridSilence.pausedBySilence = false;
-      emitHybridSafety();
-      try { applyGate(); } catch {}
-    }
+  if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+  clearHybridSilenceTimer();
+  armHybridSilenceTimer();
+  if (hybridSilence.pausedBySilence) {
+    hybridSilence.pausedBySilence = false;
+    emitHybridSafety();
   }
+  try { applyGate(); } catch {}
+}
   const handleHybridFatalOnce = (err: unknown) => {
     if (hybridSilence.erroredOnce) return;
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
@@ -1532,31 +1543,48 @@ function installScrollRouter(opts) {
       hybridBlockedReason = "blocked:silence";
     }
     const hybridRunning = hybridMotor.isRunning();
-    const guardSlowActive = hybridSilence.offScriptActive;
-    const effectivePxPerSec = silencePaused
-      ? 0
-      : baseHybridPxPerSec * (guardSlowActive ? OFFSCRIPT_SLOW : 1);
-    const shouldRunHybrid = wantEnabled && !silencePaused;
+    let effectivePxPerSec = silencePaused ? 0 : baseHybridPxPerSec * hybridScale;
+    if (!silencePaused && (!Number.isFinite(effectivePxPerSec) || effectivePxPerSec <= 0)) {
+      const fallback = Math.max(1, Number.isFinite(baseHybridPxPerSec) ? baseHybridPxPerSec : 1);
+      effectivePxPerSec = fallback;
+      try {
+        console.warn("[HYBRID] bad pxps; clamped", { hybridBasePxps, hybridScale, effectivePxPerSec });
+      } catch {}
+    }
+    const shouldRunHybrid = wantEnabled && !silencePaused && effectivePxPerSec >= 1;
+    const viewerEl = viewer;
+    const snap = {
+      mode: state2.mode,
+      phase: sessionPhase,
+      hybridWantedRunning,
+      asrEnabled: speechActive,
+      speechSilent: hybridSilence.asrSilent,
+      pausedBySilence: silencePaused,
+      offScript: hybridSilence.offScriptActive,
+      basePxps: hybridBasePxps,
+      scale: hybridScale,
+      effectivePxps: effectivePxPerSec,
+      sessionIntentOn,
+      userEnabled,
+      gatePref,
+      gateWanted,
+      phaseAllowed,
+      blocked: hybridBlockedReason,
+      viewer: {
+        has: !!viewerEl,
+        top: viewerEl?.scrollTop ?? -1,
+        h: viewerEl?.clientHeight ?? -1,
+        sh: viewerEl?.scrollHeight ?? -1,
+        max: viewerEl ? Math.max(0, viewerEl.scrollHeight - viewerEl.clientHeight) : -1,
+      },
+      motor: {
+        has: !!hybridMotor,
+        running: hybridRunning,
+        movedRecently: hybridMotor.movedRecently(),
+      },
+    };
     try {
-      console.info('[scroll-router] applyGate status', {
-        mode: state2.mode,
-        wantEnabled,
-        hybridWantedRunning,
-        userEnabled,
-        sessionPhase,
-        speechActive,
-        gatePref,
-        gateWanted,
-        asrSilent: hybridSilence.asrSilent,
-        pausedBySilence: hybridSilence.pausedBySilence,
-        livePhase: phaseAllowed,
-        basePxps: hybridBasePxps,
-        pxPerSec: effectivePxPerSec,
-        hasWriter: !!scrollWriter,
-        hybridRunning,
-        guardSlowActive,
-        blocked: hybridBlockedReason,
-      });
+      console.warn("[HYBRID] gate", snap);
     } catch {}
     if (silencePaused) {
       if (silenceTimer) {
@@ -1569,7 +1597,7 @@ function installScrollRouter(opts) {
         clearHybridSilenceTimer();
         emitHybridSafety();
       }
-    } else if (shouldRunHybrid && effectivePxPerSec > 0) {
+    } else if (shouldRunHybrid) {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;

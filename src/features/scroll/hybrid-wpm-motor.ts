@@ -18,12 +18,30 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
   let rafId: number | null = null;
   let lastNow: number | null = null;
   let lastTickLog = 0;
+  let writer: HTMLElement | null = null;
+  let warnedNoWriter = false;
+  let warnedNoOverflow = false;
+  let loggedFirstMove = false;
+  let lastMoveAtMs = 0;
   const TICK_LOG_INTERVAL_MS = 1000;
 
   const now = deps.now ?? (() => performance.now());
   const raf = deps.raf ?? ((cb: FrameRequestCallback) => window.requestAnimationFrame(cb));
   const caf = deps.caf ?? ((id: number) => window.cancelAnimationFrame(id));
   const log = deps.log ?? (() => {});
+
+  const recordMove = (prevTop: number, nextTop: number) => {
+    const delta = Math.abs(nextTop - prevTop);
+    if (delta > 0.25 && !loggedFirstMove) {
+      loggedFirstMove = true;
+      try {
+        console.warn("[HYBRID] first move", { prevTop, nextTop, max: writer ? Math.max(0, writer.scrollHeight - writer.clientHeight) : -1 });
+      } catch {}
+    }
+    if (delta > 0) {
+      lastMoveAtMs = now();
+    }
+  };
 
   const tick = () => {
     if (!running) return;
@@ -34,17 +52,35 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
     lastNow = current;
 
     if (velocityPxPerSec !== 0) {
-      const prevTop = deps.getScrollTop();
+      if (!writer) {
+        if (!warnedNoWriter) {
+          warnedNoWriter = true;
+          try { console.error("[HYBRID] no writer"); } catch {}
+        }
+        stop();
+        return;
+      }
+      const max = Math.max(0, writer.scrollHeight - writer.clientHeight);
+      if (max <= 0) {
+        if (!warnedNoOverflow) {
+          warnedNoOverflow = true;
+          try {
+            console.warn("[HYBRID] nothing to scroll", { sh: writer.scrollHeight, h: writer.clientHeight });
+          } catch {}
+        }
+        stop();
+        return;
+      }
+      const prevTop = writer.scrollTop || 0;
       const dy = velocityPxPerSec * dt;
       const top = prevTop + dy;
-      const maxTop = deps.getMaxScrollTop ? deps.getMaxScrollTop() : Number.POSITIVE_INFINITY;
-      const nextTop = clamp(top, 0, maxTop);
-      const writer = deps.getWriter();
+      const nextTop = clamp(top, 0, max);
       try {
-        writer.scrollTo(nextTop, { behavior: 'auto' });
+        writer.scrollTop = nextTop;
       } catch (err) {
         log('tick:scroll', err);
       }
+      recordMove(prevTop, nextTop);
       const tickNow = now();
       if (tickNow - lastTickLog >= TICK_LOG_INTERVAL_MS) {
         lastTickLog = tickNow;
@@ -53,8 +89,8 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
           velocityPxPerSec,
           prevTop,
           nextTop,
-          maxTop,
-          scrollWriter: !!writer,
+          maxTop: max,
+          hasWriter: !!writer,
         });
       }
     }
@@ -86,6 +122,17 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
     },
     isRunning() {
       return running;
+    },
+    setWriter(el: HTMLElement | null) {
+      writer = el;
+      if (writer) {
+        warnedNoWriter = false;
+        warnedNoOverflow = false;
+      }
+    },
+    movedRecently(nowArg?: number) {
+      const check = typeof nowArg === 'number' ? nowArg : now();
+      return lastMoveAtMs > 0 && check - lastMoveAtMs < 250;
     },
   };
 }

@@ -3,6 +3,8 @@ export interface Motor {
   stop(): void;
   setVelocityPxPerSec(pxPerSec: number): void;
   isRunning(): boolean;
+  setWriter(el: HTMLElement | null): void;
+  movedRecently(now?: number): boolean;
 }
 
 export interface MotorDeps {
