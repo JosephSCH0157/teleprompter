@@ -62,6 +62,9 @@ let autoIntentProcessor: ((detail: any) => void) | null = null;
 let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
 let scrollWriteWarned = false;
+let markHybridOffScriptFn: (() => void) | null = null;
+let markHybridOnScriptFn: (() => void) | null = null;
+let guardHandlerErrorLogged = false;
 function warnScrollWrite(payload: Record<string, unknown>) {
   if (scrollWriteWarned) return;
   scrollWriteWarned = true;
@@ -610,16 +613,21 @@ function createOrchestrator() {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
       noteHybridSpeechActivity(ts);
-      _markHybridOnScript();
+      markHybridOnScriptFn?.();
     });
   } catch {}
   try {
     window.addEventListener("tp:asr:guard", () => {
       try {
-        if (typeof _markHybridOffScript === "function") {
-          _markHybridOffScript();
+        markHybridOffScriptFn?.();
+      } catch (err) {
+        if (!guardHandlerErrorLogged) {
+          guardHandlerErrorLogged = true;
+          try {
+            console.error('[HYBRID] guard handler failed', err);
+          } catch {}
         }
-      } catch {}
+      }
     });
   } catch {}
   async function stop() {
@@ -1289,6 +1297,8 @@ function noteHybridSpeechActivity(ts?: number) {
       emitHybridSafety();
     }
   }
+  markHybridOffScriptFn = _markHybridOffScript;
+  markHybridOnScriptFn = _markHybridOnScript;
   function emitHybridSafety() {
     try {
       const payload = {
