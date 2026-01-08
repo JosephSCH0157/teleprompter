@@ -69,6 +69,10 @@ function warnScrollWrite(payload: Record<string, unknown>) {
     console.warn('[AUTO] SCROLL_WRITE_FAILED', payload);
   } catch {}
 }
+const nowMs = () =>
+  (typeof performance !== 'undefined' && typeof performance.now === 'function')
+    ? performance.now()
+    : Date.now();
 
 function onAutoIntent(e: Event) {
   const detail = (e as CustomEvent)?.detail || {};
@@ -1216,12 +1220,6 @@ function installScrollRouter(opts) {
     } catch {
       return false;
     }
-  }
-  function nowMs() {
-    if (typeof performance !== "undefined" && typeof performance.now === "function") {
-      return performance.now();
-    }
-    return Date.now();
   }
   function clearHybridSilenceTimer() {
     if (hybridSilenceTimeoutId != null) {
