@@ -1251,19 +1251,67 @@ function installScrollRouter(opts) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), SILENCE_MS);
   }
-  function noteHybridSpeechActivity(ts?: number) {
+  function noteHybridSpeechActivity(ts?: number, opts?: { source?: string; noMatch?: boolean }) {
     const now = typeof ts === "number" ? ts : nowMs();
     hybridSilence.asrSilent = false;
     hybridSilence.lastSpeechAtMs = now;
-  if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-  clearHybridSilenceTimer();
-  armHybridSilenceTimer();
-  if (hybridSilence.pausedBySilence) {
-    hybridSilence.pausedBySilence = false;
-    emitHybridSafety();
+    const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
+    if (isDevMode()) {
+      try {
+        console.info('[HYBRID] speech activity', {
+          source: opts?.source ?? 'unknown',
+          noMatch: !!opts?.noMatch,
+          pausedBySilence: hybridSilence.pausedBySilence,
+          offScriptActive: hybridSilence.offScriptActive,
+          effectivePxPerSec: Number.isFinite(effectivePxps) ? Number(effectivePxps.toFixed(2)) : effectivePxps,
+        });
+      } catch {}
+    }
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    clearHybridSilenceTimer();
+    armHybridSilenceTimer();
+    if (hybridSilence.pausedBySilence) {
+      hybridSilence.pausedBySilence = false;
+      emitHybridSafety();
+      try { applyGate(); } catch {}
+    }
+    try { applyGate(); } catch {}
   }
-  try { applyGate(); } catch {}
-}
+  const TRANSCRIPT_NO_MATCH_ENTER_MS = 300;
+  const TRANSCRIPT_MATCH_ENTER_MS = 150;
+  let transcriptNoMatchSince: number | null = null;
+  let transcriptMatchSince: number | null = null;
+  function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean }) {
+    const now = typeof detail.timestamp === "number" ? detail.timestamp : nowMs();
+    const isNoMatch = detail.noMatch === true;
+    noteHybridSpeechActivity(now, { source: detail.source || "transcript", noMatch: isNoMatch });
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    if (isNoMatch) {
+      transcriptMatchSince = null;
+      if (transcriptNoMatchSince === null) {
+        transcriptNoMatchSince = now;
+      }
+      if (
+        transcriptNoMatchSince != null &&
+        now - transcriptNoMatchSince >= TRANSCRIPT_NO_MATCH_ENTER_MS &&
+        !hybridSilence.offScriptActive
+      ) {
+        setHybridScale(OFFSCRIPT_SLOW);
+      }
+    } else {
+      transcriptNoMatchSince = null;
+      if (transcriptMatchSince === null) {
+        transcriptMatchSince = now;
+      }
+      if (
+        transcriptMatchSince != null &&
+        now - transcriptMatchSince >= TRANSCRIPT_MATCH_ENTER_MS &&
+        hybridSilence.offScriptActive
+      ) {
+        setHybridScale(RECOVERY_SCALE);
+      }
+    }
+  }
   const handleHybridFatalOnce = (err: unknown) => {
     if (hybridSilence.erroredOnce) return;
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
@@ -1289,7 +1337,6 @@ function installScrollRouter(opts) {
         console.warn('[HYBRID] typeof noteHybridSpeechActivity =', typeof noteHybridSpeechActivity);
       } catch {}
       try {
-        noteHybridSpeechActivity(ts);
         markHybridOnScriptFn?.();
       } catch (err) {
         handleHybridFatalOnce(err);
@@ -1308,6 +1355,14 @@ function installScrollRouter(opts) {
           } catch {}
         }
       }
+    });
+  } catch {}
+  try {
+    window.addEventListener("tp:speech:transcript", (ev) => {
+      try {
+        const detail = (ev as CustomEvent).detail || {};
+        handleTranscriptEvent(detail);
+      } catch {}
     });
   } catch {}
   function setHybridScale(nextScale: number) {
@@ -1773,7 +1828,7 @@ function installScrollRouter(opts) {
         const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
         hybridSilence.asrSilent = silent;
         if (!silent) {
-          noteHybridSpeechActivity(ts);
+          noteHybridSpeechActivity(ts, { source: "silence" });
         }
         applyGate();
       } catch {}
@@ -1823,7 +1878,7 @@ function installScrollRouter(opts) {
       const speaking = !!(e && e.detail && e.detail.speaking);
       vadGate = speaking;
       if (speaking) {
-        noteHybridSpeechActivity(nowMs());
+        noteHybridSpeechActivity(nowMs(), { source: "vad" });
       }
       applyGate();
     });
