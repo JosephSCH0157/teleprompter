@@ -997,7 +997,11 @@ function installScrollRouter(opts) {
   
   async function ensureOrchestratorForMode() {
     try {
-      if (state2.mode === "wpm" || state2.mode === "asr") {
+      const wantsOrchestrator =
+        state2.mode === "wpm" ||
+        state2.mode === "asr" ||
+        (state2.mode === "hybrid" && hybridWantedRunning);
+      if (wantsOrchestrator) {
         if (!orchRunning) {
           await orch.start(createVadEventAdapter());
           orch.setMode("assist");
@@ -1064,6 +1068,10 @@ function installScrollRouter(opts) {
     userEnabled = on;
     hybridWantedRunning = on;
     sessionIntentOn = on;
+    if (hybridWantedRunning && state2.mode === "hybrid") {
+      seedHybridBaseSpeed();
+      ensureOrchestratorForMode();
+    }
     if (!hybridWantedRunning) {
       hybridSilence.pausedBySilence = false;
       clearHybridSilenceTimer();
@@ -1380,6 +1388,31 @@ function installScrollRouter(opts) {
   const nudgeSpeed = (delta) => setSpeed(getCurrentSpeed() + delta);
   setSpeed(getStoredSpeed());
 
+  function resolveHybridSeedPx(): number {
+    let sliderPx: number | null = null;
+    try {
+      const sliderInput = document.getElementById("wpmTarget") as HTMLInputElement | null;
+      const sliderVal = sliderInput ? Number(sliderInput.value) : NaN;
+      if (Number.isFinite(sliderVal) && sliderVal > 0) {
+        sliderPx = convertWpmToPxPerSec(sliderVal);
+      }
+    } catch {}
+    const stored = getStoredSpeed();
+    const candidate = sliderPx ?? stored;
+    if (Number.isFinite(candidate) && candidate > 0) {
+      return candidate;
+    }
+    return Math.max(AUTO_MIN, candidate > 0 ? candidate : AUTO_MIN);
+  }
+
+  function seedHybridBaseSpeed(): number {
+    const base = resolveHybridSeedPx();
+    hybridBasePxps = base;
+    try { hybridMotor.setVelocityPxPerSec(base); } catch {}
+    applyHybridVelocity();
+    return base;
+  }
+
   try {
     if (typeof window !== 'undefined') {
       const w = window as any;
@@ -1497,16 +1530,31 @@ function installScrollRouter(opts) {
     } else if (asrLocked) {
       hybridBlockedReason = "blocked:asrSilent";
     }
-    try {
-      console.info(
-        `[scroll-router] applyGate mode=hybrid shouldRun=${wantEnabled} pxPerSec=${hybridPxPerSec} blocked=${hybridBlockedReason}`,
-      );
-    } catch {}
     const dueToGateSilence =
       userEnabled && speechActive && phaseAllowed && !isHybridBypass() && !gateWanted && !hybridSilence.asrSilent;
     const dueToAsrSilence =
       userEnabled && speechActive && phaseAllowed && !isHybridBypass() && hybridSilence.asrSilent;
     const hybridRunning = hybridMotor.isRunning();
+    try {
+      console.info('[scroll-router] applyGate status', {
+        mode: state2.mode,
+        wantEnabled,
+        hybridWantedRunning,
+        userEnabled,
+        sessionPhase,
+        speechActive,
+        gatePref,
+        gateWanted,
+        asrSilent: hybridSilence.asrSilent,
+        pausedBySilence: hybridSilence.pausedBySilence,
+        livePhase: phaseAllowed,
+        basePxps: hybridBasePxps,
+        pxPerSec: hybridPxPerSec,
+        hasWriter: !!scrollWriter,
+        hybridRunning,
+        blocked: hybridBlockedReason,
+      });
+    } catch {}
     if (wantEnabled) {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
@@ -1784,13 +1832,8 @@ function installScrollRouter(opts) {
       } else {
         auto.setSpeed?.(getStoredSpeed());
       }
-      const sliderInput = document.getElementById("wpmTarget") as HTMLInputElement | null;
-      const sliderVal = sliderInput ? Number(sliderInput.value) : NaN;
-      const sliderPx =
-        Number.isFinite(sliderVal) && sliderVal > 0 ? convertWpmToPxPerSec(sliderVal) : null;
-      const seedPx = sliderPx ?? getStoredSpeed();
-      hybridBasePxps = seedPx;
-      applyHybridVelocity();
+      seedHybridBaseSpeed();
+      ensureOrchestratorForMode();
     } catch {}
     applyGate();
   } else {
