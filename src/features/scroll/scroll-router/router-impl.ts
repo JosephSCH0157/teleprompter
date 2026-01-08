@@ -1245,6 +1245,7 @@ function installScrollRouter(opts) {
   }
   const handleHybridFatalOnce = (err: unknown) => {
     if (hybridSilence.erroredOnce) return;
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     hybridSilence.erroredOnce = true;
     try { console.error('[HYBRID] disabling due to handler error', err); } catch {}
     try { clearHybridSilenceTimer(); } catch {}
@@ -1511,9 +1512,23 @@ function installScrollRouter(opts) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
+      hybridMotor.setVelocityPxPerSec(hybridPxPerSec);
       if (!hybridRunning) {
+        try {
+          console.info('[HYBRID] shouldRun true starting motor', {
+            isRunningBefore: hybridRunning,
+            pxPerSec: hybridPxPerSec,
+            viewer: viewer ? (viewer.id || viewer.tagName || viewer.className) : null,
+            scrollWriter: !!scrollWriter,
+          });
+        } catch {}
         hybridMotor.start();
-        emitMotorState("hybridWpm", true);
+        try {
+          console.info('[HYBRID] start result', {
+            isRunningAfter: hybridMotor.isRunning(),
+            pxPerSec: hybridPxPerSec,
+          });
+        } catch {}
         armHybridSilenceTimer();
       }
     } else {

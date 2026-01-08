@@ -17,6 +17,8 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
   let velocityPxPerSec = 0;
   let rafId: number | null = null;
   let lastNow: number | null = null;
+  let lastTickLog = 0;
+  const TICK_LOG_INTERVAL_MS = 1000;
 
   const now = deps.now ?? (() => performance.now());
   const raf = deps.raf ?? ((cb: FrameRequestCallback) => window.requestAnimationFrame(cb));
@@ -32,14 +34,28 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
     lastNow = current;
 
     if (velocityPxPerSec !== 0) {
+      const prevTop = deps.getScrollTop();
       const dy = velocityPxPerSec * dt;
-      const top = deps.getScrollTop() + dy;
+      const top = prevTop + dy;
       const maxTop = deps.getMaxScrollTop ? deps.getMaxScrollTop() : Number.POSITIVE_INFINITY;
       const nextTop = clamp(top, 0, maxTop);
+      const writer = deps.getWriter();
       try {
-        deps.getWriter().scrollTo(nextTop, { behavior: 'auto' });
+        writer.scrollTo(nextTop, { behavior: 'auto' });
       } catch (err) {
         log('tick:scroll', err);
+      }
+      const tickNow = now();
+      if (tickNow - lastTickLog >= TICK_LOG_INTERVAL_MS) {
+        lastTickLog = tickNow;
+        log('tick', {
+          dt,
+          velocityPxPerSec,
+          prevTop,
+          nextTop,
+          maxTop,
+          scrollWriter: !!writer,
+        });
       }
     }
 
