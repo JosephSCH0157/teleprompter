@@ -844,7 +844,7 @@ html.tp-present .present-exit { display: inline-flex; }
 
 /* Auto status chip */
 .topbar #autoChip { margin-left: .5rem; }
-#autoChip       { background: #374151; color:#fff; border-radius:999px; padding:2px 8px; font: 500 12px/1 system-ui, sans-serif; }
+#autoChip       { background: #374151; color:#fff; border-radius:999px; padding:2px 8px; font: 500 12px/1 system-ui, sans-serif; display:inline-flex; align-items:center; justify-content:center; min-width:7.5rem; }
 #autoChip.on    { background:#16a34a; }   /* On (green)   */
 #autoChip.paused{ background:#f59e0b; }   /* Paused (amber) */
 #autoChip.manual{ background:#6b7280; }   /* Manual (gray)  */
