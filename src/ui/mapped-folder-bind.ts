@@ -7,7 +7,6 @@ import { ScriptStore } from '../features/scripts-store';
 import { debugLog, hudLog } from '../env/logging';
 import {
   consumeLastScriptId,
-  getLastScriptId,
   loadScriptById,
   persistLastScriptId,
 } from '../features/script-selection';
