@@ -27,6 +27,7 @@ export type LearnedPatch = Partial<AsrThresholds>;
 
 let baseThresholds: AsrThresholds = normalizeThresholds({ ...DEFAULT_ASR_THRESHOLDS });
 let driverThresholds: AsrThresholds = baseThresholds;
+let thresholdsDirty = false;
 const sessionLearnedPatches: Partial<Record<SpeakerSlot, LearnedPatch>> = {};
 
 function broadcastThresholdUpdate() {
@@ -123,10 +124,20 @@ function updateSessionPatch(slot: SpeakerSlot) {
   }
 }
 
-function refreshEffectiveThresholds() {
+function refreshEffectiveThresholds(force = false) {
+  if (!force && thresholdsDirty) return;
   driverThresholds = computeEffectiveThresholds();
   broadcastThresholdUpdate();
   updateSessionPatch(getActiveSpeakerSlot());
+}
+
+function markThresholdsDirty() {
+  thresholdsDirty = true;
+}
+
+function clearThresholdsDirtyInternal() {
+  thresholdsDirty = false;
+  refreshEffectiveThresholds(true);
 }
 
 function applyDevOverrides() {
@@ -146,9 +157,16 @@ subscribeActiveSpeaker(handleProfileOrSlotChange);
 
 refreshEffectiveThresholds();
 
-export function setAsrDriverThresholds(next: Partial<AsrThresholds>) {
+type SetAsrDriverThresholdsOptions = {
+  markDirty?: boolean;
+};
+
+export function setAsrDriverThresholds(next: Partial<AsrThresholds>, options?: SetAsrDriverThresholdsOptions) {
   baseThresholds = normalizeThresholds({ ...baseThresholds, ...next });
-  refreshEffectiveThresholds();
+  if (options?.markDirty) {
+    markThresholdsDirty();
+  }
+  refreshEffectiveThresholds(true);
 }
 
 export function getAsrDriverThresholds(): AsrThresholds {
@@ -171,4 +189,17 @@ export function clearSessionLearnedPatches(): void {
   Object.keys(sessionLearnedPatches).forEach((slot) => {
     delete sessionLearnedPatches[slot as SpeakerSlot];
   });
+}
+
+export function markAsrThresholdsDirty(): void {
+  markThresholdsDirty();
+}
+
+export function clearAsrThresholdsDirty(): void {
+  if (!thresholdsDirty) return;
+  clearThresholdsDirtyInternal();
+}
+
+export function areAsrThresholdsDirty(): boolean {
+  return thresholdsDirty;
 }

@@ -1,5 +1,11 @@
 import type { AsrThresholds } from '../asr/asr-thresholds';
-import { getAsrDriverThresholds, getBaseAsrThresholds, setAsrDriverThresholds } from '../asr/asr-threshold-store';
+import {
+  getAsrDriverThresholds,
+  getBaseAsrThresholds,
+  setAsrDriverThresholds,
+  markAsrThresholdsDirty,
+  clearAsrThresholdsDirty,
+} from '../asr/asr-threshold-store';
 import { saveDevAsrThresholds } from './dev-thresholds';
 import type {
   SpeakerProfile,
@@ -105,7 +111,7 @@ if (!isDevMode() || typeof document === 'undefined') {
 
   const handleInput = (cfg: ThresholdControl, value: number) => {
     const normalized = cfg.isInt ? Math.max(cfg.min, Math.min(cfg.max, Math.round(value))) : value;
-    setAsrDriverThresholds({ [cfg.key]: normalized });
+    setAsrDriverThresholds({ [cfg.key]: normalized }, { markDirty: true });
     saveDevAsrThresholds(getAsrDriverThresholds());
     updateDisplayValue(cfg.key, normalized, cfg);
   };
@@ -281,11 +287,13 @@ if (!isDevMode() || typeof document === 'undefined') {
       next[cfg.key] = normalized;
     }
     setProfileAsrTweaks(profileId, next);
+    markAsrThresholdsDirty();
   };
 
   resetButton.addEventListener('click', () => {
     const profileId = getTargetProfileId();
     if (!profileId) return;
+    clearAsrThresholdsDirty();
     setProfileAsrTweaks(profileId, undefined);
   });
 
