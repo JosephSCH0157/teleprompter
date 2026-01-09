@@ -5,6 +5,12 @@
 import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
 import { ScriptStore } from '../features/scripts-store';
 import { debugLog, hudLog } from '../env/logging';
+import {
+  consumeLastScriptId,
+  getLastScriptId,
+  loadScriptById,
+  persistLastScriptId,
+} from '../features/script-selection';
 
 function getFolderPickerEnvironmentHint(): string {
   try {
@@ -49,6 +55,7 @@ const shouldTraceMappedFolder = (() => {
     return cache;
   };
 })();
+let restoredLastScript = false;
 const fingerprintNames = (entries: { name: string }[]) =>
   entries
     .map((e) => String(e?.name || ''))
@@ -201,6 +208,20 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       const opt = sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0] : sel.options[sel.selectedIndex];
       if (!opt) return;
       sel.setAttribute('aria-busy','true');
+      const scriptId = opt.value || '';
+      if ((opt as any)?.dataset?.settingsLink === '1') {
+        try { document.getElementById('settingsBtn')?.click(); } catch {}
+        try { requestAnimationFrame(() => { try { document.getElementById('scriptsFolderCard')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {} }); } catch {}
+        return;
+      }
+      let loaded = false;
+      if (scriptId) {
+        loaded = await loadScriptById(scriptId);
+        if (loaded) {
+          syncSidebarSelection(scriptId);
+          return;
+        }
+      }
       const handle = (opt as any)?.__handle || (opt as any)?._handle;
       const file = (opt as any)?.__file || (opt as any)?._file;
       const ensureReadPermission = async (h: any): Promise<boolean> => {
@@ -225,6 +246,10 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         try { (window as any).__tpCurrentName = name; } catch {}
         try { localStorage.setItem('tp_last_script_name', name); } catch {}
         window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
+        if (scriptId) {
+          persistLastScriptId(scriptId);
+          syncSidebarSelection(scriptId);
+        }
       } else {
         opts.onSelect?.(null);
         // In CI mock mode, emit a synthetic apply so smoke can assert content updates
@@ -235,6 +260,10 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
           hudLog('script:loaded:mock', { name, chars: text.length });
           try { localStorage.setItem('tp_last_script_name', name); } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } })); } catch {}
+          if (scriptId) {
+            persistLastScriptId(scriptId);
+            syncSidebarSelection(scriptId);
+          }
         }
         // Settings link sentinel (sidebar placeholder when no folder mapped)
         if ((opt as any).dataset && (opt as any).dataset.settingsLink === '1') {
@@ -356,10 +385,19 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       try { window.dispatchEvent(new CustomEvent('tp:scripts-updated')); } catch {}
       // Preselect last used script if present
       try {
-        const last = getLastScriptName();
-        if (last) {
-          setSelectedByName(sel, last);
-          hudLog('script:last:preselect', { name: last });
+        const restoreId = consumeLastScriptId(mappedEntries);
+        if (restoreId) {
+          setSelectedById(sel, restoreId);
+          syncSidebarSelection(restoreId);
+          restoredLastScript = true;
+          hudLog('script:last:preselect', { id: restoreId });
+          void loadScriptById(restoreId);
+        } else {
+          const last = getLastScriptName();
+          if (last) {
+            setSelectedByName(sel, last);
+            hudLog('script:last:preselect', { name: last });
+          }
         }
         maybeAutoLoad(sel);
       } catch {}
@@ -447,10 +485,19 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       hudLog('folder:mapped', { count: filtered.length });
       // Preselect last used script if present (fallback path) + maybe auto-load
       try {
-        const last = getLastScriptName();
-        if (last) {
-          setSelectedByName(sel, last);
-          hudLog('script:last:preselect', { name: last });
+        const restoreId = consumeLastScriptId(mappedEntries);
+        if (restoreId) {
+          setSelectedById(sel, restoreId);
+          syncSidebarSelection(restoreId);
+          restoredLastScript = true;
+          hudLog('script:last:preselect', { id: restoreId });
+          void loadScriptById(restoreId);
+        } else {
+          const last = getLastScriptName();
+          if (last) {
+            setSelectedByName(sel, last);
+            hudLog('script:last:preselect', { name: last });
+          }
         }
         maybeAutoLoad(sel);
       } catch {}
@@ -563,8 +610,27 @@ function setSelectedByName(sel: HTMLSelectElement, name: string | null): void {
     if (sel.options[i].text === name) { sel.selectedIndex = i; break; }
   }
 }
+function setSelectedById(sel: HTMLSelectElement | null, id: string | null): void {
+  if (!sel || !id) return;
+  for (let i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === id) {
+      sel.selectedIndex = i;
+      return;
+    }
+  }
+}
+function syncSidebarSelection(id: string | null): void {
+  if (!id) return;
+  const sidebar = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
+  if (sidebar) {
+    setSelectedById(sidebar, id);
+  }
+}
 function maybeAutoLoad(sel: HTMLSelectElement) {
   try {
+    if (restoredLastScript) {
+      return;
+    }
     const s = (window as any).__tpSettings?.get?.() || (window as any).__tpSettingsStore || null;
     const auto = !!(s && s.autoLoadLastScript);
     if (auto && sel.selectedIndex >= 0) {
