@@ -116,12 +116,12 @@ function allowAuto(): boolean {
   }
 }
 
-function dispatchAutoIntent(on: boolean): void {
+function dispatchAutoIntent(on: boolean, reason?: string): void {
   try {
     if (typeof window !== 'undefined') {
       window.__tpAutoIntentPending = on;
     }
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
+    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on, reason } }));
   } catch {}
 }
 
@@ -504,10 +504,10 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
           toggleEl.addEventListener('click', () => {
             if (active) {
               stop();
-              dispatchAutoIntent(false);
+              dispatchAutoIntent(false, 'legacy-toggle');
             } else {
               start();
-              dispatchAutoIntent(true);
+              dispatchAutoIntent(true, 'legacy-toggle');
             }
           });
         }

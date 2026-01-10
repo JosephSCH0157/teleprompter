@@ -1098,6 +1098,21 @@ function installScrollRouter(opts) {
   };
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
+  const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle', 'legacy-toggle']);
+  function isFatalAutoStopReason(reason?: string | null): boolean {
+    if (!reason) return true;
+    try {
+      return HYBRID_AUTO_STOP_FATAL_REASONS.has(reason.toLowerCase());
+    } catch {
+      return true;
+    }
+  }
+  function shouldIgnoreHybridStop(reason: string | undefined, enabled: boolean): boolean {
+    if (enabled) return false;
+    if (state2.mode !== "hybrid") return false;
+    if (sessionPhase !== "live") return false;
+    return !isFatalAutoStopReason(reason);
+  }
   try {
     const storedPhase = appStore.get?.('session.phase');
     if (storedPhase) {
@@ -1106,7 +1121,7 @@ function installScrollRouter(opts) {
   } catch {
     // ignore
   }
-  function setAutoIntentState(on: boolean) {
+  function setAutoIntentState(on: boolean, reason?: string) {
     userIntentOn = on;
     userEnabled = on;
     hybridWantedRunning = on;
@@ -1131,7 +1146,14 @@ function installScrollRouter(opts) {
             ? detail.on
             : undefined;
       if (typeof enabled !== 'boolean') return;
-      setAutoIntentState(enabled);
+      const reasonRaw = typeof detail.reason === 'string' ? detail.reason : undefined;
+      if (shouldIgnoreHybridStop(reasonRaw, enabled)) {
+        try {
+          console.info('[AUTO_INTENT] hybrid stop ignored (live, non-fatal reason)', { reason: reasonRaw });
+        } catch {}
+        return;
+      }
+      setAutoIntentState(enabled, reasonRaw);
       const brain = String(appStore.get('scrollBrain') || 'auto');
       const decision = enabled ? 'motor-start-request' : 'motor-stop-request';
       const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;

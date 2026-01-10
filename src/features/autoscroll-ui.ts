@@ -32,7 +32,7 @@ function storeSpeed(value: number): void {
   }
 }
 
-function dispatchAutoIntent(on: boolean): void {
+function dispatchAutoIntent(on: boolean, reason?: string): void {
   if (typeof window === 'undefined') return;
   try {
     (window as any).__tpAutoIntentPending = on;
@@ -40,10 +40,10 @@ function dispatchAutoIntent(on: boolean): void {
     // ignore
   }
   try {
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
+    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on, reason } }));
   } catch {}
   try {
-    window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on } }));
+    window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason } }));
   } catch {}
 }
 
@@ -139,7 +139,7 @@ function initAutoControls(): void {
 
   toggleEl?.addEventListener('click', (ev) => {
     try { ev.preventDefault(); } catch {}
-    dispatchAutoIntent(!autoRunning);
+    dispatchAutoIntent(!autoRunning, 'user-toggle');
   }, { capture: true });
 
   window.addEventListener('tp:motorState', (ev) => {

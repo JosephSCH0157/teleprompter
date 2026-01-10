@@ -22,6 +22,15 @@ try {
 } catch {}
 
 let asrOffLogged = false;
+const lastPhaseInit = (() => {
+  try {
+    const session = getSession();
+    return (session?.phase as SessionPhase) ?? 'idle';
+  } catch {
+    return 'idle';
+  }
+})();
+let lastSessionPhase: SessionPhase = lastPhaseInit;
 
 function dispatchAutoIntent(enabled: boolean): void {
   try {
@@ -48,11 +57,15 @@ function stopAutoScroll(): void {
 }
 
 function maybeStartOnLive(phase: SessionPhase): void {
+  const prevPhase = lastSessionPhase;
+  lastSessionPhase = phase;
   if (phase !== 'live') {
-    try { console.debug('[scroll-session] stopping auto-scroll for phase', phase); } catch {}
-    stopAutoScroll();
-    stopSpeechBackendForSession('phase-change');
-    asrOffLogged = false;
+    if (prevPhase === 'live') {
+      try { console.debug('[scroll-session] stopping auto-scroll for phase', phase); } catch {}
+      stopAutoScroll();
+      stopSpeechBackendForSession('phase-change');
+      asrOffLogged = false;
+    }
     return;
   }
 
