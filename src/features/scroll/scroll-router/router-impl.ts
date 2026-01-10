@@ -77,11 +77,12 @@ const nowMs = () =>
     ? performance.now()
     : Date.now();
 
-function beginHybridLiveGraceWindow() {
-  if (state2.mode !== "hybrid") return;
-  const now = nowMs();
-  seedHybridBaseSpeed();
-  liveGraceWindowEndsAt = now + LIVE_GRACE_MS;
+  function beginHybridLiveGraceWindow() {
+    if (state2.mode !== "hybrid") return;
+    const now = nowMs();
+    seedHybridBaseSpeed();
+    setHybridScale(RECOVERY_SCALE);
+    liveGraceWindowEndsAt = now + LIVE_GRACE_MS;
   hybridSilence.lastSpeechAtMs = now;
   hybridSilence.pausedBySilence = false;
   clearHybridSilenceTimer();
@@ -714,7 +715,7 @@ function refreshHybridWriter() {
     hybridMotor.setWriter(viewer ?? scrollerEl ?? null);
   } catch {}
 }
-const SILENCE_MS = 1200;
+const SILENCE_MS = 3000;
 const LIVE_GRACE_MS = 1800;
 const OFFSCRIPT_MILD = 0.7;
 const OFFSCRIPT_DEEP = 0.45;
@@ -725,7 +726,7 @@ const MATCH_SIM_FLOOR = 0.6;
 const MATCH_NO_MATCH_ENTER_MS = 300;
 const MATCH_MATCH_ENTER_MS = 150;
 const MIN_SPEECH_PXPS = 12;
-const MIN_ACTIVE_SCALE = 0.25;
+const MIN_ACTIVE_SCALE = 0.55;
 const HYBRID_BASE_FALLBACK = 22;
 let matchNoMatchSince: number | null = null;
 let matchMatchSince: number | null = null;
@@ -1205,9 +1206,11 @@ function installScrollRouter(opts) {
   try {
     window.addEventListener("tp:speech-state", (e) => {
       try {
-        const running = !!(e && e.detail && e.detail.running);
-        speechActive = running;
-        applyGate();
+    const running = !!(e && e.detail && e.detail.running);
+    if (running) {
+      speechActive = true;
+    }
+    applyGate();
       } catch {}
     });
   } catch {}
@@ -1288,6 +1291,7 @@ function installScrollRouter(opts) {
     if (state2.mode !== "hybrid") return;
     if (!hybridMotor.isRunning()) return;
     hybridSilence.pausedBySilence = true;
+    speechActive = false;
     hybridMotor.stop();
     emitMotorState("hybridWpm", false);
     emitHybridSafety();
@@ -1302,8 +1306,9 @@ function installScrollRouter(opts) {
   function isLiveGraceActive(now = nowMs()) {
     return liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt;
   }
-  function noteHybridSpeechActivity(ts?: number, opts?: { source?: string; noMatch?: boolean }) {
+function noteHybridSpeechActivity(ts?: number, opts?: { source?: string; noMatch?: boolean }) {
     const now = typeof ts === "number" ? ts : nowMs();
+    speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
     liveGraceWindowEndsAt = null;
     const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
@@ -1339,7 +1344,7 @@ function installScrollRouter(opts) {
         now - matchNoMatchSince >= MATCH_NO_MATCH_ENTER_MS &&
         !hybridSilence.offScriptActive
       ) {
-        setHybridScale(OFFSCRIPT_SLOW);
+        setHybridScale(OFFSCRIPT_MILD);
       }
     } else {
       matchNoMatchSince = null;
@@ -1444,7 +1449,7 @@ function installScrollRouter(opts) {
   } catch {}
   function setHybridScale(nextScale: number) {
     let clamped = Math.max(0, Math.min(nextScale, 1));
-    if (!hybridSilence.pausedBySilence && clamped < MIN_ACTIVE_SCALE) {
+    if (speechActive && !hybridSilence.pausedBySilence && clamped < MIN_ACTIVE_SCALE) {
       clamped = MIN_ACTIVE_SCALE;
     }
     if (hybridScale === clamped) return false;

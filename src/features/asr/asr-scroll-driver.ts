@@ -638,11 +638,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   ): number {
     const scroller = opts.scroller ?? getScroller();
     const payload = { ...opts, scroller };
-    const hybridMotor = typeof window !== 'undefined' ? (window as any).__tpHybridMotor : null;
-    const motorIsRunning = typeof hybridMotor?.isRunning === 'function' ? hybridMotor?.isRunning() : false;
-    const motorMoved = typeof hybridMotor?.movedRecently === 'function' ? hybridMotor?.movedRecently() : false;
-    if (isHybridMode() && motorIsRunning && motorMoved) {
-      logDev('hybrid blocked scroll', { ...payload, motorIsRunning, motorMoved });
+    if (isHybridMode()) {
       return scroller?.scrollTop ?? lastKnownScrollTop;
     }
     return applyCanonicalScrollTop(targetTop, payload);
