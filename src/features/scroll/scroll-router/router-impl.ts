@@ -1632,6 +1632,16 @@ function installScrollRouter(opts) {
     return HYBRID_BASELINE_FLOOR_PXPS;
   }
 
+  function logHybridBaselineState(source: string) {
+    if (!isDevMode()) return;
+    try {
+      const base = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
+      const scale = Number.isFinite(hybridScale) ? hybridScale : 0;
+      const effective = base * scale;
+      const fmt = (value: number) => (Number.isFinite(value) ? value.toFixed(1) : '0.0');
+      console.info(`[HYBRID] baseline=${fmt(base)} scale=${fmt(scale)} effective=${fmt(effective)} source=${source}`);
+    } catch {}
+  }
   function setHybridBasePxps(nextPxps: number): number {
     const candidate = Number.isFinite(nextPxps) && nextPxps > 0 ? nextPxps : HYBRID_BASELINE_FLOOR_PXPS;
     if (hybridBasePxps === candidate) return candidate;
@@ -1927,6 +1937,7 @@ function installScrollRouter(opts) {
             sliderTouchedThisSession = true;
             setHybridBasePxps(pxs);
             startHybridMotorFromSpeedChange();
+            logHybridBaselineState('slider');
               if (state2.mode === 'wpm') {
                 try {
                   if (typeof auto.setSpeed === 'function') {
@@ -1965,6 +1976,7 @@ function installScrollRouter(opts) {
             sliderTouchedThisSession = true;
             setHybridBasePxps(pxs);
             startHybridMotorFromSpeedChange();
+            logHybridBaselineState('slider');
             if (state2.mode === 'wpm') {
               try {
                 if (typeof auto.setSpeed === 'function') {
@@ -1999,6 +2011,7 @@ function installScrollRouter(opts) {
         sliderTouchedThisSession = true;
         setHybridBasePxps(pxs);
         startHybridMotorFromSpeedChange();
+        logHybridBaselineState('slider');
         if (state2.mode === "wpm") {
           try { auto.setSpeed?.(pxs); } catch {}
         }
