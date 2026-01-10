@@ -63,7 +63,6 @@ let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
-let markHybridOnScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 function warnScrollWrite(payload: Record<string, unknown>) {
   if (scrollWriteWarned) return;
@@ -1446,13 +1445,7 @@ function installScrollRouter(opts) {
     const changed = setHybridScale(OFFSCRIPT_DEEP);
     if (!changed) emitHybridSafety();
   }
-  function _markHybridOnScript() {
-    if (state2.mode !== "hybrid") return;
-    const changed = setHybridScale(RECOVERY_SCALE);
-    if (!changed) emitHybridSafety();
-  }
   markHybridOffScriptFn = _markHybridOffScript;
-  markHybridOnScriptFn = _markHybridOnScript;
   function emitHybridSafety() {
     try {
     const payload = {
