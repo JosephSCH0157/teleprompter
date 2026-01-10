@@ -1102,9 +1102,9 @@ function installScrollRouter(opts) {
   };
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
-  const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle', 'legacy-toggle']);
+  const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
   function isFatalAutoStopReason(reason?: string | null): boolean {
-    if (!reason) return true;
+    if (!reason) return false;
     try {
       return HYBRID_AUTO_STOP_FATAL_REASONS.has(reason.toLowerCase());
     } catch {
@@ -1343,6 +1343,15 @@ function installScrollRouter(opts) {
         emitMotorState("hybridWpm", true);
       }
     }
+  }
+  function startHybridMotorFromSpeedChange() {
+    if (state2.mode !== "hybrid") return;
+    if (sessionPhase !== "live") return;
+    if (!userEnabled || !hybridWantedRunning) return;
+    hybridSilence.pausedBySilence = false;
+    clearHybridSilenceTimer();
+    ensureHybridMotorRunningForSpeech();
+    armHybridSilenceTimer();
   }
   function isLiveGraceActive(now = nowMs()) {
     return liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt;
@@ -1898,35 +1907,36 @@ function installScrollRouter(opts) {
     document.addEventListener("change", (e) => {
       const t = e.target;
       // Handle WPM target changes
-      if (t?.id === "wpmTarget") {
-        try {
-          const val = Number(t.value);
-          if (isFinite(val) && val > 0) {
-            localStorage.setItem('tp_baseline_wpm', String(val));
-            const pxs = convertWpmToPxPerSec(val);
-            setHybridBasePxps(pxs);
-            if (state2.mode === 'wpm') {
-              try {
-                if (typeof auto.setSpeed === 'function') {
-                  auto.setSpeed(pxs);
-                }
-                if (orchRunning) {
-                  const status = orch.getStatus();
-                  const detectedWpm = status.wpm;
-                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                    const sensitivity = val / detectedWpm;
-                    orch.setSensitivity(sensitivity);
-                  } else {
-                    orch.setSensitivity(1.0);
+        if (t?.id === "wpmTarget") {
+          try {
+            const val = Number(t.value);
+            if (isFinite(val) && val > 0) {
+              localStorage.setItem('tp_baseline_wpm', String(val));
+              const pxs = convertWpmToPxPerSec(val);
+              setHybridBasePxps(pxs);
+              startHybridMotorFromSpeedChange();
+              if (state2.mode === 'wpm') {
+                try {
+                  if (typeof auto.setSpeed === 'function') {
+                    auto.setSpeed(pxs);
                   }
+                  if (orchRunning) {
+                    const status = orch.getStatus();
+                    const detectedWpm = status.wpm;
+                    if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+                      const sensitivity = val / detectedWpm;
+                      orch.setSensitivity(sensitivity);
+                    } else {
+                      orch.setSensitivity(1.0);
+                    }
+                  }
+                } catch {
                 }
-              } catch {
               }
             }
+          } catch {
           }
-        } catch {
         }
-      }
     }, { capture: true });
     
   // (Removed v1.7.1: dev-only polling shim for legacy select pokes — SSOT stable)
@@ -1941,6 +1951,7 @@ function installScrollRouter(opts) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             const pxs = convertWpmToPxPerSec(val);
             setHybridBasePxps(pxs);
+            startHybridMotorFromSpeedChange();
             if (state2.mode === 'wpm') {
               try {
                 if (typeof auto.setSpeed === 'function') {
@@ -1973,6 +1984,7 @@ function installScrollRouter(opts) {
         const pxs = Number(detail.pxPerSec);
         if (!Number.isFinite(pxs)) return;
         setHybridBasePxps(pxs);
+        startHybridMotorFromSpeedChange();
         if (state2.mode === "wpm") {
           try { auto.setSpeed?.(pxs); } catch {}
         }

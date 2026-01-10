@@ -572,7 +572,7 @@
               }
               const top = payload && typeof payload.top === 'number' && isFinite(payload.top) ? payload.top : null;
               if (top != null) {
-                requestScroll(Math.max(0, top | 0));
+                requestScroll(Math.max(0, top));
                 return true;
               }
               return false;
