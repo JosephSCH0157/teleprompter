@@ -723,12 +723,16 @@ const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const MIN_SPEECH_PXPS = 12;
 const MIN_ACTIVE_SCALE = 0.55;
-const HYBRID_BASELINE_MIN_PXPS = 32;
+const HYBRID_BASELINE_FLOOR_PXPS = 8;
+const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
+const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
 let lastHybridGateFingerprint: string | null = null;
 let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
+let offScriptEvidence = 0;
+let lastOffScriptEvidenceTs = 0;
 var isHybridBypass = () => {
   try {
     return localStorage.getItem("tp_hybrid_bypass") === "1";
@@ -1385,7 +1389,21 @@ function installScrollRouter(opts) {
   function updateHybridScaleFromDetail(detail: { bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     const nextScale = determineHybridScaleFromDetail(detail);
-    if (typeof nextScale === "number") {
+    if (nextScale == null) return;
+    const now = nowMs();
+    if (nextScale === RECOVERY_SCALE) {
+      offScriptEvidence = 0;
+      lastOffScriptEvidenceTs = 0;
+      setHybridScale(RECOVERY_SCALE);
+      return;
+    }
+    if (lastOffScriptEvidenceTs && now - lastOffScriptEvidenceTs > OFFSCRIPT_EVIDENCE_RESET_MS) {
+      offScriptEvidence = 0;
+    }
+    lastOffScriptEvidenceTs = now;
+    offScriptEvidence += 1;
+    if (offScriptEvidence >= OFFSCRIPT_EVIDENCE_THRESHOLD) {
+      offScriptEvidence = 0;
       setHybridScale(nextScale);
     }
   }
@@ -1471,6 +1489,10 @@ function installScrollRouter(opts) {
     });
   } catch {}
   function setHybridScale(nextScale: number) {
+    if (nextScale === RECOVERY_SCALE) {
+      offScriptEvidence = 0;
+      lastOffScriptEvidenceTs = 0;
+    }
     let clamped = Math.max(0, Math.min(nextScale, 1));
     if (speechActive && !hybridSilence.pausedBySilence && clamped < MIN_ACTIVE_SCALE) {
       clamped = MIN_ACTIVE_SCALE;
@@ -1483,7 +1505,7 @@ function installScrollRouter(opts) {
   }
   function applyHybridVelocity() {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
-    const base = Math.max(HYBRID_BASELINE_MIN_PXPS, candidateBase);
+    const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const effective = base * hybridScale;
     hybridMotor.setVelocityPxPerSec(effective);
     emitHybridSafety();
@@ -1585,18 +1607,31 @@ function installScrollRouter(opts) {
     const candidates = [getStoredBaselineWpmPx(), getSliderBaselinePx(), getLastKnownAutoSpeed()];
     for (const candidate of candidates) {
       if (candidate && Number.isFinite(candidate) && candidate > 0) {
-        return Math.max(HYBRID_BASELINE_MIN_PXPS, candidate);
+        return candidate;
       }
     }
-    return HYBRID_BASELINE_MIN_PXPS;
+    return HYBRID_BASELINE_FLOOR_PXPS;
+  }
+
+  function setHybridBasePxps(nextPxps: number): number {
+    const candidate = Number.isFinite(nextPxps) && nextPxps > 0 ? nextPxps : HYBRID_BASELINE_FLOOR_PXPS;
+    if (hybridBasePxps === candidate) return candidate;
+    const prev = hybridBasePxps;
+    hybridBasePxps = candidate;
+    if (isDevMode()) {
+      try {
+        const fmt = (value: number) => (Number.isFinite(value) ? value.toFixed(1) : '0.0');
+        console.info(`[HYBRID] baseline updated from WPM: ${fmt(prev)} → ${fmt(candidate)}`);
+      } catch {}
+    }
+    applyHybridVelocity();
+    return candidate;
   }
 
   function seedHybridBaseSpeed(): number {
     const base = resolveHybridSeedPx();
-    hybridBasePxps = base;
-    try { hybridMotor.setVelocityPxPerSec(base); } catch {}
-    applyHybridVelocity();
-    return base;
+    setHybridBasePxps(base);
+    return hybridBasePxps;
   }
 
   try {
@@ -1869,8 +1904,7 @@ function installScrollRouter(opts) {
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             const pxs = convertWpmToPxPerSec(val);
-            hybridBasePxps = pxs;
-            applyHybridVelocity();
+            setHybridBasePxps(pxs);
             if (state2.mode === 'wpm') {
               try {
                 if (typeof auto.setSpeed === 'function') {
@@ -1906,8 +1940,7 @@ function installScrollRouter(opts) {
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             const pxs = convertWpmToPxPerSec(val);
-            hybridBasePxps = pxs;
-            applyHybridVelocity();
+            setHybridBasePxps(pxs);
             if (state2.mode === 'wpm') {
               try {
                 if (typeof auto.setSpeed === 'function') {
@@ -1939,8 +1972,7 @@ function installScrollRouter(opts) {
         const detail = (ev as CustomEvent).detail || {};
         const pxs = Number(detail.pxPerSec);
         if (!Number.isFinite(pxs)) return;
-        hybridBasePxps = pxs;
-        applyHybridVelocity();
+        setHybridBasePxps(pxs);
         if (state2.mode === "wpm") {
           try { auto.setSpeed?.(pxs); } catch {}
         }
