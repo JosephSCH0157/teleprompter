@@ -1121,7 +1121,7 @@ function installScrollRouter(opts) {
   } catch {
     // ignore
   }
-  function setAutoIntentState(on: boolean, reason?: string) {
+  function setAutoIntentState(on: boolean, _reason?: string) {
     userIntentOn = on;
     userEnabled = on;
     hybridWantedRunning = on;
