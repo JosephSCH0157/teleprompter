@@ -723,7 +723,7 @@ const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const MIN_SPEECH_PXPS = 12;
 const MIN_ACTIVE_SCALE = 0.55;
-const HYBRID_BASELINE_FLOOR_PXPS = 8;
+const HYBRID_BASELINE_FLOOR_PXPS = 18;
 const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
 let lastHybridGateFingerprint: string | null = null;
@@ -731,6 +731,7 @@ let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
+let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
 var isHybridBypass = () => {
@@ -1613,10 +1614,19 @@ function installScrollRouter(opts) {
     return null;
   }
   function resolveHybridSeedPx(): number {
-    const candidates = [getStoredBaselineWpmPx(), getSliderBaselinePx(), getLastKnownAutoSpeed()];
-    for (const candidate of candidates) {
-      if (candidate && Number.isFinite(candidate) && candidate > 0) {
-        return candidate;
+    const slider = getSliderBaselinePx();
+    if (slider && Number.isFinite(slider) && slider > 0) {
+      sliderTouchedThisSession = true;
+      return slider;
+    }
+    const stored = getStoredBaselineWpmPx();
+    if (stored && Number.isFinite(stored) && stored > 0) {
+      return stored;
+    }
+    if (!sliderTouchedThisSession) {
+      const auto = getLastKnownAutoSpeed();
+      if (auto && Number.isFinite(auto) && auto > 0) {
+        return auto;
       }
     }
     return HYBRID_BASELINE_FLOOR_PXPS;
@@ -1659,6 +1669,7 @@ function installScrollRouter(opts) {
   try {
     window.addEventListener('tp:autoSpeed', (ev) => {
       try {
+        if (state2.mode === 'hybrid') return;
         const detail = (ev as CustomEvent)?.detail || {};
         const raw = detail.pxPerSec ?? detail.px ?? detail.speed ?? detail.value;
         const pxs = Number(raw);
@@ -1909,12 +1920,13 @@ function installScrollRouter(opts) {
       // Handle WPM target changes
         if (t?.id === "wpmTarget") {
           try {
-            const val = Number(t.value);
-            if (isFinite(val) && val > 0) {
-              localStorage.setItem('tp_baseline_wpm', String(val));
-              const pxs = convertWpmToPxPerSec(val);
-              setHybridBasePxps(pxs);
-              startHybridMotorFromSpeedChange();
+          const val = Number(t.value);
+          if (isFinite(val) && val > 0) {
+            localStorage.setItem('tp_baseline_wpm', String(val));
+            const pxs = convertWpmToPxPerSec(val);
+            sliderTouchedThisSession = true;
+            setHybridBasePxps(pxs);
+            startHybridMotorFromSpeedChange();
               if (state2.mode === 'wpm') {
                 try {
                   if (typeof auto.setSpeed === 'function') {
@@ -1950,6 +1962,7 @@ function installScrollRouter(opts) {
           if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             const pxs = convertWpmToPxPerSec(val);
+            sliderTouchedThisSession = true;
             setHybridBasePxps(pxs);
             startHybridMotorFromSpeedChange();
             if (state2.mode === 'wpm') {
@@ -1983,6 +1996,7 @@ function installScrollRouter(opts) {
         const detail = (ev as CustomEvent).detail || {};
         const pxs = Number(detail.pxPerSec);
         if (!Number.isFinite(pxs)) return;
+        sliderTouchedThisSession = true;
         setHybridBasePxps(pxs);
         startHybridMotorFromSpeedChange();
         if (state2.mode === "wpm") {
