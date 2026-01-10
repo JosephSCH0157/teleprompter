@@ -1220,11 +1220,12 @@ function installScrollRouter(opts) {
   try {
     window.addEventListener("tp:speech-state", (e) => {
       try {
-    const running = !!(e && e.detail && e.detail.running);
-    if (running) {
-      speechActive = true;
-    }
-    applyGate();
+        const detail = (e as CustomEvent)?.detail || {};
+        const running = !!(detail.running);
+        const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
+        if (running) {
+          noteHybridSpeechActivity(ts, { source: "speech-state" });
+        }
       } catch {}
     });
   } catch {}
@@ -1303,6 +1304,16 @@ function installScrollRouter(opts) {
       return;
     }
     if (state2.mode !== "hybrid") return;
+    const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
+    const stillEligibleForSpeech =
+      sessionPhase === "live" &&
+      userEnabled &&
+      hybridWantedRunning;
+    if (stillEligibleForSpeech && lastSpeechAgeMs < HYBRID_SILENCE_STOP_MS) {
+      const delay = Math.max(1, HYBRID_SILENCE_STOP_MS - lastSpeechAgeMs);
+      armHybridSilenceTimer(delay);
+      return;
+    }
     if (!hybridMotor.isRunning()) return;
     hybridSilence.pausedBySilence = true;
     speechActive = false;
@@ -1317,6 +1328,18 @@ function installScrollRouter(opts) {
     const nextDelay = Math.max(1, delay);
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), nextDelay);
   }
+  function ensureHybridMotorRunningForSpeech() {
+    if (state2.mode !== "hybrid") return;
+    if (sessionPhase !== "live") return;
+    if (!userEnabled || !hybridWantedRunning) return;
+    applyHybridVelocity();
+    if (!hybridMotor.isRunning()) {
+      const startResult = hybridMotor.start();
+      if (startResult.started) {
+        emitMotorState("hybridWpm", true);
+      }
+    }
+  }
   function isLiveGraceActive(now = nowMs()) {
     return liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt;
   }
@@ -1325,24 +1348,26 @@ function installScrollRouter(opts) {
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
     liveGraceWindowEndsAt = null;
-    const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
+    const wasPausedBySilence = hybridSilence.pausedBySilence;
+    hybridSilence.pausedBySilence = false;
+    clearHybridSilenceTimer();
     if (isDevMode()) {
+      const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
       try {
         console.info('[HYBRID] speech activity', {
           source: opts?.source ?? 'unknown',
           noMatch: !!opts?.noMatch,
-          pausedBySilence: hybridSilence.pausedBySilence,
+          pausedBySilence: wasPausedBySilence,
           offScriptActive: hybridSilence.offScriptActive,
           effectivePxPerSec: Number.isFinite(effectivePxps) ? Number(effectivePxps.toFixed(2)) : effectivePxps,
         });
       } catch {}
     }
-    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-    clearHybridSilenceTimer();
-    if (hybridSilence.pausedBySilence) {
-      hybridSilence.pausedBySilence = false;
+    if (wasPausedBySilence) {
       emitHybridSafety();
     }
+    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    ensureHybridMotorRunningForSpeech();
     armHybridSilenceTimer();
     try { applyGate(); } catch {}
   }
@@ -1457,7 +1482,8 @@ function installScrollRouter(opts) {
     return true;
   }
   function applyHybridVelocity() {
-    const base = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
+    const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
+    const base = Math.max(HYBRID_BASELINE_MIN_PXPS, candidateBase);
     const effective = base * hybridScale;
     hybridMotor.setVelocityPxPerSec(effective);
     emitHybridSafety();
