@@ -53,30 +53,6 @@ if (typeof window !== 'undefined') {
   } catch {
     // ignore
   }
-  function beginHybridLiveGraceWindow() {
-    if (state2.mode !== "hybrid") return;
-    const now = nowMs();
-    seedHybridBaseSpeed();
-    liveGraceWindowEndsAt = now + LIVE_GRACE_MS;
-    hybridSilence.lastSpeechAtMs = now;
-    hybridSilence.pausedBySilence = false;
-    clearHybridSilenceTimer();
-    if (hybridWantedRunning) {
-      armHybridSilenceTimer(LIVE_GRACE_MS);
-    }
-    const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
-    try {
-      console.info("[HYBRID] live boot", {
-        hybridBasePxps,
-        phase: sessionPhase,
-        hybridWantedRunning,
-        lastSpeechAgeMs: 0,
-        effectivePxps,
-        scale: hybridScale,
-        isSilent: false,
-      });
-    } catch {}
-  }
 }
 
 const AUTO_INTENT_WIRE_STAMP = 'v2026-01-07c';
@@ -100,6 +76,31 @@ const nowMs = () =>
   (typeof performance !== 'undefined' && typeof performance.now === 'function')
     ? performance.now()
     : Date.now();
+
+function beginHybridLiveGraceWindow() {
+  if (state2.mode !== "hybrid") return;
+  const now = nowMs();
+  seedHybridBaseSpeed();
+  liveGraceWindowEndsAt = now + LIVE_GRACE_MS;
+  hybridSilence.lastSpeechAtMs = now;
+  hybridSilence.pausedBySilence = false;
+  clearHybridSilenceTimer();
+  if (hybridWantedRunning) {
+    armHybridSilenceTimer(LIVE_GRACE_MS);
+  }
+  const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
+  try {
+    console.info("[HYBRID] live boot", {
+      hybridBasePxps,
+      phase: sessionPhase,
+      hybridWantedRunning,
+      lastSpeechAgeMs: 0,
+      effectivePxps,
+      scale: hybridScale,
+      isSilent: false,
+    });
+  } catch {}
+}
 
 function onAutoIntent(e: Event) {
   const detail = (e as CustomEvent)?.detail || {};
