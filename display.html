@@ -522,7 +522,7 @@
                 scrollRaf = 0;
                 if (!wrap || scrollTargetTop == null) return;
                 const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-                const target = Math.max(0, Math.min(max, scrollTargetTop | 0));
+                const target = Math.max(0, Math.min(max, scrollTargetTop));
                 const current = wrap.scrollTop || 0;
                 const delta = target - current;
                 if (Math.abs(delta) <= 1) {
@@ -544,7 +544,7 @@
             // requestScroll: absolute pixels in the same container as viewer
             function requestScroll(value) {
               const max = Math.max(0, wrap.scrollHeight - wrap.clientHeight);
-              const targetTop = Math.max(0, Math.min(max, value | 0));
+              const targetTop = Math.max(0, Math.min(max, value));
               scrollTargetTop = targetTop;
               ensureScrollStep();
               logScrollCommand(targetTop, wrap.scrollTop, targetTop - (wrap.scrollTop || 0), 'N/A', 'stepping');

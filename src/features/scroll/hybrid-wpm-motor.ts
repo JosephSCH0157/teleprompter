@@ -23,6 +23,7 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
   let warnedNoOverflow = false;
   let loggedFirstMove = false;
   let lastMoveAtMs = 0;
+  let posFloat: number | null = null;
   const TICK_LOG_INTERVAL_MS = 1000;
 
   const now = deps.now ?? (() => performance.now());
@@ -41,6 +42,10 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
     if (delta > 0) {
       lastMoveAtMs = now();
     }
+  };
+
+  const resetAccumulatorFromDom = () => {
+    posFloat = writer ? writer.scrollTop || 0 : null;
   };
 
   const tick = () => {
@@ -72,9 +77,12 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
         return;
       }
       const prevTop = writer.scrollTop || 0;
-      const dy = velocityPxPerSec * dt;
-      const top = prevTop + dy;
-      const nextTop = clamp(top, 0, max);
+      if (posFloat == null) {
+        posFloat = prevTop;
+      }
+      posFloat += velocityPxPerSec * dt;
+      posFloat = clamp(posFloat, 0, max);
+      const nextTop = posFloat;
       try {
         writer.scrollTop = nextTop;
       } catch (err) {
@@ -106,6 +114,7 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
       running = true;
       loggedFirstMove = false;
       lastMoveAtMs = 0;
+      resetAccumulatorFromDom();
       lastNow = now();
       rafId = raf(tick);
       log('start', { velocityPxPerSec });
@@ -121,6 +130,7 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
       lastNow = null;
       loggedFirstMove = false;
       lastMoveAtMs = 0;
+      posFloat = null;
       log('stop', {});
     },
     setVelocityPxPerSec(pxPerSec: number) {
@@ -132,6 +142,7 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
     },
     setWriter(el: HTMLElement | null) {
       writer = el;
+      resetAccumulatorFromDom();
       if (writer) {
         warnedNoWriter = false;
         warnedNoOverflow = false;
