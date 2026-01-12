@@ -424,6 +424,81 @@ function isHybridMode(): boolean {
   return getScrollMode() === 'hybrid';
 }
 
+const HYBRID_BRAKE_TTL_MS = 320;
+const HYBRID_ASSIST_TTL_MS = 320;
+const HYBRID_TARGET_HINT_TTL_MS = 600;
+const HYBRID_ASSIST_MAX_BOOST_PXPS = 400;
+const HYBRID_TARGET_HINT_MIN_DELTA_PX = 8;
+const HYBRID_TARGET_HINT_MIN_INTERVAL_MS = 250;
+let lastHybridTargetHintTop: number | null = null;
+let lastHybridTargetHintTs = 0;
+
+const getNowMs = () =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+
+function dispatchHybridEvent(name: string, detail: Record<string, unknown>) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent(name, { detail }));
+  } catch {
+    // ignore
+  }
+}
+
+function emitHybridBrake(factor: number, reason: string, ttlMs?: number) {
+  if (!isHybridMode()) return;
+  const safeFactor = Number.isFinite(factor) ? Math.max(0, Math.min(1, factor)) : 1;
+  const requestedTtl = typeof ttlMs === 'number' ? ttlMs : HYBRID_BRAKE_TTL_MS;
+  const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
+  dispatchHybridEvent('tp:hybrid:brake', {
+    factor: safeFactor,
+    reason,
+    ttlMs: safeTtl,
+  });
+}
+
+function emitHybridAssist(boostPxps: number, reason: string, targetTop?: number, ttlMs?: number) {
+  if (!isHybridMode()) return;
+  const boostValue = typeof boostPxps === 'number' ? boostPxps : NaN;
+  const boost = Number.isFinite(boostValue)
+    ? Math.max(0, Math.min(HYBRID_ASSIST_MAX_BOOST_PXPS, boostValue))
+    : 0;
+  if (boost <= 0) return;
+  const requestedTtl = typeof ttlMs === 'number' ? ttlMs : HYBRID_ASSIST_TTL_MS;
+  const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
+  dispatchHybridEvent('tp:hybrid:assist', {
+    boostPxps: boost,
+    reason,
+    ttlMs: safeTtl,
+    targetTop,
+  });
+}
+
+function emitHybridTargetHint(top: number, confidence: number, reason?: string, ttlMs?: number) {
+  if (!isHybridMode() || !Number.isFinite(top)) return;
+  const now = getNowMs();
+  if (
+    lastHybridTargetHintTop != null &&
+    Math.abs(top - lastHybridTargetHintTop) < HYBRID_TARGET_HINT_MIN_DELTA_PX &&
+    now - lastHybridTargetHintTs < HYBRID_TARGET_HINT_MIN_INTERVAL_MS
+  ) {
+    return;
+  }
+  lastHybridTargetHintTop = top;
+  lastHybridTargetHintTs = now;
+  const requestedTtl = typeof ttlMs === 'number' ? ttlMs : HYBRID_TARGET_HINT_TTL_MS;
+  const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
+  const safeConfidence = Math.max(0, Math.min(1, confidence));
+  dispatchHybridEvent('tp:hybrid:targetHint', {
+    targetTop: top,
+    confidence: safeConfidence,
+    reason,
+    ttlMs: safeTtl,
+  });
+}
+
 function getScroller(): HTMLElement | null {
   const primary = getPrimaryScroller();
   const root = getScriptRoot();
@@ -1647,12 +1722,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (move < minStepPx) move = Math.min(err, minStepPx);
     move = Math.min(err, move);
 
-      if (move > 0) {
-        const applied = applyScrollWithHybridGuard(current + move, { scroller, reason: 'asr-tick' });
+    if (move > 0) {
+      const applied = applyScrollWithHybridGuard(current + move, { scroller, reason: 'asr-tick' });
       appliedTopPx = applied;
       lastKnownScrollTop = applied;
       lastMoveAt = Date.now();
       markProgrammaticScroll();
+      if (isHybridMode()) {
+        const normalizedErr = Math.min(1, err / 200);
+        const brakeFactor = Math.max(0.15, 1 - normalizedErr);
+        emitHybridBrake(brakeFactor, 'asr-pursuit', HYBRID_BRAKE_TTL_MS);
+        const assistBoost = Math.min(Math.max(0, pursuitVel), HYBRID_ASSIST_MAX_BOOST_PXPS);
+        emitHybridAssist(assistBoost, 'asr-pursuit', pursuitTargetTop ?? undefined, HYBRID_ASSIST_TTL_MS);
+      }
     }
     emitPursuitHud(err, pursuitVel, pursuitTargetTop, current);
     window.requestAnimationFrame(tickController);
@@ -1851,6 +1933,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 lastEvidenceAt = now;
                 ensurePursuitActive();
                 logDev('no_target_nudge', { line: targetLine, px: Math.round(limitedTarget - base), conf });
+                emitHybridTargetHint(limitedTarget, isFinal ? 0.75 : 0.55, 'asr-no-target');
               }
             }
             adoptPendingMatch({ ...pending });
@@ -1917,6 +2000,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 lastEvidenceAt = now;
                 ensurePursuitActive();
                 logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
+                emitHybridTargetHint(limitedTarget, isFinal ? 0.8 : 0.6, 'asr-same-line-center');
                 updateDebugState('same-line-recenter');
                 return;
               }
@@ -1954,6 +2038,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 creepBudgetUsed += Math.max(0, limitedTarget - base);
                 ensurePursuitActive();
                 logDev('same-line creep', { line: targetLine, px: creepStep, conf });
+                emitHybridTargetHint(limitedTarget, isFinal ? 0.8 : 0.6, 'asr-same-line-creep');
                 updateDebugState('same-line-creep');
               }
             }
@@ -2057,7 +2142,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
       const candidate = clamp(targetTop, 0, max);
       const limitedTarget = forced ? candidate : Math.min(candidate, base + jumpCap);
-      pursuitTargetTop = Math.max(base, limitedTarget);
+      const nextTargetTop = Math.max(base, limitedTarget);
+      pursuitTargetTop = nextTargetTop;
+      if (nextTargetTop > base) {
+        emitHybridTargetHint(nextTargetTop, isFinal ? 0.9 : 0.7, forced ? 'asr-forced-commit' : 'asr-commit');
+      }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
       creepBudgetUsed = 0;
