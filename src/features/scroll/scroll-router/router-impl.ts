@@ -862,6 +862,7 @@ function setSpeaking(on, auto) {
   else auto.toggle();
 }
 function hybridHandleDb(db, auto) {
+  if (state2.mode === 'hybrid') return;
   const { attackMs, releaseMs, thresholdDb } = DEFAULTS.hybrid;
   if (gateTimer) clearTimeout(gateTimer);
   if (db >= thresholdDb) gateTimer = setTimeout(() => setSpeaking(true, auto), attackMs);
