@@ -1016,6 +1016,7 @@ function installScrollRouter(opts) {
   }
   restoreMode();
   applyMode(state2.mode);
+  emitScrollModeSnapshot("mode-change");
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     seedHybridBaseSpeed();
   }
@@ -1280,8 +1281,34 @@ function installScrollRouter(opts) {
       } catch {}
       try { window.dispatchEvent(new CustomEvent("tp:motorState", { detail: payload })); } catch {}
       try { document.dispatchEvent(new CustomEvent("tp:motorState", { detail: payload })); } catch {}
+      try { window.dispatchEvent(new CustomEvent("tp:motor:state", { detail: payload })); } catch {}
+      try { document.dispatchEvent(new CustomEvent("tp:motor:state", { detail: payload })); } catch {}
+      emitScrollModeSnapshot(`motor:${source}:${running ? "on" : "off"}`);
     } catch {}
   }
+
+  function emitScrollModeSnapshot(reason: string) {
+    try {
+      const payload = {
+        reason: reason || "state",
+        mode: state2.mode,
+        phase: sessionPhase,
+        brain: String(appStore.get("scrollBrain") || "auto"),
+        clamp: state2.mode === "hybrid" || state2.mode === "asr" ? "follow" : "free",
+        userEnabled: !!userEnabled,
+        sessionIntentOn: !!sessionIntentOn,
+        autoRunning: typeof auto?.isRunning === "function" ? !!auto.isRunning() : false,
+        hybridRunning: hybridMotor?.isRunning?.() ?? false,
+        hybridWantedRunning: !!hybridWantedRunning,
+        speechActive: !!speechActive,
+        hybridPausedBySilence: !!hybridSilence.pausedBySilence,
+      };
+      try { (window as any).__tp_onScrollModeChange?.(payload); } catch {}
+      try { window.dispatchEvent(new CustomEvent("tp:scroll:mode", { detail: payload })); } catch {}
+      try { document.dispatchEvent(new CustomEvent("tp:scroll:mode", { detail: payload })); } catch {}
+    } catch {}
+  }
+
   function canRunHybridMotor() {
     try {
       const phase = appStore.get("session.phase");
@@ -1433,7 +1460,10 @@ function installScrollRouter(opts) {
     try { hybridWantedRunning = false; } catch {}
     try { stopAllMotors('hybrid guard fatal'); } catch {}
     try { emitHybridSafety(); } catch {}
-    try { applyMode('wpm'); } catch {}
+    try {
+      applyMode('wpm');
+      emitScrollModeSnapshot("mode-change");
+    } catch {}
     try {
       if ((window as any).toast) {
         (window as any).toast('Hybrid disabled after runtime error');
@@ -1930,6 +1960,7 @@ function installScrollRouter(opts) {
           beginHybridLiveGraceWindow();
         }
         applyGate();
+        emitScrollModeSnapshot(`phase:${sessionPhase}`);
       });
       appStore.subscribe("session.scrollAutoOnLive", () => {
         applyGate();
