@@ -285,6 +285,21 @@ function wirePreviewListener(): void {
 
 // --- Wizard actions --------------------------------------------------------
 
+const DEFAULT_PROFILE_LABEL = 'Desk - default';
+
+function getDesiredProfileLabel(): string {
+  try {
+    const input = $('asrLabel') as HTMLInputElement | null;
+    const value = input?.value?.trim();
+    if (value) {
+      return value;
+    }
+  } catch {
+    // ignore
+  }
+  return DEFAULT_PROFILE_LABEL;
+}
+
 export async function startAsrWizard(): Promise<void> {
   try {
     if (calibrating) return;
@@ -294,10 +309,9 @@ export async function startAsrWizard(): Promise<void> {
     if (startBtn) startBtn.disabled = true;
 
     const deviceSel = $('asrDevice') as HTMLSelectElement | null;
-    const labelInput = $('asrLabel') as HTMLInputElement | null;
 
     const deviceId = deviceSel?.value || '';
-    const label = labelInput?.value || 'Desk - default';
+    const label = getDesiredProfileLabel();
 
     const flags = {
       echoCancellation: !!( $('asrAEC') as HTMLInputElement | null )?.checked,
@@ -357,6 +371,14 @@ function wire(): void {
     $('asrSaveBtn')?.addEventListener('click', () => {
       try {
         if (!current) return;
+        const label = getDesiredProfileLabel();
+        current.profile.label = label;
+        try {
+          const deviceId = current.profile.capture?.deviceId || '';
+          current.profile.id = `${deviceId}::${label}`;
+        } catch {
+          // ignore
+        }
         upsertProfile(current.profile);
         setActiveProfile(current.profile.id);
         toast('ASR profile saved and activated.');
