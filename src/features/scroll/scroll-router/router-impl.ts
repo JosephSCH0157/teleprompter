@@ -721,9 +721,9 @@ const OFFSCRIPT_DEEP = 0.55;
 const RECOVERY_SCALE = 1;
 const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
-const MIN_SPEECH_PXPS = 12;
-const MIN_ACTIVE_SCALE = 0.55;
-const HYBRID_BASELINE_FLOOR_PXPS = 18;
+const MIN_SPEECH_PXPS = 24;
+const MIN_ACTIVE_SCALE = 0.65;
+const HYBRID_BASELINE_FLOOR_PXPS = 24;
 const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
 let lastHybridGateFingerprint: string | null = null;
@@ -1516,7 +1516,18 @@ function installScrollRouter(opts) {
   function applyHybridVelocity() {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
-    const effective = base * hybridScale;
+    // Hybrid should never "look dead". Even deep off-script should still visibly creep.
+    // If speech is active (or we're inside live grace), enforce a stronger visible floor.
+    const now = nowMs();
+    const inLiveGrace = isLiveGraceActive(now);
+    const speechRecent = now - hybridSilence.lastSpeechAtMs <= 500;
+    const wantVisibleFloor = inLiveGrace || speechRecent;
+
+    const rawEffective = base * hybridScale;
+    const effective = wantVisibleFloor
+      ? Math.max(rawEffective, MIN_SPEECH_PXPS)
+      : Math.max(rawEffective, HYBRID_BASELINE_FLOOR_PXPS);
+
     hybridMotor.setVelocityPxPerSec(effective);
     emitHybridSafety();
   }

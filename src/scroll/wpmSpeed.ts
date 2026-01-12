@@ -11,6 +11,8 @@ function resolveTypographyNumber(value: unknown, fallback: number) {
   return n;
 }
 
+const WPM_PXPS_MULTIPLIER = 3.5;
+
 export function wpmToPxPerSec(targetWpm: number, display: DisplayId = 'main'): number {
   if (!Number.isFinite(targetWpm) || targetWpm <= 0) return 0;
 
@@ -32,7 +34,7 @@ export function wpmToPxPerSec(targetWpm: number, display: DisplayId = 'main'): n
   const pxPerLine = fontSize * lineHeight;
   const linesPerMinute = targetWpm / wordsPerLine;
   const pxPerMinute = linesPerMinute * pxPerLine;
-  const pxPerSec = pxPerMinute / 60;
+  const pxPerSec = (pxPerMinute / 60) * WPM_PXPS_MULTIPLIER;
 
   // Guard against runaway values when typography settings are extreme
   return clamp(pxPerSec, 0, 2000);
