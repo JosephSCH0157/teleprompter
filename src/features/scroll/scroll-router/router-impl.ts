@@ -1338,7 +1338,7 @@ function installScrollRouter(opts) {
     if (state2.mode !== "hybrid") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    applyHybridVelocity();
+    applyHybridVelocity(hybridSilence);
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
@@ -1511,17 +1511,17 @@ function installScrollRouter(opts) {
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    applyHybridVelocity();
+    applyHybridVelocity(hybridSilence);
     return true;
   }
-  function applyHybridVelocity() {
+  function applyHybridVelocity(silenceState = hybridSilence) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     // Hybrid should never "look dead". Even deep off-script should still visibly creep.
     // If speech is active (or we're inside live grace), enforce a stronger visible floor.
     const now = nowMs();
     const inLiveGrace = isLiveGraceActive(now);
-    const speechRecent = now - hybridSilence.lastSpeechAtMs <= 500;
+    const speechRecent = now - silenceState.lastSpeechAtMs <= 500;
     const wantVisibleFloor = inLiveGrace || speechRecent;
 
     const rawEffective = base * hybridScale;
@@ -1665,7 +1665,7 @@ function installScrollRouter(opts) {
         console.info(`[HYBRID] baseline updated from WPM: ${fmt(prev)} → ${fmt(candidate)}`);
       } catch {}
     }
-    applyHybridVelocity();
+    applyHybridVelocity(hybridSilence);
     return candidate;
   }
 
@@ -2062,7 +2062,7 @@ function installScrollRouter(opts) {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        applyHybridVelocity();
+        applyHybridVelocity(hybridSilence);
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
