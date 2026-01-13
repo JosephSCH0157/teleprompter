@@ -64,6 +64,17 @@ let scrollerEl: HTMLElement | null = null;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
+const hybridSilence = {
+  lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+  pausedBySilence: false,
+  timeoutId: null as number | null,
+  erroredOnce: false,
+  offScriptActive: false,
+};
+let hybridSilence2 = 0;
+function setHybridSilence2(v: number) {
+  hybridSilence2 = Number.isFinite(v) ? v : 0;
+}
 function warnScrollWrite(payload: Record<string, unknown>) {
   if (scrollWriteWarned) return;
   scrollWriteWarned = true;
@@ -1109,17 +1120,6 @@ function installScrollRouter(opts) {
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
   let speechActive = false;
-  const hybridSilence = {
-    lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
-    pausedBySilence: false,
-    timeoutId: null as number | null,
-    erroredOnce: false,
-    offScriptActive: false,
-  };
-  let hybridSilence2 = 0;
-  function setHybridSilence2(v: number) {
-    hybridSilence2 = Number.isFinite(v) ? v : 0;
-  }
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
   const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
