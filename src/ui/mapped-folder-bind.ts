@@ -60,8 +60,8 @@ const fingerprintNames = (entries: { name: string }[]) =>
     .map((e) => String(e?.name || ''))
     .sort()
     .join('|');
-let lastPopulateFingerprint = '';
-let lastFallbackFingerprint = '';
+const lastPopulateFingerprints = new WeakMap<HTMLSelectElement, string>();
+const lastFallbackFingerprints = new WeakMap<HTMLSelectElement, string>();
 function isSupportedScriptName(name: string): boolean {
   const lower = (name || '').toLowerCase().trim();
   if (!lower) return false;
@@ -302,8 +302,9 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       if ('showDirectoryPicker' in window) {
         const entries = await listScripts();
         const entriesFingerprint = fingerprintNames(entries);
-        if (!entriesFingerprint || entriesFingerprint !== lastPopulateFingerprint) {
-          lastPopulateFingerprint = entriesFingerprint;
+        const prevFingerprint = lastPopulateFingerprints.get(sel);
+        if (!entriesFingerprint || entriesFingerprint !== prevFingerprint) {
+          lastPopulateFingerprints.set(sel, entriesFingerprint);
           populateSelect(entries);
           _lastCount = entries.length;
           try { announceCount(_lastCount); } catch {}
@@ -316,14 +317,6 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
   }
 
 function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[]) {
-  const fingerprint = fingerprintNames(entries);
-  if (fingerprint && fingerprint === lastPopulateFingerprint) {
-    if (shouldTraceMappedFolder()) {
-      debugLog('[MAPPED-FOLDER] populateSelect skipped duplicate', { fingerprint, count: entries.length });
-    }
-    return;
-  }
-  if (fingerprint) lastPopulateFingerprint = fingerprint;
   try {
     sel.innerHTML = '';
     const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
@@ -421,14 +414,14 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
       sel.innerHTML = '';
       const mappedEntries: { id: string; title: string; handle: FileSystemHandle }[] = [];
       try { sel.setAttribute('aria-busy','true'); } catch {}
-    const filtered = files.filter(f => {
-      if (shouldTraceMappedFolder()) {
-        try {
-          debugLog('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
-        } catch {}
-      }
-      return isSupportedScriptName(f.name);
-    }).sort((a,b)=>a.name.localeCompare(b.name));
+      const filtered = files.filter(f => {
+        if (shouldTraceMappedFolder()) {
+          try {
+            debugLog('[MAPPED-FOLDER] seen entry', { name: f.name, allowed: isSupportedScriptName(f.name) });
+          } catch {}
+        }
+        return isSupportedScriptName(f.name);
+      }).sort((a,b)=>a.name.localeCompare(b.name));
       if (!filtered.length) {
         try { ScriptStore.syncMapped([]); } catch {}
         if (sel.id === 'scriptSelectSidebar') {
@@ -445,37 +438,40 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
         try { announceCount(0); } catch {}
         return;
       }
-    const fallbackFingerprint = fingerprintNames(filtered.map((f) => ({ name: f.name })));
-    if (fallbackFingerprint && fallbackFingerprint === lastFallbackFingerprint) {
-      if (shouldTraceMappedFolder()) {
-        debugLog('[MAPPED-FOLDER] populateSelectFromFiles skipped duplicate', { fingerprint: fallbackFingerprint, count: filtered.length });
+      const fallbackFingerprint = fingerprintNames(filtered.map((f) => ({ name: f.name })));
+      const prevFallback = lastFallbackFingerprints.get(sel);
+      if (fallbackFingerprint && fallbackFingerprint === prevFallback) {
+        if (shouldTraceMappedFolder()) {
+          debugLog('[MAPPED-FOLDER] populateSelectFromFiles skipped duplicate', { fingerprint: fallbackFingerprint, count: filtered.length });
+        }
+        return;
       }
-      return;
-    }
-    lastFallbackFingerprint = fallbackFingerprint;
-    sel.disabled = false;
-    for (const f of filtered) {
-      const opt = new Option(f.name, f.name) as HTMLOptionElement & {
-        __fileHandle?: FileSystemFileHandle;
-        __file?: File;
-        _handle?: FileSystemFileHandle;
-        _file?: File;
-      };
-      try { opt._file = f; } catch {}
-      try { opt.__file = f; } catch {}
-      try { mappedEntries.push({ id: f.name, title: f.name, handle: f as any }); } catch {}
-      if (shouldTraceMappedFolder()) {
-        try {
-          debugLog('[MAPPED-FOLDER] option created', {
-            id: f.name,
-            label: f.name,
-            hasHandle: false,
-            hasFile: true,
-          });
-        } catch {}
+      if (fallbackFingerprint) {
+        lastFallbackFingerprints.set(sel, fallbackFingerprint);
       }
-      sel.append(opt);
-    }
+      sel.disabled = false;
+      for (const f of filtered) {
+        const opt = new Option(f.name, f.name) as HTMLOptionElement & {
+          __fileHandle?: FileSystemFileHandle;
+          __file?: File;
+          _handle?: FileSystemFileHandle;
+          _file?: File;
+        };
+        try { opt._file = f; } catch {}
+        try { opt.__file = f; } catch {}
+        try { mappedEntries.push({ id: f.name, title: f.name, handle: f as any }); } catch {}
+        if (shouldTraceMappedFolder()) {
+          try {
+            debugLog('[MAPPED-FOLDER] option created', {
+              id: f.name,
+              label: f.name,
+              hasHandle: false,
+              hasFile: true,
+            });
+          } catch {}
+        }
+        sel.append(opt);
+      }
       if (shouldTraceMappedFolder()) {
         debugLog('[MAPPED-FOLDER] syncing mapped entries (fallback)', { count: mappedEntries.length });
       }
