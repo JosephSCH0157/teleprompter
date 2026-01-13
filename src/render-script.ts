@@ -134,10 +134,31 @@ export function renderScript(text: string, container?: HTMLElement | null): void
           try {
             const viewerEl = document.getElementById('viewer') as HTMLElement | null;
             const hostEl = viewerEl || root;
+            const mode =
+              (window as any).__tpCurrentScrollMode ||
+              (window as any).__tpScrollMode ||
+              'unknown';
+            const viewerInfo = viewerEl
+              ? `${viewerEl.id || 'no-id'} ${viewerEl.className || 'no-class'}`
+              : 'no-viewer';
+            const hybridMotorInit = !!auto;
+            const listenersWired = !!(window as any).__tpHybridListenersReady;
+            try {
+              console.warn('[SCROLL_ROUTER] install debug', {
+                mode,
+                viewer: viewerInfo.trim(),
+                hybridMotorInit,
+                listenersWired,
+              });
+            } catch {}
             installScrollRouter({ auto, viewer: !!viewerEl, hostEl });
             try { console.info('RETURNED FROM installScrollRouter'); } catch {}
-          } catch (err) {
-            try { console.warn('INSTALL FAILED', err); } catch {}
+          } catch (error) {
+            try {
+              const errObj = error instanceof Error ? error : new Error(String(error));
+              console.error('INSTALL FAILED', errObj);
+              console.error(errObj.stack);
+            } catch {}
           }
           try { (window as any).__tpAuto = auto; } catch {}
           viewerScrollRouterInstalled = true;

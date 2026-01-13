@@ -738,6 +738,8 @@ let liveGraceWindowEndsAt: number | null = null;
 let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
+let offScriptStreak = 0;
+let onScriptStreak = 0;
 var isHybridBypass = () => {
   try {
     return localStorage.getItem("tp_hybrid_bypass") === "1";
@@ -1538,6 +1540,7 @@ function installScrollRouter(opts) {
     window.addEventListener("tp:hybrid:brake", handleHybridBrakeEvent);
     window.addEventListener("tp:hybrid:assist", handleHybridAssistEvent);
     window.addEventListener("tp:hybrid:targetHint", handleHybridTargetHintEvent);
+    try { (window as any).__tpHybridListenersReady = true; } catch {}
   } catch {}
   function setHybridScale(nextScale: number) {
     if (nextScale === RECOVERY_SCALE) {
