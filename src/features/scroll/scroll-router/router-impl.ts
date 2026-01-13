@@ -2268,7 +2268,11 @@ function installScrollRouter(opts) {
       liveSessionWpmLocked = false;
     }
   }
-  function applyWpmBaselinePx(pxs: number, source: string) {
+   type WpmIntentSource = 'sidebar' | 'restore' | 'script-load' | 'hotkey';
+   const WPM_INTENT_EVENT = 'tp:wpm:intent';
+   let lastWpmIntent: { wpm: number; source: WpmIntentSource } | null = null;
+
+   function applyWpmBaselinePx(pxs: number, source: string) {
   if (!Number.isFinite(pxs) || pxs <= 0) return;
   sliderTouchedThisSession = true;
   recordUserWpmPx(pxs);
@@ -2282,97 +2286,121 @@ function installScrollRouter(opts) {
     }
   }
 
-  try {
-    document.addEventListener("change", (e) => {
-      const t = e.target;
-      // Handle WPM target changes
-        if (t?.id === "wpmTarget") {
-          try {
-          const val = Number(t.value);
-        if (isFinite(val) && val > 0) {
-            localStorage.setItem('tp_baseline_wpm', String(val));
-            const pxs = convertWpmToPxPerSec(val);
-            markSliderInteraction();
-            applyWpmBaselinePx(pxs, 'slider-change');
-            if (state2.mode === 'wpm') {
-              try {
-                if (orchRunning) {
-                  const status = orch.getStatus();
-                  const detectedWpm = status.wpm;
-                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                    const sensitivity = val / detectedWpm;
-                    orch.setSensitivity(sensitivity);
-                  } else {
-                    orch.setSensitivity(1.0);
-                  }
-                }
-              } catch {
-              }
-            }
-            }
-          } catch {
+  function emitWpmIntent(wpm: number, source: WpmIntentSource, pxPerSec: number) {
+    if (!Number.isFinite(wpm) || wpm <= 0) return;
+    if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
+    if (typeof window === "undefined") return;
+    if (lastWpmIntent && lastWpmIntent.wpm === wpm && lastWpmIntent.source === source) return;
+    lastWpmIntent = { wpm, source };
+    const detail = { wpm, source };
+    try {
+      window.dispatchEvent(new CustomEvent(WPM_INTENT_EVENT, { detail }));
+    } catch {}
+    try {
+      window.dispatchEvent(new CustomEvent('tp:wpm:change', {
+        detail: { wpm, source, pxPerSec },
+      }));
+    } catch {}
+  }
+
+  function handleSidebarWpmChange(val: number, label: 'slider-change' | 'slider-input') {
+    if (!Number.isFinite(val) || val <= 0) return;
+    try {
+      localStorage.setItem('tp_baseline_wpm', String(val));
+    } catch {}
+    const pxs = convertWpmToPxPerSec(val);
+    if (!Number.isFinite(pxs) || pxs <= 0) return;
+    markSliderInteraction();
+    emitWpmIntent(val, 'sidebar', pxs);
+    applyWpmBaselinePx(pxs, label);
+    if (state2.mode === 'wpm') {
+      try {
+        if (orchRunning) {
+          const status = orch.getStatus();
+          const detectedWpm = status.wpm;
+          if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
+            const sensitivity = val / detectedWpm;
+            orch.setSensitivity(sensitivity);
+          } else {
+            orch.setSensitivity(1.0);
           }
         }
-    }, { capture: true });
-    
-  // (Removed v1.7.1: dev-only polling shim for legacy select pokes — SSOT stable)
+      } catch {
+      }
+    }
+  }
 
-  // Also handle input event for real-time WPM target updates
+  function resolveWpmDetail(detail: Record<string, unknown>) {
+    const pxRaw = Number(detail.pxPerSec);
+    if (Number.isFinite(pxRaw) && pxRaw > 0) {
+      const source =
+        typeof detail.source === "string" && detail.source.length > 0
+          ? detail.source
+          : "tp:wpm:change";
+      return { pxPerSec: pxRaw, source };
+    }
+    const wpm = Number(detail.wpm);
+    if (Number.isFinite(wpm) && wpm > 0) {
+      const pxFromWpm = convertWpmToPxPerSec(wpm);
+      if (Number.isFinite(pxFromWpm) && pxFromWpm > 0) {
+        const source =
+          typeof detail.source === "string" && detail.source.length > 0
+            ? detail.source
+            : "tp:wpm:intent";
+        return { pxPerSec: pxFromWpm, source };
+      }
+    }
+    return null;
+  }
+
+  try {
+    const handleWpmEvent = (detail: Record<string, unknown>) => {
+      const resolved = resolveWpmDetail(detail);
+      if (!resolved) return;
+      const { pxPerSec, source } = resolved;
+      const sourceIsSlider = isSliderWpmSource(source);
+      if (liveSessionWpmLocked && !sourceIsSlider) {
+        return;
+      }
+      if (hybridMotor.isRunning() && !sourceIsSlider && wpmSliderUserTouched) {
+        return;
+      }
+      const now = nowMs();
+      const withinUserEvent = lastUserWpmPx > 0 && now - lastUserWpmAt <= WPM_USER_DEDUPE_MS;
+      if (withinUserEvent && Math.abs(lastUserWpmPx - pxPerSec) < 0.5) {
+        return;
+      }
+      applyWpmBaselinePx(pxPerSec, source);
+    };
+
+    document.addEventListener("change", (e) => {
+      const t = e.target;
+      if (t?.id === "wpmTarget") {
+        try {
+          handleSidebarWpmChange(Number(t.value), 'slider-change');
+        } catch {}
+      }
+    }, { capture: true });
+
     document.addEventListener("input", (e) => {
       const t = e.target;
       if (t?.id === "wpmTarget") {
         try {
-          const val = Number(t.value);
-        if (isFinite(val) && val > 0) {
-            localStorage.setItem('tp_baseline_wpm', String(val));
-            const pxs = convertWpmToPxPerSec(val);
-            markSliderInteraction();
-            applyWpmBaselinePx(pxs, 'slider-input');
-            if (state2.mode === 'wpm') {
-              try {
-                if (orchRunning) {
-                  const status = orch.getStatus();
-                  const detectedWpm = status.wpm;
-                  if (detectedWpm && isFinite(detectedWpm) && detectedWpm > 0) {
-                    const sensitivity = val / detectedWpm;
-                    orch.setSensitivity(sensitivity);
-                  } else {
-                    orch.setSensitivity(1.0);
-                  }
-                }
-              } catch {
-              }
-            }
-          }
-        } catch {
-        }
+          handleSidebarWpmChange(Number(t.value), 'slider-input');
+        } catch {}
       }
     }, { capture: true });
-  } catch {
-  }
-  try {
+
     window.addEventListener("tp:wpm:change", (ev) => {
       try {
-        const detail = (ev as CustomEvent).detail || {};
-        const pxs = Number(detail.pxPerSec);
-        if (!Number.isFinite(pxs)) return;
-        const source =
-          typeof detail.source === "string" && detail.source.length > 0 ? detail.source : "tp:wpm:change";
-        const sourceIsSlider = isSliderWpmSource(source);
-        if (liveSessionWpmLocked && !sourceIsSlider) {
-          return;
-        }
-        if (hybridMotor.isRunning() && !sourceIsSlider && wpmSliderUserTouched) {
-          return;
-        }
-        const now = nowMs();
-        const withinUserEvent = lastUserWpmPx > 0 && now - lastUserWpmAt <= WPM_USER_DEDUPE_MS;
-        if (withinUserEvent && Math.abs(lastUserWpmPx - pxs) < 0.5) {
-          return;
-        }
-        applyWpmBaselinePx(pxs, source);
-      } catch {
-      }
+        handleWpmEvent((ev as CustomEvent).detail || {});
+      } catch {}
+    });
+
+    window.addEventListener("tp:wpm:intent", (ev) => {
+      try {
+        handleWpmEvent((ev as CustomEvent).detail || {});
+      } catch {}
     });
   } catch {
   }
