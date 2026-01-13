@@ -9,6 +9,7 @@ import {
   consumeLastScriptId,
   loadScriptById,
   persistLastScriptId,
+  restoreStillPossible,
 } from '../features/script-selection';
 import { setCurrentScriptHandle } from '../fs/script-doc';
 import { scriptBaseName } from '../fs/script-naming';
@@ -217,6 +218,7 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
       }
       let loaded = false;
       if (scriptId) {
+        persistLastScriptId(scriptId);
         loaded = await loadScriptById(scriptId);
         if (loaded) {
           syncSidebarSelection(scriptId);
@@ -394,14 +396,15 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           restoredLastScript = true;
           hudLog('script:last:preselect', { id: restoreId });
           void loadScriptById(restoreId);
-        } else {
+          maybeAutoLoad(sel);
+        } else if (!restoreStillPossible()) {
           const last = getLastScriptName();
           if (last) {
             setSelectedByName(sel, last);
             hudLog('script:last:preselect', { name: last });
           }
+          maybeAutoLoad(sel);
         }
-        maybeAutoLoad(sel);
       } catch {}
       const cnt = sel.options.length;
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
@@ -497,14 +500,15 @@ function populateSelect(entries: { name: string; handle: FileSystemFileHandle }[
           restoredLastScript = true;
           hudLog('script:last:preselect', { id: restoreId });
           void loadScriptById(restoreId);
-        } else {
+          maybeAutoLoad(sel);
+        } else if (!restoreStillPossible()) {
           const last = getLastScriptName();
           if (last) {
             setSelectedByName(sel, last);
             hudLog('script:last:preselect', { name: last });
           }
+          maybeAutoLoad(sel);
         }
-        maybeAutoLoad(sel);
       } catch {}
       const cnt = sel.options.length;
       try { window.dispatchEvent(new CustomEvent('tp:folderScripts:populated', { detail: { count: cnt } })); } catch {}
