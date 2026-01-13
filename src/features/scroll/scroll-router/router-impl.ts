@@ -994,12 +994,19 @@ function installScrollRouter(opts) {
   }
   refreshHybridWriter();
   function setProcessorAndFlush() {
-    autoIntentProcessor = handleAutoIntent;
+    autoIntentProcessor = (detail) => {
+      try {
+        processAutoIntent(detail);
+      } catch (err) {
+        console.error('[AUTO_INTENT] PROCESS crash', err);
+        throw err;
+      }
+    };
     console.warn('[AUTO_INTENT] processor assigned', { hasPending: !!pendingAutoIntentDetail });
     if (pendingAutoIntentDetail) {
       console.warn('[AUTO_INTENT] flushing pending', pendingAutoIntentDetail);
       try {
-        handleAutoIntent(pendingAutoIntentDetail);
+        autoIntentProcessor(pendingAutoIntentDetail);
       } catch {
         // ignore
       }
@@ -1138,6 +1145,22 @@ function installScrollRouter(opts) {
   } catch {
     // ignore
   }
+  type AutoIntentDecision = 'motor-start-request' | 'motor-stop-request';
+  interface AutoIntentPayload {
+    enabled: boolean;
+    decision: AutoIntentDecision;
+    pxs: number;
+    reason?: string;
+  }
+  function resolveAutoIntentEnabled(detail: any): boolean | undefined {
+    if (typeof detail.enabled === 'boolean') return detail.enabled;
+    if (typeof detail.on === 'boolean') return detail.on;
+    return undefined;
+  }
+  function resolveAutoIntentReason(detail: any): string | undefined {
+    return typeof detail.reason === 'string' ? detail.reason : undefined;
+  }
+
   function setAutoIntentState(on: boolean, _reason?: string) {
     userIntentOn = on;
     userEnabled = on;
@@ -1154,25 +1177,20 @@ function installScrollRouter(opts) {
     persistStoredAutoEnabled(on);
     try { applyGate(); } catch {}
   }
-  function handleAutoIntent(detail: any) {
+  function handleAutoIntent(detail: any): AutoIntentPayload | null {
     try {
-      const enabled =
-        typeof detail.enabled === 'boolean'
-          ? detail.enabled
-          : typeof detail.on === 'boolean'
-            ? detail.on
-            : undefined;
-      if (typeof enabled !== 'boolean') return;
-      const reasonRaw = typeof detail.reason === 'string' ? detail.reason : undefined;
+      const enabled = resolveAutoIntentEnabled(detail);
+      if (typeof enabled !== 'boolean') return null;
+      const reasonRaw = resolveAutoIntentReason(detail);
       if (shouldIgnoreHybridStop(reasonRaw, enabled)) {
         try {
           console.info('[AUTO_INTENT] hybrid stop ignored (live, non-fatal reason)', { reason: reasonRaw });
         } catch {}
-        return;
+        return null;
       }
       setAutoIntentState(enabled, reasonRaw);
       const brain = String(appStore.get('scrollBrain') || 'auto');
-      const decision = enabled ? 'motor-start-request' : 'motor-stop-request';
+      const decision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
       const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
       const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       try {
@@ -1189,45 +1207,63 @@ function installScrollRouter(opts) {
         );
       } catch {}
       const pxs = Number(pxPerSec) || 0;
-      if (decision === 'motor-start-request') {
-        try { auto.setSpeed?.(pxs); } catch {}
-        try {
-          if (!auto.isRunning?.()) {
-            auto.start?.();
-          }
-        } catch {}
-        try { auto.setEnabled?.(true); } catch {}
-        enabledNow = true;
-        try { emitMotorState('auto', true); } catch {}
-        try { emitAutoState(); } catch {}
-        if (state2.mode === 'hybrid') {
-          try { startHybridMotorFromSpeedChange(); } catch {}
-        }
-      } else {
-        try { auto.setEnabled?.(false); } catch {}
-        enabledNow = false;
-        try { emitMotorState('auto', false); } catch {}
-        try { emitAutoState(); } catch {}
-        if (state2.mode === 'hybrid') {
-          try {
-            if (hybridMotor.isRunning()) {
-              hybridMotor.stop();
-              emitMotorState('hybridWpm', false);
-            }
-          } catch {}
-        }
-      }
+      enabledNow = decision === 'motor-start-request';
+      try { emitMotorState('auto', enabledNow); } catch {}
+      try { emitAutoState(); } catch {}
+      return { enabled, decision, pxs, reason: reasonRaw };
     } catch {}
+    return null;
   }
-  autoIntentProcessor = (detail) => {
-    console.warn('[AUTO_INTENT] PROCESS enter', {
-      detail,
-      mode: state2.mode,
-      pxPerSec: typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined,
-      sessionPhase,
-    });
+
+  function processAutoIntent(detail: any) {
+    const payload = handleAutoIntent(detail);
+    if (!payload) return;
+    const { enabled, decision, pxs, reason } = payload;
+    const mode = state2.mode;
+    const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
+    const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
     try {
-      handleAutoIntent(detail);
+      console.warn('[AUTO_INTENT] processor RUN', { enabled, mode, pxps, chosenMotor });
+    } catch {}
+    if (mode === 'hybrid') {
+      if (enabled) {
+        try {
+          seedHybridBaseSpeed();
+          startHybridMotorFromSpeedChange();
+          console.warn('[HYBRID_MOTOR] start/enable ok', {
+            reason: reason ?? 'auto-intent',
+            phase: sessionPhase,
+            baselinePxps: hybridBasePxps,
+          });
+        } catch {}
+      } else {
+        try {
+          if (hybridMotor.isRunning()) {
+            hybridMotor.stop();
+            emitMotorState('hybridWpm', false);
+          }
+          emitHybridSafety();
+        } catch {}
+      }
+      return;
+    }
+    if (decision === 'motor-start-request') {
+      try { auto.setSpeed?.(pxs); } catch {}
+      try {
+        if (!auto.isRunning?.()) {
+          auto.start?.();
+        }
+      } catch {}
+      try { auto.setEnabled?.(true); } catch {}
+    } else {
+      try { auto.setEnabled?.(false); } catch {}
+      try { auto.stop?.(); } catch {}
+    }
+  }
+
+  autoIntentProcessor = (detail) => {
+    try {
+      processAutoIntent(detail);
     } catch (err) {
       console.error('[AUTO_INTENT] PROCESS crash', err);
       throw err;
@@ -1237,7 +1273,7 @@ function installScrollRouter(opts) {
   if (pendingAutoIntentDetail) {
     console.warn('[AUTO_INTENT] flushing pending', pendingAutoIntentDetail);
     try {
-      handleAutoIntent(pendingAutoIntentDetail);
+      autoIntentProcessor(pendingAutoIntentDetail);
     } catch {
       // ignore
     }

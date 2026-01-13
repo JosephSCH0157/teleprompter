@@ -32,6 +32,14 @@ const lastPhaseInit = (() => {
 })();
 let lastSessionPhase: SessionPhase = lastPhaseInit;
 
+type StopAutoScrollContext = {
+  reason: string;
+  phase: SessionPhase;
+  mode: string;
+  userEnabled: boolean;
+  shouldRun: boolean;
+};
+
 function dispatchAutoIntent(enabled: boolean): void {
   try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {
@@ -49,30 +57,40 @@ function startAutoScroll(): void {
   dispatchAutoIntent(true);
 }
 
-function stopAutoScroll(): void {
+function stopAutoScroll(ctx: StopAutoScrollContext): void {
   try {
-    console.debug('[scroll-session] dispatching tp:auto:intent (stop)');
+    console.info('[scroll-session] STOP requested', ctx);
   } catch {}
   dispatchAutoIntent(false);
+}
+
+function shouldStopAutoForPhase(phase: SessionPhase): boolean {
+  return phase !== 'preroll';
 }
 
 function maybeStartOnLive(phase: SessionPhase): void {
   const prevPhase = lastSessionPhase;
   lastSessionPhase = phase;
+  const session = getSession();
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const canonicalMode = normalizeScrollMode(rawMode);
+  const canonicalModeStr = String(canonicalMode);
+  const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(rawMode);
   if (phase !== 'live') {
-    if (prevPhase === 'live') {
-      try { console.debug('[scroll-session] stopping auto-scroll for phase', phase); } catch {}
-      stopAutoScroll();
+    if (prevPhase === 'live' && shouldStopAutoForPhase(phase)) {
+      stopAutoScroll({
+        reason: 'phase-change',
+        phase,
+        mode: canonicalMode,
+        userEnabled: session.scrollAutoOnLive,
+        shouldRun,
+      });
       stopSpeechBackendForSession('phase-change');
       asrOffLogged = false;
     }
     return;
   }
 
-  const session = getSession();
-  const rawMode = appStore.get('scrollMode') as string | undefined;
-  const canonicalMode = normalizeScrollMode(rawMode);
-  const canonicalModeStr = String(canonicalMode);
   try {
     console.debug('[ASR] live entered', {
       mode: canonicalMode,
@@ -119,7 +137,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     try { console.debug('[scroll-session] auto-scroll disabled for live phase'); } catch {}
     return;
   }
-  if (!shouldAutoStartForMode(rawMode)) {
+  if (!shouldRun) {
     try { console.debug('[scroll-session] auto-scroll not allowed for mode', canonicalMode); } catch {}
     return;
   }
