@@ -1879,6 +1879,15 @@ function installScrollRouter(opts) {
     }
     return hybridBrakeState.factor;
   }
+  function setHybridBrake(factor: number, ttlMs: number, reason: string | null = null) {
+    const now = nowMs();
+    const expiresAt = ttlMs > 0 ? now + ttlMs : now;
+    hybridBrakeState = {
+      factor,
+      expiresAt,
+      reason,
+    };
+  }
 
   function getActiveAssistBoost(now = nowMs()) {
     if (hybridAssistState.expiresAt <= now) {
@@ -1930,16 +1939,65 @@ function installScrollRouter(opts) {
 
   function handleHybridBrakeEvent(ev: Event) {
     if (state2.mode !== "hybrid") return;
+    const now = nowMs();
     const detail = (ev as CustomEvent)?.detail || {};
     const factorRaw = Number(detail.factor);
     const safeFactor = Number.isFinite(factorRaw) ? clamp(factorRaw, 0, 1) : 1;
     const ttlRaw = Number.isFinite(Number(detail.ttlMs)) ? Number(detail.ttlMs) : HYBRID_BRAKE_DEFAULT_TTL;
     const ttl = Math.max(HYBRID_EVENT_TTL_MIN, Math.min(HYBRID_EVENT_TTL_MAX, ttlRaw));
-    hybridBrakeState = {
-      factor: safeFactor,
-      expiresAt: nowMs() + ttl,
-      reason: typeof detail.reason === "string" ? detail.reason : null,
-    };
+    const reason = typeof detail.reason === "string" ? detail.reason : null;
+
+    const prev = hybridBrakeState;
+    const prevActive = prev.expiresAt > now;
+    const prevFactor = prev.factor;
+    const prevReason = prev.reason;
+    const remaining = prev.expiresAt - now;
+    const FACTOR_EPS = 0.01;
+    const REFRESH_WINDOW_MS = 120;
+    const sameFactor = Math.abs(prevFactor - safeFactor) <= FACTOR_EPS;
+    const sameReason = prevReason === reason;
+
+    if (prevActive && sameFactor && sameReason && remaining > REFRESH_WINDOW_MS) {
+      if (isDevMode()) {
+        try {
+          console.info(
+            `[HYBRID_BRAKE] ignore refresh ${JSON.stringify({
+              now,
+              safeFactor,
+              ttl,
+              reason,
+              remaining,
+            })}`,
+          );
+        } catch {}
+      }
+      return;
+    }
+
+    if (safeFactor >= 0.999) {
+      setHybridBrake(1, 0, null);
+    } else {
+      setHybridBrake(safeFactor, ttl, reason);
+    }
+
+    if (isDevMode()) {
+      try {
+        console.warn(
+          `[HYBRID_BRAKE_SET] ${JSON.stringify({
+            now,
+            factor: hybridBrakeState.factor,
+            ttl,
+            expiresAt: hybridBrakeState.expiresAt,
+            reason,
+            prevActive,
+            prevFactor,
+            prevReason,
+            remaining,
+          })}`,
+        );
+      } catch {}
+    }
+
     scheduleHybridVelocityRefresh();
     applyHybridVelocity(hybridSilence);
   }
@@ -2025,7 +2083,22 @@ function installScrollRouter(opts) {
       chosenScale: effectiveScale,
       reason,
     });
-    const brakeFactor = getActiveBrakeFactor(now);
+    const brakeRaw = getActiveBrakeFactor(now);
+    const brakeFactor = graceActive ? 1 : brakeRaw;
+    if (isDevMode()) {
+      try {
+        console.info(
+          `[HYBRID_BRAKE] ${JSON.stringify({
+            now,
+            brakeRaw,
+            brakeFactor,
+            graceActive,
+            brakeExpiresAt: hybridBrakeState.expiresAt,
+            brakeReason: hybridBrakeState.reason,
+          })}`,
+        );
+      } catch {}
+    }
     const rawAssist = getActiveAssistBoost(now);
     const effective = base * effectiveScale * brakeFactor;
     const suppressAssist =
