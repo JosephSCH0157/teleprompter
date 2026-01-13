@@ -10,6 +10,7 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../../scroll/scroller';
+import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
 import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
 
 // ASR Training rule: matching should be permissive; committing should be conservative.
@@ -707,16 +708,98 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let pursuitVel = 0;
     let pursuitLastTs = 0;
     let pursuitActive = false;
+  function logAsrScrollAttempt(
+    stage: 'attempt' | 'denied' | 'applied',
+    payload: {
+      targetTop: number;
+      currentTop: number;
+      reason: string;
+      scroller?: HTMLElement | null;
+      source?: string;
+      applied?: boolean;
+    },
+  ) {
+    if (!shouldLogScrollWrite()) return;
+    try {
+      const topValue =
+        typeof payload.targetTop === 'number' && Number.isFinite(payload.targetTop)
+          ? Number(payload.targetTop.toFixed(1))
+          : payload.targetTop;
+      console.info('[ASR_SCROLL_WRITE]', {
+        stage,
+        reason: payload.reason,
+        source: payload.source || 'asr',
+        targetTop: topValue,
+        currentTop: Math.round(payload.currentTop || 0),
+        applied: payload.applied,
+        scroller: describeElement(payload.scroller ?? null),
+      });
+    } catch {}
+  }
+
+  function scheduleAsrWriteCheck(
+    scroller: HTMLElement,
+    before: number,
+    reason: string,
+    targetTop: number,
+    source: string,
+  ) {
+    if (!shouldLogScrollWrite()) return;
+    const logFn = () => {
+      try {
+        const after = scroller.scrollTop || before;
+        logAsrScrollAttempt('applied', {
+          targetTop,
+          currentTop: before,
+          reason,
+          source,
+          scroller,
+          applied: after !== before,
+        });
+      } catch {}
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(logFn);
+    } else {
+      setTimeout(logFn, 0);
+    }
+  }
+
   function applyScrollWithHybridGuard(
     targetTop: number,
-    opts: { scroller?: HTMLElement | null; reason?: string },
+    opts: { scroller?: HTMLElement | null; reason?: string; source?: string },
   ): number {
     const scroller = opts.scroller ?? getScroller();
-    const payload = { ...opts, scroller };
-    if (isHybridMode()) {
-      return scroller?.scrollTop ?? lastKnownScrollTop;
+    const reason = opts.reason ?? 'asr';
+    const source = opts.source ?? 'asr';
+    const currentTop = scroller?.scrollTop ?? lastKnownScrollTop;
+    logAsrScrollAttempt('attempt', { targetTop, currentTop, reason, scroller, source });
+    if (!scroller) {
+      logAsrScrollAttempt('denied', {
+        targetTop,
+        currentTop,
+        reason: `${reason}:no-scroller`,
+        scroller,
+        source,
+        applied: false,
+      });
+      return currentTop;
     }
-    return applyCanonicalScrollTop(targetTop, payload);
+    if (isHybridMode()) {
+      logAsrScrollAttempt('denied', {
+        targetTop,
+        currentTop,
+        reason: `${reason}:hybrid`,
+        scroller,
+        source,
+        applied: false,
+      });
+      return currentTop;
+    }
+    const payload = { ...opts, scroller };
+    const appliedTop = applyCanonicalScrollTop(targetTop, { ...payload, source });
+    scheduleAsrWriteCheck(scroller, currentTop, reason, targetTop, source);
+    return appliedTop;
   }
   let lastEvidenceAt = 0;
   let lastBackRecoverAt = 0;

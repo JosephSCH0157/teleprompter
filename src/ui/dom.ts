@@ -1064,7 +1064,11 @@ export function bindStaticDom() {
           return getLineElementByIndex(root as ParentNode, index);
         },
         scrollToTop: (top: number) => {
-          applyCanonicalScrollTop(top, { scroller: resolveCatchUpScroller(), reason: 'catchup' });
+          applyCanonicalScrollTop(top, {
+            scroller: resolveCatchUpScroller(),
+            reason: 'catchup',
+            source: 'dom-catchup',
+          });
         },
         onCatchUp: ({ index, line, targetTop, prevTop }) => {
           const mode = getScrollMode();
@@ -1081,7 +1085,11 @@ export function bindStaticDom() {
                 try {
                   console.warn('[CATCHUP_ABORTED_BACKJUMP]', { prevIndex, nextIndex });
                 } catch {}
-                applyCanonicalScrollTop(prevTop, { scroller: resolveCatchUpScroller(), reason: 'catchup-abort-backjump' });
+                applyCanonicalScrollTop(prevTop, {
+                  scroller: resolveCatchUpScroller(),
+                  reason: 'catchup-abort-backjump',
+                  source: 'dom-catchup',
+                });
                 try { (window as any).currentIndex = prevIndex; } catch {}
               }
             };

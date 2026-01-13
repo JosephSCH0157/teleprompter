@@ -29,7 +29,7 @@ type ScrollWriteLogPayload = {
   reason: string;
 };
 
-function shouldLogScrollWrite(): boolean {
+export function shouldLogScrollWrite(): boolean {
   try {
     const w = window as any;
     if (w.__tpScrollDebug === true) return true;

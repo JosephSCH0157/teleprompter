@@ -1,6 +1,7 @@
-import { computeAnchorLineIndex } from './scroll-helpers';
+import { computeAnchorLineIndex, shouldLogScrollWrite } from './scroll-helpers';
 
 let displayScrollChannel: BroadcastChannel | null = null;
+let scrollEventTrackerInstalled = false;
 
 export function getScrollContainer(): HTMLElement | null {
   try {
@@ -104,7 +105,7 @@ function isDevScrollSync(): boolean {
 
 export function applyCanonicalScrollTop(
   topPx: number,
-  opts: { scroller?: HTMLElement | null; reason?: string } = {},
+  opts: { scroller?: HTMLElement | null; reason?: string; source?: string } = {},
 ): number {
   const scroller =
     opts.scroller ||
@@ -112,10 +113,28 @@ export function applyCanonicalScrollTop(
   if (!scroller) return 0;
   const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
   const target = Math.max(0, Math.min(Number(topPx) || 0, max));
+  const before = scroller.scrollTop || 0;
   try {
     scroller.scrollTop = target;
   } catch {
     // ignore
+  }
+  const after = scroller.scrollTop || target;
+  const writerSource = opts.source ?? opts.reason ?? 'programmatic';
+  try {
+    scroller.dataset.tpLastWriter = writerSource;
+  } catch {}
+  if (shouldLogScrollWrite()) {
+    try {
+      console.info('[SCROLL_WRITE_DETAIL]', {
+        source: writerSource,
+        reason: opts.reason,
+        target: Math.round(target),
+        before: Math.round(before),
+        after: Math.round(after),
+        scroller: describeElement(scroller),
+      });
+    } catch {}
   }
   try {
     let actualTop = target;
@@ -176,17 +195,39 @@ if (typeof window !== 'undefined') {
     if (!isDisplayWindow()) {
       w.__tpScrollWrite = {
         scrollTo(top: number) {
-          applyCanonicalScrollTop(top, { reason: 'writer:scrollTo' });
+          applyCanonicalScrollTop(top, { reason: 'writer:scrollTo', source: 'scroll-writer' });
         },
         scrollBy(delta: number) {
           const sc =
             resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
           const cur = sc ? (sc.scrollTop || 0) : 0;
-          applyCanonicalScrollTop(cur + (Number(delta) || 0), { reason: 'writer:scrollBy' });
+          applyCanonicalScrollTop(cur + (Number(delta) || 0), { reason: 'writer:scrollBy', source: 'scroll-writer' });
         },
       };
     }
   } catch {
     // ignore
   }
+}
+
+if (typeof window !== 'undefined') {
+  try {
+    if (!scrollEventTrackerInstalled) {
+      const handler = (event: Event) => {
+        if (!shouldLogScrollWrite()) return;
+        const target = event.target as HTMLElement | null;
+        if (!target) return;
+        try {
+          console.info('[SCROLL_EVENT]', {
+            scrollTop: Math.round(target.scrollTop || 0),
+            tpLastWriter: target.dataset.tpLastWriter ?? null,
+            isTrusted: event.isTrusted,
+            scroller: describeElement(target),
+          });
+        } catch {}
+      };
+      window.addEventListener('scroll', handler, { capture: true, passive: true });
+      scrollEventTrackerInstalled = true;
+    }
+  } catch {}
 }
