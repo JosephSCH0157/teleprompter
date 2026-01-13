@@ -1801,6 +1801,11 @@ function installScrollRouter(opts) {
     return HYBRID_BASELINE_FLOOR_PXPS;
   }
 
+  let hybridSilence2 = 0;
+  function setHybridSilence2(v: number) {
+    hybridSilence2 = Number.isFinite(v) ? v : 0;
+  }
+
   function logHybridBaselineState(source: string) {
     if (!isDevMode()) return;
     try {
