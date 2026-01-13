@@ -107,7 +107,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
 let lastEmittedWpm = Number.NaN;
 let lastEmittedPxPerSec = Number.NaN;
 
-function emitWpmChange(wpm: number, pxPerSec: number): void {
+function emitWpmChange(wpm: number, pxPerSec: number, source: string): void {
   const nextWpm = Number.isFinite(wpm) ? wpm : Number.NaN;
   const nextPx = Number.isFinite(pxPerSec) ? pxPerSec : Number.NaN;
   if (nextWpm === lastEmittedWpm && nextPx === lastEmittedPxPerSec) return;
