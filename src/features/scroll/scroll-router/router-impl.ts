@@ -755,6 +755,14 @@ let lastOffScriptEvidenceTs = 0;
 let offScriptStreak = 0;
 let onScriptStreak = 0;
 let hybridGraceUntil = 0;
+const WPM_USER_DEDUPE_MS = 600;
+let lastUserWpmPx = 0;
+let lastUserWpmAt = 0;
+
+function recordUserWpmPx(pxs: number) {
+  lastUserWpmPx = pxs > 0 ? pxs : 0;
+  lastUserWpmAt = nowMs();
+}
 
 function startHybridGrace(reason: string) {
   hybridGraceUntil = nowMs() + HYBRID_GRACE_DURATION_MS;
@@ -2198,12 +2206,15 @@ function installScrollRouter(opts) {
       });
     }
   } catch {}
-  function applyWpmBaselinePx(pxs: number, source: string) {
-    if (!Number.isFinite(pxs) || pxs <= 0) return;
-    sliderTouchedThisSession = true;
-    setHybridBasePxps(pxs);
-    startHybridMotorFromSpeedChange();
-    logHybridBaselineState(source);
+function applyWpmBaselinePx(pxs: number, source: string) {
+  if (!Number.isFinite(pxs) || pxs <= 0) return;
+  sliderTouchedThisSession = true;
+  recordUserWpmPx(pxs);
+  setHybridScale(RECOVERY_SCALE);
+  startHybridGrace(source);
+  setHybridBasePxps(pxs);
+  startHybridMotorFromSpeedChange();
+  logHybridBaselineState(source);
     if (state2.mode === "wpm") {
       try { auto.setSpeed?.(pxs); } catch {}
     }
@@ -2281,6 +2292,11 @@ function installScrollRouter(opts) {
         const detail = (ev as CustomEvent).detail || {};
         const pxs = Number(detail.pxPerSec);
         if (!Number.isFinite(pxs)) return;
+        const now = nowMs();
+        const withinUserEvent = lastUserWpmPx > 0 && now - lastUserWpmAt <= WPM_USER_DEDUPE_MS;
+        if (withinUserEvent && Math.abs(lastUserWpmPx - pxs) < 0.5) {
+          return;
+        }
         applyWpmBaselinePx(pxs, 'tp:wpm:change');
       } catch {
       }
