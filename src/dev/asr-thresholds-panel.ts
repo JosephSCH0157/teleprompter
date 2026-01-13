@@ -20,6 +20,7 @@ import {
   subscribeSpeakerProfileState,
   setProfileAsrTweaks,
 } from '../ui/speaker-profiles-store';
+import { getDevDrawerContentHost, initDevDrawer } from './dev-drawer';
 
 type ThresholdControl = {
   key: keyof AsrThresholds;
@@ -67,6 +68,7 @@ function isDevMode(): boolean {
 if (!isDevMode() || typeof document === 'undefined') {
   // nothing to do in production
 } else {
+  initDevDrawer();
   const panel = document.createElement('div');
   panel.id = 'asr-thresholds-panel';
   panel.style.cssText = [
@@ -357,7 +359,8 @@ if (!isDevMode() || typeof document === 'undefined') {
     handleOverrideStateUpdate();
   });
 
-  document.body.appendChild(panel);
+  const host = getDevDrawerContentHost();
+  (host ?? document.body).appendChild(panel);
 
   const onWindowThreshold = () => {
     syncControls();
