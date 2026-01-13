@@ -675,21 +675,6 @@ async function refreshScriptsSidebar(): Promise<void> {
     }));
     ScriptStore.syncMapped(mappedEntries);
     const sel = document.getElementById('scriptSelectSidebar') as HTMLSelectElement | null;
-    const settingsSel = document.getElementById('scriptSelect') as HTMLSelectElement | null;
-    const fill = (target: HTMLSelectElement | null) => {
-      if (!target) return;
-      const opts = scripts.map((s) => {
-        const option = document.createElement('option');
-        option.value = s.name;
-        option.textContent = s.name;
-        return option;
-      });
-      target.innerHTML = '';
-      opts.forEach((option) => target.append(option));
-      try { target.disabled = false; } catch {}
-    };
-    fill(sel);
-    fill(settingsSel);
     if (sel) sel.setAttribute('aria-busy', 'false');
   } catch {}
 }

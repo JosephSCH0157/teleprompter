@@ -1200,11 +1200,22 @@ function installScrollRouter(opts) {
         enabledNow = true;
         try { emitMotorState('auto', true); } catch {}
         try { emitAutoState(); } catch {}
+        if (state2.mode === 'hybrid') {
+          try { startHybridMotorFromSpeedChange(); } catch {}
+        }
       } else {
         try { auto.setEnabled?.(false); } catch {}
         enabledNow = false;
         try { emitMotorState('auto', false); } catch {}
         try { emitAutoState(); } catch {}
+        if (state2.mode === 'hybrid') {
+          try {
+            if (hybridMotor.isRunning()) {
+              hybridMotor.stop();
+              emitMotorState('hybridWpm', false);
+            }
+          } catch {}
+        }
       }
     } catch {}
   }

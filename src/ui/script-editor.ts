@@ -21,50 +21,68 @@ function getSidebarSelect(): HTMLSelectElement | null {
 
 type MappedEntry = { id: string; title: string; handle?: FileSystemFileHandle };
 
-// Store -> sidebar sync (single source of truth)
-export function syncSidebarFromSettings(): void {
-  const select = getSidebarSelect();
-  if (!select) {
-    debugLog('[SCRIPT-EDITOR] syncSidebarFromSettings: no sidebar select found');
-    return;
-  }
+type SelectRole = 'sidebar' | 'settings';
+const SETTINGS_SELECT_ID = 'scriptSelect';
 
+function gatherScriptEntries(): MappedEntry[] {
   const entries = ScriptStore.getMappedEntries ? ScriptStore.getMappedEntries() as MappedEntry[] : [];
-  const count = entries.length;
+  return entries.map((entry) => ({ id: entry.id, title: entry.title || entry.id }));
+}
 
-  if (!count) {
-    select.innerHTML = '';
-    select.value = '';
-    debugLog('[SCRIPT-EDITOR] syncSidebarFromSettings (no entries)', {
-      settingsOptions: 0,
-      sidebarOptions: select.options.length,
-      value: select.value,
-    });
+function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole, entries: MappedEntry[]): void {
+  if (!select) {
+    debugLog('[SCRIPT-EDITOR] syncSelectFromStore: missing select', { role });
     return;
   }
-
-  const prev = select.value;
-  // Simple rebuild via HTML to avoid any weird DOM issues
-  const html = entries
-    .map((entry) => `<option value="${entry.id}">${entry.title || entry.id}</option>`)
-    .join('');
-  select.innerHTML = html;
-  if (!prev || !entries.some((e) => e.id === prev)) {
-    select.value = select.options.length ? select.options[0].value : '';
+  const previous = select.value;
+  select.innerHTML = '';
+  if (!entries.length) {
+    const placeholderText =
+      role === 'sidebar'
+        ? 'Map script folder...'
+        : 'No existing scripts yet - map folder and save new ones here';
+    const placeholder = new Option(placeholderText, role === 'sidebar' ? '__OPEN_SETTINGS__' : '', true, true);
+    if (role === 'sidebar') {
+      (placeholder as any).dataset.settingsLink = '1';
+      select.disabled = false;
+    } else {
+      select.disabled = true;
+    }
+    select.append(placeholder);
+    select.value = placeholder.value;
   } else {
-    select.value = prev;
+    select.disabled = false;
+    const fragment = document.createDocumentFragment();
+    for (const entry of entries) {
+      const option = document.createElement('option');
+      option.value = entry.id;
+      option.textContent = entry.title || entry.id;
+      fragment.appendChild(option);
+    }
+    select.append(fragment);
+    if (previous && entries.some((entry) => entry.id === previous)) {
+      select.value = previous;
+    } else {
+      select.value = entries[0].id;
+    }
   }
-  select.setAttribute('aria-busy', 'false');
-
-  debugLog('[SCRIPT-EDITOR] syncSidebarFromSettings (post-rebuild)', {
-    settingsOptions: count,
-    sidebarOptions: select.options.length,
+  try { select.setAttribute('aria-busy', 'false'); } catch {}
+  debugLog('[SCRIPT-EDITOR] syncSelectFromStore', {
+    role,
+    entries: entries.length,
     value: select.value,
   });
 }
 
+function syncScriptSelectsFromStore(): void {
+  const entries = gatherScriptEntries();
+  syncSelectFromStore(getSidebarSelect(), 'sidebar', entries);
+  const settingsSelect = document.getElementById(SETTINGS_SELECT_ID) as HTMLSelectElement | null;
+  syncSelectFromStore(settingsSelect, 'settings', entries);
+}
+
 function wireSidebarStoreSync(): void {
-  const run = () => syncSidebarFromSettings();
+  const run = () => syncScriptSelectsFromStore();
   try { window.addEventListener('tp:scripts-updated', run as any, { signal: sidebarAbort?.signal }); } catch {}
   run();
 }
@@ -75,7 +93,7 @@ function wireSidebarHandlers(): void {
   select.addEventListener('change', () => {
     debugLog('[SCRIPT-EDITOR] sidebar change', { value: select.value });
     if (!select.value) {
-      syncSidebarFromSettings();
+      syncScriptSelectsFromStore();
       return;
     }
   }, { signal: sidebarAbort?.signal });
