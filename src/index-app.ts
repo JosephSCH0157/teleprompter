@@ -58,6 +58,7 @@ import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
 import './index-hooks/preroll';
+import { initDevDrawer } from './dev/dev-drawer';
 import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
 import { ensureUserAndProfile, loadProfileSettings, saveProfileSettings, applySettingsPatch, type PersistedAppKey, type UserSettings } from './forge/authProfile';
@@ -1758,6 +1759,11 @@ export async function boot() {
 			(window as any).__tpTsBooted = 1;
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
+
+			const devFlag = !!((window as any).__TP_DEV || (window as any).__TP_DEV1);
+			if (devFlag) {
+				try { initDevDrawer(); } catch {}
+			}
 
 			// Session slice + preroll-driven orchestration
 			try { initSession(); } catch {}
