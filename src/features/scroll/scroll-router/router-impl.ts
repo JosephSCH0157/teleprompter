@@ -40,6 +40,31 @@ const isDevMode = (() => {
   };
 })();
 
+type ViewerRole = 'main' | 'display';
+const viewerRole: ViewerRole = (() => {
+  if (typeof window === 'undefined') return 'main';
+  const path = String(window.location?.pathname || '').toLowerCase();
+  const bodyRole = String(window.document?.body?.dataset?.viewerRole || '').toLowerCase();
+  if (path.includes('display') || bodyRole === 'display') return 'display';
+  return 'main';
+})();
+function isMainViewer() {
+  return viewerRole === 'main';
+}
+function ensureMainViewer(action: string) {
+  if (isMainViewer()) return true;
+  try {
+    console.warn('[ROLE_GUARD] blocked', { action, viewerRole });
+  } catch {}
+  return false;
+}
+try {
+  console.info('[VIEWER_ROLE]', {
+    viewerRole,
+    path: typeof window !== 'undefined' ? window.location?.pathname : '<unknown>',
+  });
+} catch {}
+
 ;(globalThis as any).__tp_router_stamp = ((globalThis as any).__tp_router_stamp ?? 0) + 1;
 try {
   console.warn('[ROUTER_STAMP]', (globalThis as any).__tp_router_stamp);
@@ -87,6 +112,47 @@ const nowMs = () =>
   (typeof performance !== 'undefined' && typeof performance.now === 'function')
     ? performance.now()
     : Date.now();
+
+let tpLastWriter: { from: string; at: number; y: number } | null = null;
+function scrollWrite(y: number, meta: { from: string; reason?: string }) {
+  if (!isMainViewer()) {
+    try {
+      console.warn('[SCROLL_WRITE] denied (display role)', { y, meta });
+    } catch {}
+    return false;
+  }
+  const target =
+    viewer ?? scrollerEl ?? (typeof document !== 'undefined' ? document.getElementById('viewer') : null);
+  const before = target?.scrollTop ?? null;
+  let ok = false;
+  try {
+    const writeFn = (window as any).__tpScrollWrite;
+    if (typeof writeFn === 'function') {
+      writeFn(y);
+      ok = true;
+    } else if (target) {
+      target.scrollTop = y;
+      ok = true;
+    }
+  } catch (err) {
+    try {
+      console.error('[SCROLL_WRITE] exception', { y, meta, err });
+    } catch {}
+  }
+  const after = target?.scrollTop ?? null;
+  tpLastWriter = { from: meta.from, at: nowMs(), y };
+  try {
+    console.info('[SCROLL_WRITE]', {
+      ok,
+      from: meta.from,
+      reason: meta.reason ?? null,
+      before,
+      y,
+      after,
+    });
+  } catch {}
+  return ok;
+}
 
   function beginHybridLiveGraceWindow() {
     if (state2.mode !== "hybrid") return;
@@ -710,6 +776,37 @@ function hasScrollableTarget() {
   }
 }
 const scrollWriter = getScrollWriter();
+try {
+  const origScrollTo = scrollWriter?.scrollTo?.bind(scrollWriter);
+  if (origScrollTo) {
+    scrollWriter.scrollTo = (y: number, opts?: { behavior?: string }) => {
+      scrollWrite(y, { from: 'scrollWriter.scrollTo', reason: 'hooked' });
+      return origScrollTo(y, opts);
+    };
+  }
+  const origScrollBy = scrollWriter?.scrollBy?.bind(scrollWriter);
+  if (origScrollBy) {
+    scrollWriter.scrollBy = (delta: number, opts?: { behavior?: string }) => {
+      const target = (() => {
+        try {
+          const el = viewer ?? scrollerEl ?? (typeof document !== 'undefined' ? document.getElementById('viewer') : null);
+          if (!el) return null;
+          return Math.max(0, el.scrollTop + delta);
+        } catch {
+          return null;
+        }
+      })();
+      if (typeof target === 'number') {
+        scrollWrite(target, { from: 'scrollWriter.scrollBy', reason: 'hooked' });
+      }
+      return origScrollBy(delta, opts);
+    };
+  }
+} catch (err) {
+  try {
+    console.warn('[SCROLL_WRITE] hook failed', err);
+  } catch {}
+}
 const hybridMotor = createHybridWpmMotor({
   getWriter: () => scrollWriter,
   getScrollTop: () => (viewer ? (viewer.scrollTop || 0) : 0),
@@ -761,7 +858,8 @@ let lastUserWpmAt = 0;
   const WPM_USER_SOURCES = new Set(["slider-change", "slider-input", "sidebar"]);
 let liveSessionWpmLocked = false;
 let wpmSliderUserTouched = false;
-let suppressWpmUiEvents = false;
+let suppressWpmUiEcho = false;
+let lastWpmIntent: { wpm: number; source?: string; at: number } | null = null;
 let userWpmLocked = false;
 
 
@@ -774,20 +872,30 @@ function markSliderInteraction() {
   wpmSliderUserTouched = true;
 }
 
+function noteWpmIntent(wpm: number, source?: string) {
+  lastWpmIntent = { wpm, source, at: nowMs() };
+  if (!userWpmLocked && source === 'sidebar') {
+    userWpmLocked = true;
+    try {
+      console.info('[WPM_INTENT] userWpmLocked=1 (first touch)', { wpm, source });
+    } catch {}
+  }
+}
+
 function scheduleWpmUiEventReset() {
   if (typeof queueMicrotask === "function") {
     queueMicrotask(() => {
-      suppressWpmUiEvents = false;
+      suppressWpmUiEcho = false;
     });
   } else {
     setTimeout(() => {
-      suppressWpmUiEvents = false;
+      suppressWpmUiEcho = false;
     }, 0);
   }
 }
 
 function setSliderValueSilently(el: HTMLInputElement, value: string) {
-  suppressWpmUiEvents = true;
+  suppressWpmUiEcho = true;
   el.value = value;
   scheduleWpmUiEventReset();
 }
@@ -1292,26 +1400,68 @@ function installScrollRouter(opts) {
     if (!payload) return;
     const { enabled, decision, pxs, reason } = payload;
     const mode = state2.mode;
-    const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
-    const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
-    try {
-      console.warn('[AUTO_INTENT] processor RUN', { enabled, mode, pxps, chosenMotor });
-    } catch {}
-    if (mode === 'hybrid') {
-      if (enabled) {
-        try {
-          seedHybridBaseSpeed();
-          startHybridMotorFromSpeedChange();
-          console.warn('[HYBRID_MOTOR] start/enable ok', {
-            reason: reason ?? 'auto-intent',
-            phase: sessionPhase,
-            baselinePxps: hybridBasePxps,
-          });
-        } catch {}
-      } else {
-        try {
-          if (hybridMotor.isRunning()) {
-            hybridMotor.stop();
+      const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
+      const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
+      try {
+        console.warn('[AUTO_INTENT] processor RUN', {
+          enabled,
+          mode,
+          pxps,
+          chosenMotor,
+          viewerRole,
+          lastWpm: lastWpmIntent?.wpm ?? null,
+        });
+      } catch {}
+      if (mode === 'hybrid') {
+        if (enabled) {
+          if (!ensureMainViewer('hybrid.start')) {
+            return;
+          }
+          if (!userEnabled) {
+            try {
+              console.info('[HYBRID_MOTOR] user disabled -> no actuation');
+            } catch {}
+            return;
+          }
+          if (sessionPhase !== 'live') {
+            try {
+              console.info('[HYBRID_MOTOR] not live -> no actuation', { phase: sessionPhase });
+            } catch {}
+            return;
+          }
+          if (!Number.isFinite(hybridBasePxps) || hybridBasePxps <= 0) {
+            const fallbackWpm = lastWpmIntent?.wpm ?? 140;
+            const fallbackPx = convertWpmToPxPerSec(fallbackWpm);
+            try {
+              console.warn('[HYBRID_MOTOR] basePxps missing -> seed from WPM', { fallbackWpm });
+              if (Number.isFinite(fallbackPx) && fallbackPx > 0) {
+                applyWpmBaselinePx(fallbackPx, 'hybrid-seed');
+              }
+            } catch (err) {
+              try {
+                console.error('[HYBRID_MOTOR] baseline seed FAILED', err);
+              } catch {}
+            }
+          }
+          try {
+            seedHybridBaseSpeed();
+            startHybridMotorFromSpeedChange();
+            hybridMotor.setEnabled?.(true);
+            hybridMotor.start?.();
+            console.warn('[HYBRID_MOTOR] start/enable ok', {
+              reason: reason ?? 'auto-intent',
+              phase: sessionPhase,
+              baselinePxps: hybridBasePxps,
+            });
+          } catch (err) {
+            try {
+              console.error('[HYBRID_MOTOR] start/enable FAILED', err);
+            } catch {}
+          }
+        } else {
+          try {
+            if (hybridMotor.isRunning()) {
+              hybridMotor.stop();
             emitMotorState('hybridWpm', false);
           }
           emitHybridSafety();
@@ -2326,7 +2476,6 @@ function installScrollRouter(opts) {
   }
    type WpmIntentSource = 'sidebar' | 'restore' | 'script-load' | 'hotkey';
    const WPM_INTENT_EVENT = 'tp:wpm:intent';
-   let lastWpmIntent: { wpm: number; source: WpmIntentSource } | null = null;
 
   function applyWpmBaselinePx(pxs: number, source: string) {
   if (!Number.isFinite(pxs) || pxs <= 0) return;
@@ -2376,7 +2525,7 @@ function installScrollRouter(opts) {
     if (!Number.isFinite(pxPerSec) || pxPerSec <= 0) return;
     if (typeof window === "undefined") return;
     if (lastWpmIntent && lastWpmIntent.wpm === wpm && lastWpmIntent.source === source) return;
-    lastWpmIntent = { wpm, source };
+    noteWpmIntent(wpm, source);
     const detail = { wpm, source };
     try {
       window.dispatchEvent(new CustomEvent(WPM_INTENT_EVENT, { detail }));
@@ -2389,7 +2538,7 @@ function installScrollRouter(opts) {
   }
 
   function handleSidebarWpmChange(val: number, label: 'slider-change' | 'slider-input') {
-    if (suppressWpmUiEvents) return;
+    if (suppressWpmUiEcho) return;
     if (!Number.isFinite(val) || val <= 0) return;
     try {
       localStorage.setItem('tp_baseline_wpm', String(val));
@@ -2445,6 +2594,12 @@ function installScrollRouter(opts) {
       const resolved = resolveWpmDetail(detail);
       if (!resolved) return;
       const { pxPerSec, source } = resolved;
+      if (eventName !== WPM_INTENT_EVENT && userWpmLocked) {
+        try {
+          console.warn('[WPM_LEGACY] ignored (userWpmLocked=1)', { eventName, source });
+        } catch {}
+        return;
+      }
       if (eventName === "tp:wpm:change" && source === "sidebar") return;
       if (source === "store" && userWpmLocked) return;
       const sourceIsSlider = isSliderWpmSource(source);
@@ -2488,7 +2643,16 @@ function installScrollRouter(opts) {
 
     window.addEventListener("tp:wpm:intent", (ev) => {
       try {
-        handleWpmEvent((ev as CustomEvent).detail || {}, "tp:wpm:intent");
+        const detail = (ev as CustomEvent)?.detail || {};
+        const wpmValue = Number(detail.wpm);
+        const source = typeof detail.source === "string" ? detail.source : "unknown";
+        if (Number.isFinite(wpmValue) && wpmValue > 0) {
+          noteWpmIntent(wpmValue, source);
+        }
+        try {
+          console.info('[WPM_INTENT] recv', { wpm: wpmValue, source });
+        } catch {}
+        handleWpmEvent(detail, "tp:wpm:intent");
       } catch {}
     });
   } catch {
