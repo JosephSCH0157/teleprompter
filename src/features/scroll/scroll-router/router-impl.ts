@@ -1520,13 +1520,11 @@ function installScrollRouter(opts) {
       effectivePxPerSec: Number.isFinite(effectivePxps) ? Number(effectivePxps.toFixed(2)) : effectivePxps,
     };
     try {
+      console.info('[HYBRID] speech activity', speechPayload);
+    } catch {}
+    try {
       console.info('[speech] activity', speechPayload);
     } catch {}
-    if (isDevMode()) {
-      try {
-        console.info('[HYBRID] speech activity', speechPayload);
-      } catch {}
-    }
     if (wasPausedBySilence) {
       emitHybridSafety();
     }
