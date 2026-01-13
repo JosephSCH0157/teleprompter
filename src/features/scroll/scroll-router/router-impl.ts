@@ -1511,16 +1511,20 @@ function installScrollRouter(opts) {
     if (!opts?.noMatch) {
       startHybridGrace(opts?.source ?? "speech-result");
     }
+    const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
+    const speechPayload = {
+      source: opts?.source ?? 'unknown',
+      noMatch: !!opts?.noMatch,
+      pausedBySilence: wasPausedBySilence,
+      offScriptActive: hybridSilence.offScriptActive,
+      effectivePxPerSec: Number.isFinite(effectivePxps) ? Number(effectivePxps.toFixed(2)) : effectivePxps,
+    };
+    try {
+      console.info('[speech] activity', speechPayload);
+    } catch {}
     if (isDevMode()) {
-      const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
       try {
-        console.info('[HYBRID] speech activity', {
-          source: opts?.source ?? 'unknown',
-          noMatch: !!opts?.noMatch,
-          pausedBySilence: wasPausedBySilence,
-          offScriptActive: hybridSilence.offScriptActive,
-          effectivePxPerSec: Number.isFinite(effectivePxps) ? Number(effectivePxps.toFixed(2)) : effectivePxps,
-        });
+        console.info('[HYBRID] speech activity', speechPayload);
       } catch {}
     }
     if (wasPausedBySilence) {
