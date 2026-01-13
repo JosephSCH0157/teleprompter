@@ -128,28 +128,28 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       ].join(' '));
       if (!viewerScrollRouterInstalled && viewer) {
         try { console.warn('[SCROLL_ROUTER] render-script installing router now'); } catch {}
+        const auto = createAutoMotor();
+        const viewerEl = document.getElementById('viewer') as HTMLElement | null;
+        const hostEl = viewerEl || root;
+        const mode =
+          (window as any).__tpCurrentScrollMode ||
+          (window as any).__tpScrollMode ||
+          'unknown';
+        const viewerInfo = viewerEl
+          ? `${viewerEl.id || 'no-id'} ${viewerEl.className || 'no-class'}`
+          : 'no-viewer';
+        const hybridMotorInit = !!auto;
+        const listenersWired = !!(window as any).__tpHybridListenersReady;
         try {
-          const auto = createAutoMotor();
-          const viewerEl = document.getElementById('viewer') as HTMLElement | null;
-          const hostEl = viewerEl || root;
-          const mode =
-            (window as any).__tpCurrentScrollMode ||
-            (window as any).__tpScrollMode ||
-            'unknown';
-          const viewerInfo = viewerEl
-            ? `${viewerEl.id || 'no-id'} ${viewerEl.className || 'no-class'}`
-            : 'no-viewer';
-          const hybridMotorInit = !!auto;
-          const listenersWired = !!(window as any).__tpHybridListenersReady;
-          try {
-            console.warn('[SCROLL_ROUTER] install debug', {
-              mode,
-              viewer: viewerInfo.trim(),
-              hybridMotorInit,
-              listenersWired,
-            });
-          } catch {}
-          try { console.info('ABOUT TO CALL installScrollRouter'); } catch {}
+          console.warn('[SCROLL_ROUTER] install debug', {
+            mode,
+            viewer: viewerInfo.trim(),
+            hybridMotorInit,
+            listenersWired,
+          });
+        } catch {}
+        try { console.info('ABOUT TO CALL installScrollRouter'); } catch {}
+        try {
           installScrollRouter({ auto, viewer: !!viewerEl, hostEl });
           try { console.info('RETURNED FROM installScrollRouter'); } catch {}
           try { (window as any).__tpAuto = auto; } catch {}
@@ -158,8 +158,10 @@ export function renderScript(text: string, container?: HTMLElement | null): void
           try {
             const errObj = error instanceof Error ? error : new Error(String(error));
             console.error('[SCROLL_ROUTER] install failure context', {
-              mode: (window as any).__tpCurrentScrollMode || (window as any).__tpScrollMode || 'unknown',
-              listenerMode: (window as any).__tpScrollMode,
+              mode,
+              viewer: viewerInfo.trim(),
+              hybridMotorInit,
+              listenersWired,
             });
             console.error('[SCROLL_ROUTER] INSTALL FAILED', errObj);
             if (errObj.stack) {
