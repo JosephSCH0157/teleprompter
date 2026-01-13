@@ -855,6 +855,7 @@ const OFFSCRIPT_SCALE = 0.5;
 const SILENCE_SCALE = 0.1;
 const GRACE_MIN_SCALE = 0.8;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
+const HYBRID_ASSIST_CAP_FRAC = 0.35;
   const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
   const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
   let lastHybridGateFingerprint: string | null = null;
@@ -2025,9 +2026,34 @@ function installScrollRouter(opts) {
       reason,
     });
     const brakeFactor = getActiveBrakeFactor(now);
-    const assistBoost = getActiveAssistBoost(now);
+    const rawAssist = getActiveAssistBoost(now);
     const effective = base * effectiveScale * brakeFactor;
+    const suppressAssist =
+      reason === 'silence' ||
+      effectiveScale <= OFFSCRIPT_SCALE ||
+      reason === 'grace';
+    const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
+    const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
     const velocity = Math.max(0, effective + assistBoost);
+
+    if (isDevMode()) {
+      try {
+        console.info(
+          `[HYBRID_VELOCITY] ${JSON.stringify({
+            basePxps: base,
+            chosenScale: effectiveScale,
+            brakeFactor,
+            effective,
+            rawAssist,
+            assistCap,
+            assistBoost,
+            suppressAssist,
+            velocity,
+            reason,
+          })}`,
+        );
+      } catch {}
+    }
 
     hybridMotor.setVelocityPxPerSec(velocity);
     emitHybridSafety();
