@@ -1393,6 +1393,7 @@ function installScrollRouter(opts) {
     const now = typeof ts === "number" ? ts : nowMs();
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
+    setHybridSilence2(now);
     liveGraceWindowEndsAt = null;
     const wasPausedBySilence = hybridSilence.pausedBySilence;
     hybridSilence.pausedBySilence = false;
@@ -1702,6 +1703,7 @@ function installScrollRouter(opts) {
       scale: hybridScale,
       lastSpeechAtMs: hybridSilence.lastSpeechAtMs,
       targetHint: hybridTargetHintState ?? undefined,
+      hybridSilenceStamp: hybridSilence2,
     };
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("tp:hybridSafety", { detail: payload }));
