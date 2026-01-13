@@ -13,6 +13,51 @@ const defaultViewer = () =>
   (document.getElementById('viewer') as HTMLElement | null) ||
   (document.querySelector('[data-role=\"viewer\"]') as HTMLElement | null);
 
+const SCROLL_CALLER_HINTS: Array<[string, string]> = [
+  ['asr-scroll-driver', 'ASR'],
+  ['hybrid-wpm-motor', 'Hybrid'],
+  ['auto-motor', 'Auto'],
+  ['scroll-router', 'Router'],
+  ['autoscroll', 'Auto'],
+];
+
+type ScrollWriteLogPayload = {
+  caller: string;
+  target: number;
+  current: number;
+  accepted: boolean;
+  reason: string;
+};
+
+function shouldLogScrollWrite(): boolean {
+  try {
+    const w = window as any;
+    if (w.__tpScrollDebug === true) return true;
+    if (w.__tpScrollWriteDebug === true) return true;
+    const qs = new URLSearchParams(window.location.search || '');
+    if (qs.has('scrollDebug') || qs.has('scrollWriteDebug')) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function detectScrollCaller(): string {
+  try {
+    const trace = (new Error().stack || '').toLowerCase();
+    for (const [hint, tag] of SCROLL_CALLER_HINTS) {
+      if (trace.includes(hint)) return tag;
+    }
+  } catch {
+    // ignore
+  }
+  return 'unknown';
+}
+
+function logScrollWrite(payload: ScrollWriteLogPayload): void {
+  try { console.info('[SCROLL_WRITE]', payload); } catch {}
+}
+
 function readLineIndex(el: Element | null): number | null {
   if (!el) return null;
   const line = (el as HTMLElement).closest ? (el as HTMLElement).closest('.line') as HTMLElement | null : null;
@@ -79,10 +124,11 @@ export function setClampActive(on: boolean): void {
   try { (window as any).__tpClampActive = !!on; } catch {}
 }
 
-function clampScrollTop(sc: HTMLElement, y: number): number {
+function clampScrollTop(sc: HTMLElement, y: number): { target: number; guardDenied: boolean; max: number } {
   const max = Math.max(0, sc.scrollHeight - sc.clientHeight);
   const t = Math.max(0, Math.min(Number(y) || 0, max));
-  return clampGuard(t, max) ? t : sc.scrollTop || 0;
+  const allowed = clampGuard(t, max);
+  return { target: allowed ? t : (sc.scrollTop || 0), guardDenied: !allowed, max };
 }
 
 function mirrorToDisplay(sc: HTMLElement): void {
@@ -106,10 +152,32 @@ function mirrorToDisplay(sc: HTMLElement): void {
 }
 
 export function scrollByPx(dy: number, getScroller = defaultViewer): void {
-  if (clampActive()) return;
+  const logEnabled = shouldLogScrollWrite();
+  const caller = logEnabled ? detectScrollCaller() : 'unknown';
+  if (clampActive()) {
+    if (logEnabled) {
+      logScrollWrite({ caller, target: Number(dy) || 0, current: 0, accepted: false, reason: 'clamp-active' });
+    }
+    return;
+  }
   const sc = getScroller();
-  if (!sc) return;
-  const target = clampScrollTop(sc, (sc.scrollTop || 0) + (Number(dy) || 0));
+  if (!sc) {
+    if (logEnabled) {
+      logScrollWrite({ caller, target: Number(dy) || 0, current: 0, accepted: false, reason: 'no-scroller' });
+    }
+    return;
+  }
+  const current = sc.scrollTop || 0;
+  const { target, guardDenied } = clampScrollTop(sc, current + (Number(dy) || 0));
+  if (guardDenied) {
+    if (logEnabled) {
+      logScrollWrite({ caller, target, current, accepted: false, reason: 'clamp-guard' });
+    }
+    return;
+  }
+  if (logEnabled) {
+    logScrollWrite({ caller, target, current, accepted: true, reason: 'scrollByPx' });
+  }
   requestWrite(() => {
     try { sc.scrollTop = target; } catch {}
     mirrorToDisplay(sc);
@@ -170,7 +238,18 @@ export function centerLine(lineIndex: number, getScroller = defaultViewer): void
     (document.getElementById(`tp-line-${idx}`) as HTMLElement | null);
   if (!line) return;
   const offset = Math.max(0, (sc.clientHeight - line.offsetHeight) / 2);
-  const target = clampScrollTop(sc, (line.offsetTop || 0) - offset);
+  const logEnabled = shouldLogScrollWrite();
+  const caller = logEnabled ? detectScrollCaller() : 'unknown';
+  const { target, guardDenied } = clampScrollTop(sc, (line.offsetTop || 0) - offset);
+  if (guardDenied) {
+    if (logEnabled) {
+      logScrollWrite({ caller, target, current: sc.scrollTop || 0, accepted: false, reason: 'clamp-guard' });
+    }
+    return;
+  }
+  if (logEnabled) {
+    logScrollWrite({ caller, target, current: sc.scrollTop || 0, accepted: true, reason: 'centerLine' });
+  }
   requestWrite(() => {
     try { sc.scrollTop = target; } catch {}
   });
@@ -216,11 +295,33 @@ export function createScrollerHelpers(getScroller: ScrollerGetter) {
     scrollByPx: (px: number) => scrollByPx(px, () => getScroller()),
     scrollByLines: (n: number) => scrollByLines(n, () => getScroller()),
     centerLine: (i: number) => centerLine(i, () => getScroller()),
-    requestScroll: (top: number) => {
-    if (clampActive()) return;
+  requestScroll: (top: number) => {
+    const logEnabled = shouldLogScrollWrite();
+    const caller = logEnabled ? detectScrollCaller() : 'unknown';
+    if (clampActive()) {
+      if (logEnabled) {
+        logScrollWrite({ caller, target: top, current: 0, accepted: false, reason: 'clamp-active' });
+      }
+      return;
+    }
     const sc = getScroller();
-    if (!sc) return;
-    const target = clampScrollTop(sc, top);
+    if (!sc) {
+      if (logEnabled) {
+        logScrollWrite({ caller, target: top, current: 0, accepted: false, reason: 'no-scroller' });
+      }
+      return;
+    }
+    const current = sc.scrollTop || 0;
+    const { target, guardDenied } = clampScrollTop(sc, top);
+    if (guardDenied) {
+      if (logEnabled) {
+        logScrollWrite({ caller, target, current, accepted: false, reason: 'clamp-guard' });
+      }
+      return;
+    }
+    if (logEnabled) {
+      logScrollWrite({ caller, target, current, accepted: true, reason: 'requestScroll' });
+    }
     requestWrite(() => {
       try { sc.scrollTop = target; } catch {}
       mirrorToDisplay(sc);

@@ -2177,6 +2177,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       resetLowSimStreak();
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
+      const intendedTargetTop = pursuitTargetTop ?? currentTop;
+      try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         matchId,
         prevIndex: prevLineIndex,
@@ -2185,6 +2187,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
         scrollTopBefore: Math.round(currentTop),
         scrollTopAfter: Math.round(pursuitTargetTop ?? currentTop),
+        targetTop: Math.round(intendedTargetTop),
         forced: !!forced,
         mode: getScrollMode() || 'unknown',
         relock: !!relockOverride,
