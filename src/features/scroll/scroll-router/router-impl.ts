@@ -733,12 +733,11 @@ const OFFSCRIPT_DEEP = 0.55;
 const RECOVERY_SCALE = 1;
 const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
-const MIN_SPEECH_PXPS = 24;
-const MIN_ACTIVE_SCALE = 0.65;
 const HYBRID_GRACE_DURATION_MS = 900;
-const HYBRID_GRACE_SCALE = 0.8;
-  const HYBRID_BASELINE_FLOOR_PXPS = 24;
-  const HYBRID_SLOW_LANE_FACTOR = 0.6;
+const OFFSCRIPT_SCALE = 0.5;
+const SILENCE_SCALE = 0.1;
+const GRACE_MIN_SCALE = 0.8;
+const HYBRID_BASELINE_FLOOR_PXPS = 24;
   const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
   const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
   let lastHybridGateFingerprint: string | null = null;
@@ -1687,12 +1686,7 @@ function installScrollRouter(opts) {
       offScriptEvidence = 0;
       lastOffScriptEvidenceTs = 0;
     }
-    let clamped = Math.max(0, Math.min(nextScale, 1));
-    const now = nowMs();
-    const graceFloor = isHybridGraceActive(now) ? Math.max(MIN_ACTIVE_SCALE, HYBRID_GRACE_SCALE) : MIN_ACTIVE_SCALE;
-    if (speechActive && !hybridSilence.pausedBySilence && clamped < graceFloor) {
-      clamped = graceFloor;
-    }
+    const clamped = Math.max(0, Math.min(nextScale, 1));
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
@@ -1812,22 +1806,27 @@ function installScrollRouter(opts) {
       ts: nowMs(),
     };
   }
+  function computeEffectiveHybridScale(now: number, silenceState = hybridSilence) {
+    let scale = Number.isFinite(hybridScale) && hybridScale > 0 ? hybridScale : 1;
+    if (silenceState.pausedBySilence) {
+      scale = Math.min(scale, SILENCE_SCALE);
+    } else if (silenceState.offScriptActive) {
+      scale = Math.min(scale, OFFSCRIPT_SCALE);
+    }
+    if (isHybridGraceActive(now)) {
+      scale = Math.max(scale, GRACE_MIN_SCALE);
+    }
+    return scale;
+  }
+
   function applyHybridVelocity(silenceState = hybridSilence) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
-    // Hybrid should never "look dead". Even deep off-script should still visibly creep.
-    // If speech is active (or we're inside live grace), enforce a stronger visible floor.
     const now = nowMs();
-    const inLiveGrace = isLiveGraceActive(now);
-    const speechRecent = now - silenceState.lastSpeechAtMs <= 500;
-    const wantVisibleFloor = inLiveGrace || speechRecent;
-
+    const effectiveScale = computeEffectiveHybridScale(now, silenceState);
     const brakeFactor = getActiveBrakeFactor(now);
     const assistBoost = getActiveAssistBoost(now);
-    const rawEffective = base * hybridScale * brakeFactor;
-    const slowFloor = Math.max(base * HYBRID_SLOW_LANE_FACTOR, HYBRID_BASELINE_FLOOR_PXPS);
-    const floor = wantVisibleFloor ? Math.max(slowFloor, MIN_SPEECH_PXPS) : slowFloor;
-    const effective = Math.max(rawEffective, floor);
+    const effective = base * effectiveScale * brakeFactor;
     const velocity = Math.max(0, effective + assistBoost);
 
     hybridMotor.setVelocityPxPerSec(velocity);
@@ -2103,16 +2102,14 @@ function installScrollRouter(opts) {
       hybridBlockedReason = "blocked:silence";
     }
     const hybridRunning = hybridMotor.isRunning();
-    let effectivePxPerSec = silencePaused ? 0 : baseHybridPxPerSec * hybridScale;
-    if (!silencePaused && (!Number.isFinite(effectivePxPerSec) || effectivePxPerSec <= 0)) {
-      const fallback = Math.max(1, Number.isFinite(baseHybridPxPerSec) ? baseHybridPxPerSec : 1);
-      effectivePxPerSec = fallback;
-      try {
-        console.warn("[HYBRID] bad pxps; clamped", { hybridBasePxps, hybridScale, effectivePxPerSec });
-      } catch {}
-    }
+    let effectivePxPerSec = 0;
     if (!silencePaused) {
-      effectivePxPerSec = Math.max(effectivePxPerSec, MIN_SPEECH_PXPS);
+      const now = nowMs();
+      const scale = computeEffectiveHybridScale(now);
+      const brake = getActiveBrakeFactor(now);
+      const pxCandidate = baseHybridPxPerSec * scale * brake;
+      const fallback = Math.max(1, Number.isFinite(baseHybridPxPerSec) ? baseHybridPxPerSec : 1);
+      effectivePxPerSec = Number.isFinite(pxCandidate) && pxCandidate > 0 ? pxCandidate : fallback;
     }
     const shouldRunHybrid = wantEnabled && !silencePaused && effectivePxPerSec >= 1;
     const viewerEl = viewer;

@@ -54,7 +54,7 @@ function bindInput(input: HTMLInputElement, api: ScrollSpeedApi) {
     if (wpm > 0) persistWpm(wpm);
     try {
       if (typeof window !== 'undefined') {
-        const detail = { wpm, pxPerSec };
+        const detail = { wpm, pxPerSec, source: 'sidebar' };
         window.dispatchEvent(new CustomEvent('tp:wpm:change', { detail }));
       }
     } catch {
