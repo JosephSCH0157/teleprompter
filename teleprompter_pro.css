@@ -1142,10 +1142,12 @@ html.tp-mode-rehearsal::after{
 .tp-dev-pill {
   pointer-events: auto;
 }
+.tp-dev-overlay {
+  z-index: 9999;
+}
 #tp-dev-root {
   position: fixed;
   inset: 0;
-  z-index: 2099;
   pointer-events: none;
 }
 .tp-dev-pill {

@@ -19,6 +19,9 @@ let drawerEl: HTMLElement | null = null;
 let pillEl: HTMLButtonElement | null = null;
 let zenButtonEl: HTMLButtonElement | null = null;
 let contentHost: HTMLElement | null = null;
+let currentDock: Dock | null = null;
+let lastDockUpdate = 0;
+let listenersAttached = false;
 
 function isBrowser(): boolean {
   return typeof window !== 'undefined' && typeof document !== 'undefined';
@@ -47,11 +50,28 @@ function computeDock(): Dock {
   return 'bottom';
 }
 
+function applyDock(dock: Dock): void {
+  if (!drawerEl) return;
+  currentDock = dock;
+  drawerEl.dataset.dock = dock;
+  drawerEl.setAttribute('data-dock', dock);
+}
+
 function updateDock(): void {
   if (!drawerEl) return;
   const dock = computeDock();
-  drawerEl.dataset.dock = dock;
-  drawerEl.setAttribute('data-dock', dock);
+  if (dock === currentDock) return;
+  applyDock(dock);
+}
+
+function scheduleDockUpdate(): void {
+  if (!drawerEl) return;
+  const now = performance.now();
+  if (now - lastDockUpdate < 100) return;
+  lastDockUpdate = now;
+  const dock = computeDock();
+  if (dock === currentDock) return;
+  applyDock(dock);
 }
 
 function setDrawerOpen(value: boolean): void {
@@ -78,7 +98,29 @@ function updateZenState(value: boolean): void {
 }
 
 function handleResize(): void {
-  updateDock();
+  void scheduleDockUpdate();
+}
+
+function attachListeners(): void {
+  if (listenersAttached) return;
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', handleResize);
+  window.addEventListener('keydown', handleKeydown);
+  listenersAttached = true;
+}
+
+function handleKeydown(event: KeyboardEvent): void {
+  if (!event.ctrlKey || !event.shiftKey) return;
+  if (event.altKey || event.metaKey) return;
+  if (event.code === 'KeyD') {
+    event.preventDefault();
+    toggleDrawer();
+    return;
+  }
+  if (event.code === 'KeyZ') {
+    event.preventDefault();
+    updateZenState(!zenMode);
+  }
 }
 
 function ensureRoot(): HTMLElement | null {
@@ -145,6 +187,7 @@ export function initDevDrawer(): void {
   if (!isBrowser()) return;
   if (!isDevActive()) return;
   if (!document.body) return;
+  if (document.getElementById(ROOT_ID)) return;
   rootEl = ensureRoot();
   if (!rootEl) return;
   buildDrawerStructure();
@@ -153,8 +196,7 @@ export function initDevDrawer(): void {
   zenMode = getDevZen();
   updateZenState(zenMode);
   updateDock();
-  window.addEventListener('resize', handleResize);
-  window.addEventListener('orientationchange', handleResize);
+  attachListeners();
   initialized = true;
 }
 
