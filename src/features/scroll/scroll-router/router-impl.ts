@@ -64,6 +64,7 @@ let scrollerEl: HTMLElement | null = null;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
+let hybridScrollGraceListenerInstalled = false;
 const hybridSilence = {
   lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
   pausedBySilence: false,
@@ -734,6 +735,8 @@ const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const MIN_SPEECH_PXPS = 24;
 const MIN_ACTIVE_SCALE = 0.65;
+const HYBRID_GRACE_DURATION_MS = 900;
+const HYBRID_GRACE_SCALE = 0.8;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
 const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
@@ -751,6 +754,20 @@ let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
 let offScriptStreak = 0;
 let onScriptStreak = 0;
+let hybridGraceUntil = 0;
+
+function startHybridGrace(reason: string) {
+  hybridGraceUntil = nowMs() + HYBRID_GRACE_DURATION_MS;
+  if (isDevMode()) {
+    try {
+      console.info('[HYBRID] grace window', { reason, until: hybridGraceUntil });
+    } catch {}
+  }
+}
+
+function isHybridGraceActive(now = nowMs()) {
+  return hybridGraceUntil > now;
+}
 var isHybridBypass = () => {
   try {
     return localStorage.getItem("tp_hybrid_bypass") === "1";
@@ -1002,6 +1019,21 @@ function installScrollRouter(opts) {
   if (!scrollerEl) {
     const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
     scrollerEl = fallback;
+  }
+  if (!hybridScrollGraceListenerInstalled) {
+    try {
+      const scrollHandler = (event: Event) => {
+        if (!event.isTrusted) return;
+        const target = event.target as HTMLElement | null;
+        const scroller = scrollerEl;
+        if (!scroller || !target) return;
+        if (scroller === target || scroller.contains(target)) {
+          startHybridGrace('manual-scroll');
+        }
+      };
+      window.addEventListener('scroll', scrollHandler, { capture: true, passive: true });
+      hybridScrollGraceListenerInstalled = true;
+    } catch {}
   }
   refreshHybridWriter();
   function setProcessorAndFlush() {
@@ -1442,15 +1474,22 @@ function installScrollRouter(opts) {
   function isLiveGraceActive(now = nowMs()) {
     return liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt;
   }
-  function noteHybridSpeechActivity(ts?: number, opts?: { source?: string; noMatch?: boolean }) {
+  function noteHybridSpeechActivity(
+    ts?: number,
+    opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
+  ) {
     const now = typeof ts === "number" ? ts : nowMs();
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
     setHybridSilence2(now);
     liveGraceWindowEndsAt = null;
-    const wasPausedBySilence = hybridSilence.pausedBySilence;
+    const wasPausedBySilence =
+      typeof opts?.resumedFromSilence === "boolean" ? opts.resumedFromSilence : hybridSilence.pausedBySilence;
     hybridSilence.pausedBySilence = false;
     clearHybridSilenceTimer();
+    if (!opts?.noMatch) {
+      startHybridGrace(opts?.source ?? "speech-result");
+    }
     if (isDevMode()) {
       const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
       try {
@@ -1466,7 +1505,7 @@ function installScrollRouter(opts) {
     if (wasPausedBySilence) {
       emitHybridSafety();
     }
-    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+      if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     ensureHybridMotorRunningForSpeech();
     armHybridSilenceTimer();
     try { applyGate(); } catch {}
@@ -1506,7 +1545,14 @@ function installScrollRouter(opts) {
   function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     const now = typeof detail.timestamp === "number" ? detail.timestamp : nowMs();
     const isNoMatch = detail.noMatch === true;
-    noteHybridSpeechActivity(now, { source: detail.source || "transcript", noMatch: isNoMatch });
+    const wasSilent = hybridSilence.pausedBySilence;
+    hybridSilence.pausedBySilence = false;
+    clearHybridSilenceTimer();
+    noteHybridSpeechActivity(now, {
+      source: detail.source || "transcript",
+      noMatch: isNoMatch,
+      resumedFromSilence: wasSilent,
+    });
     updateHybridScaleFromDetail(detail);
   }
   const handleHybridFatalOnce = (err: unknown) => {
@@ -1599,8 +1645,10 @@ function installScrollRouter(opts) {
       lastOffScriptEvidenceTs = 0;
     }
     let clamped = Math.max(0, Math.min(nextScale, 1));
-    if (speechActive && !hybridSilence.pausedBySilence && clamped < MIN_ACTIVE_SCALE) {
-      clamped = MIN_ACTIVE_SCALE;
+    const now = nowMs();
+    const graceFloor = isHybridGraceActive(now) ? Math.max(MIN_ACTIVE_SCALE, HYBRID_GRACE_SCALE) : MIN_ACTIVE_SCALE;
+    if (speechActive && !hybridSilence.pausedBySilence && clamped < graceFloor) {
+      clamped = graceFloor;
     }
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
