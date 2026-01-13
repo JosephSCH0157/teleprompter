@@ -156,8 +156,17 @@ export function renderScript(text: string, container?: HTMLElement | null): void
           } catch (error) {
             try {
               const errObj = error instanceof Error ? error : new Error(String(error));
-              console.error('INSTALL FAILED', errObj);
-              console.error(errObj.stack);
+              console.error('[SCROLL_ROUTER] install failure context', {
+                mode,
+                viewerId: viewerEl?.id ?? '(none)',
+                viewerClass: viewerEl?.className ?? '(none)',
+                hybridMotorInit,
+                listenersWired,
+              });
+              console.error('[SCROLL_ROUTER] INSTALL FAILED', errObj);
+              if (errObj.stack) {
+                console.error(errObj.stack);
+              }
             } catch {}
           }
           try { (window as any).__tpAuto = auto; } catch {}

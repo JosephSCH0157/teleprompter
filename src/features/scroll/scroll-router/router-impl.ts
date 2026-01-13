@@ -1109,6 +1109,10 @@ function installScrollRouter(opts) {
     erroredOnce: false,
     offScriptActive: false,
   };
+  let hybridSilence2 = 0;
+  function setHybridSilence2(v: number) {
+    hybridSilence2 = Number.isFinite(v) ? v : 0;
+  }
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
   const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
@@ -1804,11 +1808,6 @@ function installScrollRouter(opts) {
       }
     }
     return HYBRID_BASELINE_FLOOR_PXPS;
-  }
-
-  let hybridSilence2 = 0;
-  function setHybridSilence2(v: number) {
-    hybridSilence2 = Number.isFinite(v) ? v : 0;
   }
 
   function logHybridBaselineState(source: string) {
