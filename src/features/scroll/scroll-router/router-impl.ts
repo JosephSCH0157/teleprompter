@@ -737,12 +737,13 @@ const MIN_SPEECH_PXPS = 24;
 const MIN_ACTIVE_SCALE = 0.65;
 const HYBRID_GRACE_DURATION_MS = 900;
 const HYBRID_GRACE_SCALE = 0.8;
-const HYBRID_BASELINE_FLOOR_PXPS = 24;
-const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
-const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
-let lastHybridGateFingerprint: string | null = null;
-let hybridBasePxps = 0;
-let hybridScale = RECOVERY_SCALE;
+  const HYBRID_BASELINE_FLOOR_PXPS = 24;
+  const HYBRID_SLOW_LANE_FACTOR = 0.6;
+  const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
+  const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
+  let lastHybridGateFingerprint: string | null = null;
+  let hybridBasePxps = 0;
+  let hybridScale = RECOVERY_SCALE;
 let hybridBrakeState = { factor: 1, expiresAt: 0, reason: null as string | null };
 let hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null as string | null };
 let hybridEventRefreshTimer: number | null = null;
@@ -754,14 +755,26 @@ let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
 let offScriptStreak = 0;
 let onScriptStreak = 0;
-let hybridGraceUntil = 0;
-const WPM_USER_DEDUPE_MS = 600;
-let lastUserWpmPx = 0;
-let lastUserWpmAt = 0;
+  let hybridGraceUntil = 0;
+  const WPM_USER_DEDUPE_MS = 600;
+  let lastUserWpmPx = 0;
+  let lastUserWpmAt = 0;
+  const WPM_USER_SOURCES = new Set(["slider-change", "slider-input"]);
+  let liveSessionWpmLocked = false;
+  let wpmSliderUserTouched = false;
+
 
 function recordUserWpmPx(pxs: number) {
   lastUserWpmPx = pxs > 0 ? pxs : 0;
   lastUserWpmAt = nowMs();
+}
+
+function markSliderInteraction() {
+  wpmSliderUserTouched = true;
+}
+
+function isSliderWpmSource(source?: unknown) {
+  return typeof source === "string" && WPM_USER_SOURCES.has(source);
 }
 
 function startHybridGrace(reason: string) {
@@ -1790,7 +1803,8 @@ function installScrollRouter(opts) {
     const brakeFactor = getActiveBrakeFactor(now);
     const assistBoost = getActiveAssistBoost(now);
     const rawEffective = base * hybridScale * brakeFactor;
-    const floor = wantVisibleFloor ? MIN_SPEECH_PXPS : HYBRID_BASELINE_FLOOR_PXPS;
+    const slowFloor = Math.max(base * HYBRID_SLOW_LANE_FACTOR, HYBRID_BASELINE_FLOOR_PXPS);
+    const floor = wantVisibleFloor ? Math.max(slowFloor, MIN_SPEECH_PXPS) : slowFloor;
     const effective = Math.max(rawEffective, floor);
     const velocity = Math.max(0, effective + assistBoost);
 
@@ -2189,24 +2203,70 @@ function installScrollRouter(opts) {
     applyGate();
   });
   try {
-    if (typeof appStore.subscribe === "function") {
-      appStore.subscribe("session.phase", (phase) => {
-        const prevPhase = sessionPhase;
-        sessionPhase = String(phase || "idle");
-        if (sessionPhase !== "live") {
-          stopAllMotors("phase change");
-        } else if (prevPhase !== "live") {
-          beginHybridLiveGraceWindow();
-        }
-        applyGate();
-        emitScrollModeSnapshot(`phase:${sessionPhase}`);
-      });
+      if (typeof appStore.subscribe === "function") {
+        appStore.subscribe("session.phase", (phase) => {
+          const prevPhase = sessionPhase;
+          sessionPhase = String(phase || "idle");
+          if (sessionPhase !== "live") {
+            stopAllMotors("phase change");
+            liveSessionWpmLocked = false;
+            wpmSliderUserTouched = false;
+          } else if (prevPhase !== "live") {
+            liveSessionWpmLocked = true;
+            syncSliderWpmBeforeLiveStart();
+            beginHybridLiveGraceWindow();
+          }
+          applyGate();
+          emitScrollModeSnapshot(`phase:${sessionPhase}`);
+        });
       appStore.subscribe("session.scrollAutoOnLive", () => {
         applyGate();
       });
     }
   } catch {}
-function applyWpmBaselinePx(pxs: number, source: string) {
+  function syncSliderWpmBeforeLiveStart() {
+    if (typeof document === "undefined") {
+      liveSessionWpmLocked = false;
+      return;
+    }
+    let nextWpm = Number.NaN;
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    try {
+      const sliderInput = document.getElementById("wpmTarget") as HTMLInputElement | null;
+      if (sliderInput) {
+        const sliderVal = Number(sliderInput.value);
+        if (Number.isFinite(sliderVal) && sliderVal > 0) {
+          nextWpm = sliderVal;
+        }
+      }
+      if (!Number.isFinite(nextWpm) || nextWpm <= 0) {
+        const stored = typeof store?.get === "function" ? store.get("wpmTarget") : undefined;
+        if (typeof stored === "number" && stored > 0) {
+          nextWpm = stored;
+        }
+      }
+      if (!Number.isFinite(nextWpm) || nextWpm <= 0) {
+        nextWpm = 180;
+      }
+      if (sliderInput) {
+        sliderInput.value = String(nextWpm);
+      }
+      if (typeof store?.set === "function") {
+        try {
+          store.set("wpmTarget", nextWpm);
+        } catch {}
+      }
+      const pxs = convertWpmToPxPerSec(nextWpm);
+      if (Number.isFinite(pxs) && pxs > 0) {
+        applyWpmBaselinePx(pxs, "session-start");
+      }
+    } catch {
+      // ignore
+    } finally {
+      liveSessionWpmLocked = false;
+    }
+  }
+  function applyWpmBaselinePx(pxs: number, source: string) {
   if (!Number.isFinite(pxs) || pxs <= 0) return;
   sliderTouchedThisSession = true;
   recordUserWpmPx(pxs);
@@ -2230,6 +2290,7 @@ function applyWpmBaselinePx(pxs: number, source: string) {
         if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             const pxs = convertWpmToPxPerSec(val);
+            markSliderInteraction();
             applyWpmBaselinePx(pxs, 'slider-change');
             if (state2.mode === 'wpm') {
               try {
@@ -2263,6 +2324,7 @@ function applyWpmBaselinePx(pxs: number, source: string) {
         if (isFinite(val) && val > 0) {
             localStorage.setItem('tp_baseline_wpm', String(val));
             const pxs = convertWpmToPxPerSec(val);
+            markSliderInteraction();
             applyWpmBaselinePx(pxs, 'slider-input');
             if (state2.mode === 'wpm') {
               try {
@@ -2292,12 +2354,21 @@ function applyWpmBaselinePx(pxs: number, source: string) {
         const detail = (ev as CustomEvent).detail || {};
         const pxs = Number(detail.pxPerSec);
         if (!Number.isFinite(pxs)) return;
+        const source =
+          typeof detail.source === "string" && detail.source.length > 0 ? detail.source : "tp:wpm:change";
+        const sourceIsSlider = isSliderWpmSource(source);
+        if (liveSessionWpmLocked && !sourceIsSlider) {
+          return;
+        }
+        if (hybridMotor.isRunning() && !sourceIsSlider && wpmSliderUserTouched) {
+          return;
+        }
         const now = nowMs();
         const withinUserEvent = lastUserWpmPx > 0 && now - lastUserWpmAt <= WPM_USER_DEDUPE_MS;
         if (withinUserEvent && Math.abs(lastUserWpmPx - pxs) < 0.5) {
           return;
         }
-        applyWpmBaselinePx(pxs, 'tp:wpm:change');
+        applyWpmBaselinePx(pxs, source);
       } catch {
       }
     });

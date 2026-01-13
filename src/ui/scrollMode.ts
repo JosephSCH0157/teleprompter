@@ -107,7 +107,7 @@ export function applyScrollModeUI(mode: ScrollMode, root: Document | HTMLElement
 let lastEmittedWpm = Number.NaN;
 let lastEmittedPxPerSec = Number.NaN;
 
-function emitWpmChange(wpm: number, pxPerSec: number, source: string): void {
+function emitWpmChange(wpm: number, pxPerSec: number, source = "store"): void {
   const nextWpm = Number.isFinite(wpm) ? wpm : Number.NaN;
   const nextPx = Number.isFinite(pxPerSec) ? pxPerSec : Number.NaN;
   if (nextWpm === lastEmittedWpm && nextPx === lastEmittedPxPerSec) return;
@@ -117,7 +117,7 @@ function emitWpmChange(wpm: number, pxPerSec: number, source: string): void {
   try {
     window.dispatchEvent(
       new CustomEvent('tp:wpm:change', {
-        detail: { wpm: nextWpm, pxPerSec: nextPx },
+        detail: { wpm: nextWpm, pxPerSec: nextPx, source },
       }),
     );
   } catch {
@@ -141,7 +141,7 @@ export function initWpmBindings(root: Document | HTMLElement = document): void {
     if (wpmPxChip) {
       wpmPxChip.textContent = `${pxPerSec.toFixed(1)} px/s`;
     }
-    emitWpmChange(wpm, pxPerSec);
+    emitWpmChange(wpm, pxPerSec, 'store');
   };
 
   wpmInput.addEventListener('change', () => {
