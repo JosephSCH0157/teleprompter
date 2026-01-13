@@ -108,13 +108,14 @@ async function writeText(handle: FileSystemFileHandle, text: string): Promise<vo
 async function ensureWritePermission(handle: FileSystemFileHandle): Promise<boolean> {
   try {
     const opts = { mode: 'readwrite' as const };
+    const h = handle as any;
     const query =
-      typeof handle.queryPermission === 'function'
-        ? await handle.queryPermission(opts)
+      typeof h?.queryPermission === 'function'
+        ? await h.queryPermission(opts)
         : 'granted';
     if (query === 'granted') return true;
-    if (typeof handle.requestPermission === 'function') {
-      const req = await handle.requestPermission(opts);
+    if (typeof h?.requestPermission === 'function') {
+      const req = await h.requestPermission(opts);
       return req === 'granted';
     }
   } catch {}
