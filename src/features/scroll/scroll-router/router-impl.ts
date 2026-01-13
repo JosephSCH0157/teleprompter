@@ -500,7 +500,14 @@ function createAutoMotor() {
 function logHybridPaceTelemetry(payload) {
   if (!isDevMode()) return;
   try {
-    console.debug("[HYBRID_WPM]", payload);
+    console.debug(`[HYBRID_WPM] ${JSON.stringify(payload)}`);
+  } catch {}
+}
+
+function logHybridScaleDetail(obj: any) {
+  if (!isDevMode()) return;
+  try {
+    console.info(`[HYBRID] scale detail ${JSON.stringify(obj)}`);
   } catch {}
 }
 
@@ -512,7 +519,20 @@ function convertWpmToPxPerSec(targetWpm: number) {
     const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
     const lineHeightPx = fsPx * lhScale;
     const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-    return (targetWpm / 60 / wpl) * lineHeightPx;
+    const pxPerSec = (targetWpm / 60 / wpl) * lineHeightPx;
+    try {
+      console.info(
+        `[WPM_CONVERT] ${JSON.stringify({
+          targetWpm,
+          fsPx,
+          lhScale,
+          lineHeightPx,
+          wpl,
+          pxPerSec,
+        })}`,
+      );
+    } catch {}
+    return pxPerSec;
   } catch {
     return 0;
   }
@@ -1995,19 +2015,15 @@ function installScrollRouter(opts) {
       scaleFromGrace,
       graceActive,
     } = computeEffectiveHybridScale(now, silenceState);
-    if (isDevMode()) {
-      try {
-        console.info('[HYBRID] scale detail', {
-          basePxps: base,
-          scaleFromSilence,
-          scaleFromOffscript,
-          scaleFromGrace,
-          graceActive,
-          chosenScale: effectiveScale,
-          reason,
-        });
-      } catch {}
-    }
+    logHybridScaleDetail({
+      basePxps: base,
+      scaleFromSilence,
+      scaleFromOffscript,
+      scaleFromGrace,
+      graceActive,
+      chosenScale: effectiveScale,
+      reason,
+    });
     const brakeFactor = getActiveBrakeFactor(now);
     const assistBoost = getActiveAssistBoost(now);
     const effective = base * effectiveScale * brakeFactor;
