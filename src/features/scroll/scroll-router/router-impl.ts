@@ -755,13 +755,15 @@ let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
 let offScriptStreak = 0;
 let onScriptStreak = 0;
-  let hybridGraceUntil = 0;
-  const WPM_USER_DEDUPE_MS = 600;
-  let lastUserWpmPx = 0;
-  let lastUserWpmAt = 0;
-  const WPM_USER_SOURCES = new Set(["slider-change", "slider-input"]);
-  let liveSessionWpmLocked = false;
-  let wpmSliderUserTouched = false;
+let hybridGraceUntil = 0;
+const WPM_USER_DEDUPE_MS = 600;
+let lastUserWpmPx = 0;
+let lastUserWpmAt = 0;
+  const WPM_USER_SOURCES = new Set(["slider-change", "slider-input", "sidebar"]);
+let liveSessionWpmLocked = false;
+let wpmSliderUserTouched = false;
+let suppressWpmUiEvents = false;
+let userWpmLocked = false;
 
 
 function recordUserWpmPx(pxs: number) {
@@ -771,6 +773,24 @@ function recordUserWpmPx(pxs: number) {
 
 function markSliderInteraction() {
   wpmSliderUserTouched = true;
+}
+
+function scheduleWpmUiEventReset() {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(() => {
+      suppressWpmUiEvents = false;
+    });
+  } else {
+    setTimeout(() => {
+      suppressWpmUiEvents = false;
+    }, 0);
+  }
+}
+
+function setSliderValueSilently(el: HTMLInputElement, value: string) {
+  suppressWpmUiEvents = true;
+  el.value = value;
+  scheduleWpmUiEventReset();
 }
 
 function isSliderWpmSource(source?: unknown) {
@@ -1158,12 +1178,12 @@ function installScrollRouter(opts) {
   // Initialize WPM target input from localStorage
   try {
     const wpmTargetInput = document.getElementById('wpmTarget');
-    if (wpmTargetInput) {
-      const stored = localStorage.getItem('tp_baseline_wpm');
-      if (stored) {
-        wpmTargetInput.value = stored;
+      if (wpmTargetInput) {
+        const stored = localStorage.getItem('tp_baseline_wpm');
+        if (stored) {
+          setSliderValueSilently(wpmTargetInput, stored);
+        }
       }
-    }
   } catch {
   }
   
@@ -2209,13 +2229,14 @@ function installScrollRouter(opts) {
         appStore.subscribe("session.phase", (phase) => {
           const prevPhase = sessionPhase;
           sessionPhase = String(phase || "idle");
-          if (sessionPhase !== "live") {
-            stopAllMotors("phase change");
-            liveSessionWpmLocked = false;
-            wpmSliderUserTouched = false;
-          } else if (prevPhase !== "live") {
-            liveSessionWpmLocked = true;
-            syncSliderWpmBeforeLiveStart();
+        if (sessionPhase !== "live") {
+          stopAllMotors("phase change");
+          liveSessionWpmLocked = false;
+          wpmSliderUserTouched = false;
+          userWpmLocked = false;
+        } else if (prevPhase !== "live") {
+          liveSessionWpmLocked = true;
+          syncSliderWpmBeforeLiveStart();
             beginHybridLiveGraceWindow();
           }
           applyGate();
@@ -2228,6 +2249,10 @@ function installScrollRouter(opts) {
   } catch {}
   function syncSliderWpmBeforeLiveStart() {
     if (typeof document === "undefined") {
+      liveSessionWpmLocked = false;
+      return;
+    }
+    if (userWpmLocked) {
       liveSessionWpmLocked = false;
       return;
     }
@@ -2251,7 +2276,7 @@ function installScrollRouter(opts) {
         nextWpm = 180;
       }
       if (sliderInput) {
-        sliderInput.value = String(nextWpm);
+        setSliderValueSilently(sliderInput, String(nextWpm));
       }
       if (typeof store?.set === "function") {
         try {
@@ -2272,8 +2297,37 @@ function installScrollRouter(opts) {
    const WPM_INTENT_EVENT = 'tp:wpm:intent';
    let lastWpmIntent: { wpm: number; source: WpmIntentSource } | null = null;
 
-   function applyWpmBaselinePx(pxs: number, source: string) {
+  function applyWpmBaselinePx(pxs: number, source: string) {
   if (!Number.isFinite(pxs) || pxs <= 0) return;
+  const storeWpm = (() => {
+    try {
+      const raw = localStorage.getItem('tp_baseline_wpm');
+      const num = raw ? Number(raw) : NaN;
+      return Number.isFinite(num) ? num : NaN;
+    } catch {
+      return NaN;
+    }
+  })();
+  const sliderValue = (() => {
+    try {
+      const slider = document.getElementById("wpmTarget") as HTMLInputElement | null;
+      if (!slider) return NaN;
+      const num = Number(slider.value);
+      return Number.isFinite(num) ? num : NaN;
+    } catch {
+      return NaN;
+    }
+  })();
+  try {
+    console.info('[HYBRID] baseline writer', {
+      pxPerSec: pxs,
+      source,
+      storeWpm,
+      sliderValue,
+      hybridBase: hybridBasePxps,
+      hybridScale,
+    });
+  } catch {}
   sliderTouchedThisSession = true;
   recordUserWpmPx(pxs);
   setHybridScale(RECOVERY_SCALE);
@@ -2304,10 +2358,12 @@ function installScrollRouter(opts) {
   }
 
   function handleSidebarWpmChange(val: number, label: 'slider-change' | 'slider-input') {
+    if (suppressWpmUiEvents) return;
     if (!Number.isFinite(val) || val <= 0) return;
     try {
       localStorage.setItem('tp_baseline_wpm', String(val));
     } catch {}
+    userWpmLocked = true;
     const pxs = convertWpmToPxPerSec(val);
     if (!Number.isFinite(pxs) || pxs <= 0) return;
     markSliderInteraction();
@@ -2354,10 +2410,12 @@ function installScrollRouter(opts) {
   }
 
   try {
-    const handleWpmEvent = (detail: Record<string, unknown>) => {
+    const handleWpmEvent = (detail: Record<string, unknown>, eventName: string) => {
       const resolved = resolveWpmDetail(detail);
       if (!resolved) return;
       const { pxPerSec, source } = resolved;
+      if (eventName === "tp:wpm:change" && source === "sidebar") return;
+      if (source === "store" && userWpmLocked) return;
       const sourceIsSlider = isSliderWpmSource(source);
       if (liveSessionWpmLocked && !sourceIsSlider) {
         return;
@@ -2393,13 +2451,13 @@ function installScrollRouter(opts) {
 
     window.addEventListener("tp:wpm:change", (ev) => {
       try {
-        handleWpmEvent((ev as CustomEvent).detail || {});
+        handleWpmEvent((ev as CustomEvent).detail || {}, "tp:wpm:change");
       } catch {}
     });
 
     window.addEventListener("tp:wpm:intent", (ev) => {
       try {
-        handleWpmEvent((ev as CustomEvent).detail || {});
+        handleWpmEvent((ev as CustomEvent).detail || {}, "tp:wpm:intent");
       } catch {}
     });
   } catch {
