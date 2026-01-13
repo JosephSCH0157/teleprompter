@@ -1807,23 +1807,57 @@ function installScrollRouter(opts) {
     };
   }
   function computeEffectiveHybridScale(now: number, silenceState = hybridSilence) {
-    let scale = Number.isFinite(hybridScale) && hybridScale > 0 ? hybridScale : 1;
+    const scaleFromSilence = silenceState.pausedBySilence ? SILENCE_SCALE : 1;
+    const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
+    const graceActive = isHybridGraceActive(now);
+    const scaleFromGrace = graceActive ? Math.max(GRACE_MIN_SCALE, 1) : 1;
+    let chosenScale = 1;
+    let reason: 'base' | 'grace' | 'offscript' | 'silence' = 'base';
     if (silenceState.pausedBySilence) {
-      scale = Math.min(scale, SILENCE_SCALE);
+      chosenScale = Math.min(chosenScale, scaleFromSilence);
+      reason = 'silence';
     } else if (silenceState.offScriptActive) {
-      scale = Math.min(scale, OFFSCRIPT_SCALE);
+      chosenScale = Math.min(chosenScale, scaleFromOffscript);
+      reason = 'offscript';
+    } else {
+      chosenScale = scaleFromGrace;
+      reason = graceActive ? 'grace' : 'base';
     }
-    if (isHybridGraceActive(now)) {
-      scale = Math.max(scale, GRACE_MIN_SCALE);
-    }
-    return scale;
+    return {
+      scale: chosenScale,
+      reason,
+      scaleFromSilence,
+      scaleFromOffscript,
+      scaleFromGrace,
+      graceActive,
+    };
   }
 
   function applyHybridVelocity(silenceState = hybridSilence) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
-    const effectiveScale = computeEffectiveHybridScale(now, silenceState);
+    const {
+      scale: effectiveScale,
+      reason,
+      scaleFromSilence,
+      scaleFromOffscript,
+      scaleFromGrace,
+      graceActive,
+    } = computeEffectiveHybridScale(now, silenceState);
+    if (isDevMode()) {
+      try {
+        console.info('[HYBRID] scale detail', {
+          basePxps: base,
+          scaleFromSilence,
+          scaleFromOffscript,
+          scaleFromGrace,
+          graceActive,
+          chosenScale: effectiveScale,
+          reason,
+        });
+      } catch {}
+    }
     const brakeFactor = getActiveBrakeFactor(now);
     const assistBoost = getActiveAssistBoost(now);
     const effective = base * effectiveScale * brakeFactor;

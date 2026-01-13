@@ -1,8 +1,9 @@
 // Local script manager for sidebar Save/Load buttons.
 // Uses localStorage to persist a small list of scripts (title + text).
 
-import { saveToMappedFolder } from '../fs/save-script-to-mapped-folder';
-import { getMappedFolder } from '../fs/mapped-folder';
+import { clearCurrentScriptHandle } from '../fs/script-doc';
+import { saveCurrentScript, saveScriptAs, SaveScriptSuccess } from '../fs/script-save';
+import { scriptBaseName } from '../fs/script-naming';
 
 type ScriptEntry = { title: string; text: string; ts: number };
 
@@ -48,6 +49,42 @@ function dispatchLoad(name: string, text: string): void {
   } catch {
     /* ignore */
   }
+}
+
+function updateTitleFromFilename(filename: string): void {
+  const input = getTitleInput();
+  if (!input) return;
+  input.value = scriptBaseName(filename);
+}
+
+function applySavedState(result: SaveScriptSuccess, text: string): void {
+  const displayName = scriptBaseName(result.name);
+  try {
+    localStorage.setItem(TITLE_KEY, displayName);
+  } catch {}
+  try {
+    localStorage.setItem('tp_last_script_name', displayName);
+  } catch {}
+  updateTitleFromFilename(result.name);
+  dispatchLoad(displayName, text);
+}
+
+async function handleSave({ asCopy }: { asCopy: boolean }): Promise<void> {
+  const title = (getTitleInput()?.value || 'Untitled').trim();
+  const text = getText();
+  const result = asCopy
+    ? await saveScriptAs(text, { suggestedTitle: title })
+    : await saveCurrentScript(text, { suggestedTitle: title });
+
+  if (result.ok) {
+    applySavedState(result, text);
+    return;
+  }
+  if (result.reason === 'cancelled') {
+    return;
+  }
+  clearCurrentScriptHandle();
+  saveScript(title);
 }
 
 function saveScript(name: string | null | undefined): void {
@@ -120,37 +157,10 @@ function wireButton(id: string, handler: () => void): void {
 
 function initScriptsLocal(): void {
   wireButton('scriptSaveBtn', () => {
-    const t = getTitleInput();
-    const title = t?.value || 'Untitled';
-
-    if (getMappedFolder()) {
-      void (async () => {
-        const res = await saveToMappedFolder(title, getText());
-        if (!res.ok) {
-          saveScript(title);
-        }
-      })();
-      return;
-    }
-
-    saveScript(title);
+    void handleSave({ asCopy: false });
   });
   wireButton('scriptSaveAsBtn', () => {
-    const nm = prompt('Save script as:', getTitleInput()?.value || 'Untitled');
-    if (nm) {
-      const t = getTitleInput();
-      if (t) t.value = nm;
-      if (getMappedFolder()) {
-        void (async () => {
-          const res = await saveToMappedFolder(nm, getText());
-          if (!res.ok) {
-            saveScript(nm);
-          }
-        })();
-        return;
-      }
-      saveScript(nm);
-    }
+    void handleSave({ asCopy: true });
   });
   wireButton('scriptDeleteBtn', () => deleteCurrent());
   wireButton('scriptRenameBtn', () => renameCurrent());

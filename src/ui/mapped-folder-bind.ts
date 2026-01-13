@@ -2,7 +2,7 @@
 // Bind Choose Folder button + Scripts <select> to mapped-folder SSOT.
 // Safe no-op if elements are missing.
 
-import { initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
+import { getMappedFolder, initMappedFolder, listScripts, onMappedFolder, pickMappedFolder } from '../fs/mapped-folder';
 import { ScriptStore } from '../features/scripts-store';
 import { debugLog, hudLog } from '../env/logging';
 import {
@@ -10,6 +10,8 @@ import {
   loadScriptById,
   persistLastScriptId,
 } from '../features/script-selection';
+import { setCurrentScriptHandle } from '../fs/script-doc';
+import { scriptBaseName } from '../fs/script-naming';
 
 function getFolderPickerEnvironmentHint(): string {
   try {
@@ -244,6 +246,14 @@ export async function bindMappedFolderUI(opts: BindOpts): Promise<() => void> {
         const { name, text } = await readHandleOrFile(handle || file);
         try { (window as any).__tpCurrentName = name; } catch {}
         try { localStorage.setItem('tp_last_script_name', name); } catch {}
+        try {
+          const folder = getMappedFolder();
+          setCurrentScriptHandle(handle || null, folder, name);
+          const titleInput = document.getElementById('scriptTitle') as HTMLInputElement | null;
+          if (titleInput) {
+            titleInput.value = scriptBaseName(name);
+          }
+        } catch {}
         window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name, text } }));
         if (scriptId) {
           persistLastScriptId(scriptId);
