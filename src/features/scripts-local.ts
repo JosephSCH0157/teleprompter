@@ -2,7 +2,8 @@
 // Uses localStorage to persist a small list of scripts (title + text).
 
 import { clearCurrentScriptHandle } from '../fs/script-doc';
-import { saveCurrentScript, saveScriptAs, SaveScriptSuccess } from '../fs/script-save';
+import { saveCurrentScript, saveScriptAs } from '../fs/script-save';
+import type { SaveScriptSuccess } from '../fs/script-save';
 import { scriptBaseName } from '../fs/script-naming';
 
 type ScriptEntry = { title: string; text: string; ts: number };

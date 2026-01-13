@@ -142,6 +142,9 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   const after = target?.scrollTop ?? null;
   tpLastWriter = { from: meta.from, at: nowMs(), y };
   try {
+    ((window as any).__tpLastWriter = tpLastWriter);
+  } catch {}
+  try {
     console.info('[SCROLL_WRITE]', {
       ok,
       from: meta.from,
