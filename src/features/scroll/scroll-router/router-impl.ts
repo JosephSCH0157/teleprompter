@@ -1018,7 +1018,7 @@ function scheduleHybridVelocityRefresh() {
       return;
     }
     try {
-    applyHybridVelocity2(hybridSilence);
+    applyHybridVelocity(hybridSilence);
     } catch (err) {
       if (isDevMode()) {
         try {
@@ -1089,7 +1089,7 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     reason,
   };
   scheduleHybridVelocityRefresh();
-  applyHybridVelocity2(hybridSilence);
+  applyHybridVelocity(hybridSilence);
   if (isDevMode()) {
     try {
       console.info('[HYBRID_BRAKE] set', {
@@ -1902,7 +1902,7 @@ function handleHybridSilenceTimeout() {
     if (state2.mode !== "hybrid") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    applyHybridVelocity2(hybridSilence);
+    applyHybridVelocity(hybridSilence);
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
@@ -2098,7 +2098,7 @@ function handleHybridSilenceTimeout() {
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    applyHybridVelocity2(hybridSilence);
+    applyHybridVelocity(hybridSilence);
     return true;
   }
   function getActiveBrakeFactor(now = nowMs()) {
@@ -2215,7 +2215,7 @@ function handleHybridSilenceTimeout() {
       };
     }
     scheduleHybridVelocityRefresh();
-    applyHybridVelocity2(hybridSilence);
+    applyHybridVelocity(hybridSilence);
   }
 
   function handleHybridTargetHintEvent(ev: Event) {
@@ -2258,7 +2258,7 @@ function handleHybridSilenceTimeout() {
     };
   }
 
-  function applyHybridVelocity2(silenceState = hybridSilence) {
+  function applyHybridVelocityImpl(silenceState = hybridSilence) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
@@ -2329,7 +2329,8 @@ function handleHybridSilenceTimeout() {
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
   }
-  const applyHybridVelocity = applyHybridVelocity2;
+  const applyHybridVelocity2 = applyHybridVelocityImpl;
+  const applyHybridVelocity = applyHybridVelocityImpl;
   function _markHybridOffScript() {
     if (state2.mode !== "hybrid") return;
     const changed = setHybridScale(OFFSCRIPT_DEEP);
@@ -2466,7 +2467,7 @@ function handleHybridSilenceTimeout() {
         console.info(`[HYBRID] baseline updated from WPM: ${fmt(prev)} → ${fmt(candidate)}`);
       } catch {}
     }
-    applyHybridVelocity2(hybridSilence);
+    applyHybridVelocity(hybridSilence);
     return candidate;
   }
 
@@ -3013,7 +3014,7 @@ function handleHybridSilenceTimeout() {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        applyHybridVelocity2(hybridSilence);
+        applyHybridVelocity(hybridSilence);
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
