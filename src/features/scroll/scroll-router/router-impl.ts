@@ -1018,7 +1018,24 @@ function scheduleHybridVelocityRefresh() {
       return;
     }
     try {
-    applyHybridVelocity(hybridSilence);
+  ((silenceState: typeof hybridSilence) => {
+    const candidateGlobal =
+      typeof globalThis !== "undefined"
+        ? globalThis
+        : typeof window !== "undefined"
+        ? window
+        : null;
+    if (candidateGlobal) {
+      const g = candidateGlobal as any;
+      const runner =
+        typeof g.__tpApplyHybridVelocity === "function"
+          ? g.__tpApplyHybridVelocity
+          : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+      runner(silenceState);
+    } else {
+      applyHybridVelocityCore(silenceState);
+    }
+  })(hybridSilence);
     } catch (err) {
       if (isDevMode()) {
         try {
@@ -1089,7 +1106,24 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     reason,
   };
   scheduleHybridVelocityRefresh();
-  applyHybridVelocity(hybridSilence);
+  ((silenceState: typeof hybridSilence) => {
+    const candidateGlobal =
+      typeof globalThis !== "undefined"
+        ? globalThis
+        : typeof window !== "undefined"
+        ? window
+        : null;
+    if (candidateGlobal) {
+      const g = candidateGlobal as any;
+      const runner =
+        typeof g.__tpApplyHybridVelocity === "function"
+          ? g.__tpApplyHybridVelocity
+          : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+      runner(silenceState);
+    } else {
+      applyHybridVelocityCore(silenceState);
+    }
+  })(hybridSilence);
   if (isDevMode()) {
     try {
       console.info('[HYBRID_BRAKE] set', {
@@ -1902,7 +1936,24 @@ function handleHybridSilenceTimeout() {
     if (state2.mode !== "hybrid") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    applyHybridVelocity(hybridSilence);
+    ((silenceState: typeof hybridSilence) => {
+      const candidateGlobal =
+        typeof globalThis !== "undefined"
+          ? globalThis
+          : typeof window !== "undefined"
+          ? window
+          : null;
+      if (candidateGlobal) {
+        const g = candidateGlobal as any;
+        const runner =
+          typeof g.__tpApplyHybridVelocity === "function"
+            ? g.__tpApplyHybridVelocity
+            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+        runner(silenceState);
+      } else {
+        applyHybridVelocityCore(silenceState);
+      }
+    })(hybridSilence);
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
@@ -2098,7 +2149,24 @@ function handleHybridSilenceTimeout() {
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    applyHybridVelocity(hybridSilence);
+    ((silenceState: typeof hybridSilence) => {
+      const candidateGlobal =
+        typeof globalThis !== "undefined"
+          ? globalThis
+          : typeof window !== "undefined"
+          ? window
+          : null;
+      if (candidateGlobal) {
+        const g = candidateGlobal as any;
+        const runner =
+          typeof g.__tpApplyHybridVelocity === "function"
+            ? g.__tpApplyHybridVelocity
+            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+        runner(silenceState);
+      } else {
+        applyHybridVelocityCore(silenceState);
+      }
+    })(hybridSilence);
     return true;
   }
   function getActiveBrakeFactor(now = nowMs()) {
@@ -2215,7 +2283,24 @@ function handleHybridSilenceTimeout() {
       };
     }
     scheduleHybridVelocityRefresh();
-    applyHybridVelocity(hybridSilence);
+    ((silenceState: typeof hybridSilence) => {
+      const candidateGlobal =
+        typeof globalThis !== "undefined"
+          ? globalThis
+          : typeof window !== "undefined"
+          ? window
+          : null;
+      if (candidateGlobal) {
+        const g = candidateGlobal as any;
+        const runner =
+          typeof g.__tpApplyHybridVelocity === "function"
+            ? g.__tpApplyHybridVelocity
+            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+        runner(silenceState);
+      } else {
+        applyHybridVelocityCore(silenceState);
+      }
+    })(hybridSilence);
   }
 
   function handleHybridTargetHintEvent(ev: Event) {
@@ -2258,7 +2343,7 @@ function handleHybridSilenceTimeout() {
     };
   }
 
-  function applyHybridVelocityImpl(silenceState = hybridSilence) {
+  function applyHybridVelocityCore(silenceState = hybridSilence) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
@@ -2328,12 +2413,6 @@ function handleHybridSilenceTimeout() {
     hybridMotor.setVelocityPxPerSec(velocity);
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
-  }
-  function applyHybridVelocity(silenceState = hybridSilence) {
-    return applyHybridVelocityImpl(silenceState);
-  }
-  function applyHybridVelocity2(silenceState = hybridSilence) {
-    return applyHybridVelocityImpl(silenceState);
   }
   function _markHybridOffScript() {
     if (state2.mode !== "hybrid") return;
@@ -2471,7 +2550,24 @@ function handleHybridSilenceTimeout() {
         console.info(`[HYBRID] baseline updated from WPM: ${fmt(prev)} → ${fmt(candidate)}`);
       } catch {}
     }
-    applyHybridVelocity(hybridSilence);
+    ((silenceState: typeof hybridSilence) => {
+      const candidateGlobal =
+        typeof globalThis !== "undefined"
+          ? globalThis
+          : typeof window !== "undefined"
+          ? window
+          : null;
+      if (candidateGlobal) {
+        const g = candidateGlobal as any;
+        const runner =
+          typeof g.__tpApplyHybridVelocity === "function"
+            ? g.__tpApplyHybridVelocity
+            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+        runner(silenceState);
+      } else {
+        applyHybridVelocityCore(silenceState);
+      }
+    })(hybridSilence);
     return candidate;
   }
 
@@ -3018,7 +3114,24 @@ function handleHybridSilenceTimeout() {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        applyHybridVelocity(hybridSilence);
+        ((silenceState: typeof hybridSilence) => {
+          const candidateGlobal =
+            typeof globalThis !== "undefined"
+              ? globalThis
+              : typeof window !== "undefined"
+              ? window
+              : null;
+          if (candidateGlobal) {
+            const g = candidateGlobal as any;
+            const runner =
+              typeof g.__tpApplyHybridVelocity === "function"
+                ? g.__tpApplyHybridVelocity
+                : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
+            runner(silenceState);
+          } else {
+            applyHybridVelocityCore(silenceState);
+          }
+        })(hybridSilence);
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
