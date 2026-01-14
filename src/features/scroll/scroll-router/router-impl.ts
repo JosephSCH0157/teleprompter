@@ -2277,6 +2277,10 @@ function handleHybridSilenceTimeout() {
       chosenScale: effectiveScale,
       reason,
     });
+    const brakeActive = hybridBrakeState.expiresAt > now;
+    const brakeTtl = Math.max(0, hybridBrakeState.expiresAt - now);
+    const assistActive = hybridAssistState.expiresAt > now;
+    const assistTtl = Math.max(0, hybridAssistState.expiresAt - now);
     const brakeRaw = getActiveBrakeFactor(now);
     const brakeFactor = graceActive ? 1 : brakeRaw;
     const motorRunning = hybridMotor.isRunning();
@@ -2300,11 +2304,6 @@ function handleHybridSilenceTimeout() {
     const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
     const velocity = Math.max(0, effective + assistBoost);
-
-    const brakeActive = hybridBrakeState.expiresAt > now;
-    const brakeTtl = Math.max(0, hybridBrakeState.expiresAt - now);
-    const assistActive = hybridAssistState.expiresAt > now;
-    const assistTtl = Math.max(0, hybridAssistState.expiresAt - now);
     logHybridVelocityEvent({
       basePxps: base,
       chosenScale: effectiveScale,
