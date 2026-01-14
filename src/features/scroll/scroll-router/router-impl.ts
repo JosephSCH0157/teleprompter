@@ -981,6 +981,7 @@ function isSliderWpmSource(source?: unknown) {
 
 function startHybridGrace(reason: string) {
   const now = nowMs();
+  setHybridBrake(1, 0, reason ?? 'grace-reset');
   hybridGraceUntil = now + HYBRID_GRACE_DURATION_MS;
   hybridSilence.pausedBySilence = false;
   hybridSilence.lastSpeechAtMs = now;
@@ -1529,8 +1530,8 @@ function installScrollRouter(opts) {
             const fallbackPx = convertWpmToPxPerSec(fallbackWpm);
             try {
               console.warn('[HYBRID_MOTOR] basePxps missing -> seed from WPM', { fallbackWpm });
-              if (Number.isFinite(fallbackPx) && fallbackPx > 0) {
-                applyWpmBaselinePx(fallbackPx, 'hybrid-seed');
+            if (Number.isFinite(fallbackPx) && fallbackPx > 0) {
+                applyWpmBaselinePx(fallbackPx, 'hybrid-seed', fallbackWpm);
               }
             } catch (err) {
               try {
@@ -2678,44 +2679,55 @@ function handleHybridSilenceTimeout() {
    type WpmIntentSource = 'sidebar' | 'restore' | 'script-load' | 'hotkey';
    const WPM_INTENT_EVENT = 'tp:wpm:intent';
 
-  function applyWpmBaselinePx(pxs: number, source: string) {
-  if (!Number.isFinite(pxs) || pxs <= 0) return;
-  const storeWpm = (() => {
+  function applyWpmBaselinePx(pxs: number, source: string, wpmValue?: number) {
+    if (!Number.isFinite(pxs) || pxs <= 0) return;
+    const storeWpm = (() => {
+      try {
+        const raw = localStorage.getItem('tp_baseline_wpm');
+        const num = raw ? Number(raw) : NaN;
+        return Number.isFinite(num) ? num : NaN;
+      } catch {
+        return NaN;
+      }
+    })();
+    const sliderValue = (() => {
+      try {
+        const slider = document.getElementById("wpmTarget") as HTMLInputElement | null;
+        if (!slider) return NaN;
+        const num = Number(slider.value);
+        return Number.isFinite(num) ? num : NaN;
+      } catch {
+        return NaN;
+      }
+    })();
     try {
-      const raw = localStorage.getItem('tp_baseline_wpm');
-      const num = raw ? Number(raw) : NaN;
-      return Number.isFinite(num) ? num : NaN;
-    } catch {
-      return NaN;
+      console.info('[HYBRID] baseline writer', {
+        pxPerSec: pxs,
+        source,
+        storeWpm,
+        sliderValue,
+        hybridBase: hybridBasePxps,
+        hybridScale,
+      });
+    } catch {}
+    sliderTouchedThisSession = true;
+    recordUserWpmPx(pxs);
+    setHybridScale(RECOVERY_SCALE);
+    startHybridGrace(source);
+    setHybridBasePxps(pxs);
+    startHybridMotorFromSpeedChange();
+    logHybridBaselineState(source);
+    if (isDevMode()) {
+      try {
+        console.info('[HYBRID_BASE] set', {
+          pxPerSec: pxs,
+          wpm: Number.isFinite(wpmValue ?? NaN) ? wpmValue : undefined,
+          source,
+          hybridBase: hybridBasePxps,
+          scale: hybridScale,
+        });
+      } catch {}
     }
-  })();
-  const sliderValue = (() => {
-    try {
-      const slider = document.getElementById("wpmTarget") as HTMLInputElement | null;
-      if (!slider) return NaN;
-      const num = Number(slider.value);
-      return Number.isFinite(num) ? num : NaN;
-    } catch {
-      return NaN;
-    }
-  })();
-  try {
-    console.info('[HYBRID] baseline writer', {
-      pxPerSec: pxs,
-      source,
-      storeWpm,
-      sliderValue,
-      hybridBase: hybridBasePxps,
-      hybridScale,
-    });
-  } catch {}
-  sliderTouchedThisSession = true;
-  recordUserWpmPx(pxs);
-  setHybridScale(RECOVERY_SCALE);
-  startHybridGrace(source);
-  setHybridBasePxps(pxs);
-  startHybridMotorFromSpeedChange();
-  logHybridBaselineState(source);
     if (state2.mode === "wpm") {
       try { auto.setSpeed?.(pxs); } catch {}
     }
@@ -2749,7 +2761,7 @@ function handleHybridSilenceTimeout() {
     if (!Number.isFinite(pxs) || pxs <= 0) return;
     markSliderInteraction();
     emitWpmIntent(val, 'sidebar', pxs);
-    applyWpmBaselinePx(pxs, label);
+    applyWpmBaselinePx(pxs, label, val);
     if (state2.mode === 'wpm') {
       try {
         if (orchRunning) {
@@ -2769,12 +2781,14 @@ function handleHybridSilenceTimeout() {
 
   function resolveWpmDetail(detail: Record<string, unknown>) {
     const pxRaw = Number(detail.pxPerSec);
+    const incomingWpmRaw = Number(detail.wpm);
+    const incomingWpm = Number.isFinite(incomingWpmRaw) ? incomingWpmRaw : undefined;
     if (Number.isFinite(pxRaw) && pxRaw > 0) {
       const source =
         typeof detail.source === "string" && detail.source.length > 0
           ? detail.source
           : "tp:wpm:change";
-      return { pxPerSec: pxRaw, source };
+      return { pxPerSec: pxRaw, source, wpm: incomingWpm };
     }
     const wpm = Number(detail.wpm);
     if (Number.isFinite(wpm) && wpm > 0) {
@@ -2784,7 +2798,7 @@ function handleHybridSilenceTimeout() {
           typeof detail.source === "string" && detail.source.length > 0
             ? detail.source
             : "tp:wpm:intent";
-        return { pxPerSec: pxFromWpm, source };
+        return { pxPerSec: pxFromWpm, source, wpm };
       }
     }
     return null;
@@ -2794,7 +2808,7 @@ function handleHybridSilenceTimeout() {
     const handleWpmEvent = (detail: Record<string, unknown>, eventName: string) => {
       const resolved = resolveWpmDetail(detail);
       if (!resolved) return;
-      const { pxPerSec, source } = resolved;
+      const { pxPerSec, source, wpm } = resolved;
       if (eventName !== WPM_INTENT_EVENT && userWpmLocked) {
         try {
           console.warn('[WPM_LEGACY] ignored (userWpmLocked=1)', { eventName, source });
@@ -2815,7 +2829,7 @@ function handleHybridSilenceTimeout() {
       if (withinUserEvent && Math.abs(lastUserWpmPx - pxPerSec) < 0.5) {
         return;
       }
-      applyWpmBaselinePx(pxPerSec, source);
+      applyWpmBaselinePx(pxPerSec, source, wpm);
     };
 
     document.addEventListener("change", (e) => {
