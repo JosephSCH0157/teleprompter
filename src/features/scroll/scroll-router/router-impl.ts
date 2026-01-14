@@ -553,6 +553,7 @@ function logHybridPaceTelemetry(payload: any) {
 
 function logHybridScaleDetail(obj: any) {
   if (!isDevMode()) return;
+  if (state2.mode !== 'hybrid') return;
   const now = nowMs();
   if (now - lastHybridScaleLogAt < HYBRID_LOG_THROTTLE_MS) return;
   lastHybridScaleLogAt = now;
@@ -561,6 +562,7 @@ function logHybridScaleDetail(obj: any) {
     chosenScale: obj.chosenScale,
     reason: obj.reason,
     graceActive: obj.graceActive,
+    pauseLikely: !!obj.pauseLikely,
   };
   try {
     console.info('[HYBRID] scale detail', summary);
@@ -574,6 +576,7 @@ function logHybridScaleDetail(obj: any) {
 
 function logHybridBrakeEvent(payload: any) {
   if (!isDevMode()) return;
+  if (state2.mode !== 'hybrid') return;
   const now = nowMs();
   const ttl = Math.max(0, (payload.brakeExpiresAt ?? 0) - (payload.now ?? now));
   const shouldLog = payload.graceActive || payload.brakeActive || ttl > 0;
@@ -596,6 +599,7 @@ function logHybridBrakeEvent(payload: any) {
 
 function logHybridVelocityEvent(payload: any) {
   if (!isDevMode()) return;
+  if (state2.mode !== 'hybrid') return;
   const meaningful =
     payload.motorRunning ||
     payload.brakeTtl > 0 ||
@@ -626,6 +630,7 @@ function logHybridVelocityEvent(payload: any) {
 
 function logHybridMotorEvent(evt: string, data?: any) {
   if (!isDevMode()) return;
+  if (state2.mode !== 'hybrid') return;
   if (evt === 'velocity') {
     const now = nowMs();
     const signature = `${Number(data?.velocityPxPerSec ?? 0).toFixed(2)}`;
@@ -976,8 +981,11 @@ const RECOVERY_SCALE = 1;
 const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const HYBRID_GRACE_DURATION_MS = 900;
-const OFFSCRIPT_SCALE = 0.5;
-const SILENCE_SCALE = 0.1;
+const OFFSCRIPT_SCALE = 0.65;
+const SILENCE_SCALE = 0.25;
+const HYBRID_PAUSE_SILENCE_STOP_MS = 9000;
+const PAUSE_SILENCE_SCALE = 0.65;
+const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
 const GRACE_MIN_SCALE = 0.8;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
 const HYBRID_ASSIST_CAP_FRAC = 0.35;
@@ -998,6 +1006,37 @@ let hybridVelocityRefreshRaf: number | null = null;
 let hybridTargetHintState: { top: number; confidence: number; reason?: string; ts: number } | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
+function isPauseTokenText(text?: string | null) {
+  if (!text) return false;
+  const normalized = text.trim().toLowerCase();
+  if (!normalized) return false;
+  return HYBRID_PAUSE_TOKENS.some((token) => normalized.includes(token));
+}
+function isPlannedPauseLikely() {
+  if (typeof document === 'undefined') return false;
+  const container =
+    viewer ?? scrollerEl ?? (typeof document !== 'undefined' ? document.getElementById('viewer') : null);
+  if (!container) return false;
+  try {
+    const rect = container.getBoundingClientRect();
+    const nearTopY = rect.top + rect.height * 0.15;
+    const nearBottomY = rect.top + rect.height * 0.85;
+    const candidates = Array.from(container.querySelectorAll('span, div, p, li')).slice(0, 800);
+    for (const el of candidates) {
+      const text = (el.textContent ?? '').trim();
+      if (!isPauseTokenText(text)) continue;
+      const r = el.getBoundingClientRect();
+      const midY = (r.top + r.bottom) / 2;
+      if (midY >= nearTopY && midY <= nearBottomY) {
+        return true;
+      }
+    }
+  } catch {}
+  return false;
+}
+function computeHybridSilenceDelayMs() {
+  return isPlannedPauseLikely() ? HYBRID_PAUSE_SILENCE_STOP_MS : HYBRID_SILENCE_STOP_MS;
+}
 let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
@@ -1887,7 +1926,7 @@ function handleHybridSilenceTimeout() {
     }
     if (liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt) {
       const delay = Math.max(0, liveGraceWindowEndsAt - now);
-      armHybridSilenceTimer(delay || HYBRID_SILENCE_STOP_MS);
+      armHybridSilenceTimer(delay || computeHybridSilenceDelayMs());
       return;
     }
     if (state2.mode !== "hybrid") return;
@@ -1896,8 +1935,9 @@ function handleHybridSilenceTimeout() {
       sessionPhase === "live" &&
       userEnabled &&
       hybridWantedRunning;
-    if (stillEligibleForSpeech && lastSpeechAgeMs < HYBRID_SILENCE_STOP_MS) {
-      const delay = Math.max(1, HYBRID_SILENCE_STOP_MS - lastSpeechAgeMs);
+    const silenceStopMs = computeHybridSilenceDelayMs();
+    if (stillEligibleForSpeech && lastSpeechAgeMs < silenceStopMs) {
+      const delay = Math.max(1, silenceStopMs - lastSpeechAgeMs);
       armHybridSilenceTimer(delay);
       return;
     }
@@ -1912,7 +1952,7 @@ function handleHybridSilenceTimeout() {
   try {
     (window as any).__tp_handleHybridSilenceTimeout = handleHybridSilenceTimeout;
   } catch {}
-  function armHybridSilenceTimer(delay: number = HYBRID_SILENCE_STOP_MS) {
+function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     clearHybridSilenceTimer();
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     const nextDelay = Math.max(1, delay);
@@ -2266,10 +2306,15 @@ function handleHybridSilenceTimeout() {
     };
   }
   function computeEffectiveHybridScale(now: number, silenceState = hybridSilence) {
-    const scaleFromSilence = silenceState.pausedBySilence ? SILENCE_SCALE : 1;
-    const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
-    const graceActive = isHybridGraceActive(now);
-    const scaleFromGrace = graceActive ? Math.max(GRACE_MIN_SCALE, 1) : 1;
+  const pauseLikely = isPlannedPauseLikely();
+  const scaleFromSilence = silenceState.pausedBySilence
+    ? pauseLikely
+      ? PAUSE_SILENCE_SCALE
+      : SILENCE_SCALE
+    : 1;
+  const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
+  const graceActive = isHybridGraceActive(now);
+  const scaleFromGrace = graceActive ? Math.max(GRACE_MIN_SCALE, 1) : 1;
     let chosenScale = 1;
     let reason: 'base' | 'grace' | 'offscript' | 'silence' = 'base';
     if (silenceState.pausedBySilence) {
@@ -2289,6 +2334,7 @@ function handleHybridSilenceTimeout() {
       scaleFromOffscript,
       scaleFromGrace,
       graceActive,
+      pauseLikely,
     };
   }
 
@@ -2296,14 +2342,15 @@ function handleHybridSilenceTimeout() {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
-    const {
-      scale: effectiveScale,
-      reason,
-      scaleFromSilence,
-      scaleFromOffscript,
-      scaleFromGrace,
-      graceActive,
-    } = computeEffectiveHybridScale(now, silenceState);
+  const {
+    scale: effectiveScale,
+    reason,
+    scaleFromSilence,
+    scaleFromOffscript,
+    scaleFromGrace,
+    graceActive,
+    pauseLikely,
+  } = computeEffectiveHybridScale(now, silenceState);
     logHybridScaleDetail({
       basePxps: base,
       scaleFromSilence,
@@ -2312,6 +2359,7 @@ function handleHybridSilenceTimeout() {
       graceActive,
       chosenScale: effectiveScale,
       reason,
+      pauseLikely,
     });
     const brakeActive = hybridBrakeState.expiresAt > now;
     const brakeTtl = Math.max(0, hybridBrakeState.expiresAt - now);
@@ -2622,7 +2670,8 @@ function handleHybridSilenceTimeout() {
     const baseHybridPxPerSec = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
     const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
     const liveGraceActive = isLiveGraceActive(now);
-    const isSilent = !liveGraceActive && lastSpeechAgeMs >= HYBRID_SILENCE_STOP_MS;
+    const silenceStopMs = computeHybridSilenceDelayMs();
+    const isSilent = !liveGraceActive && lastSpeechAgeMs >= silenceStopMs;
     const speechAllowed = !isSilent;
     const gateSatisfied = isHybridBypass() ? true : gateWanted;
     const wantEnabled =
@@ -3066,7 +3115,7 @@ function handleHybridSilenceTimeout() {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
         }
-        armHybridSilenceTimer(HYBRID_SILENCE_STOP_MS);
+        armHybridSilenceTimer(computeHybridSilenceDelayMs());
         emitHybridSafety();
         applyGate();
         if (isDevMode()) {
