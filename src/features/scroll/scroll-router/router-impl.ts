@@ -1952,13 +1952,25 @@ function handleHybridSilenceTimeout() {
     return hybridBrakeState.factor;
   }
   function setHybridBrake(factor: number, ttlMs: number, reason: string | null = null) {
+    const safeFactor = Number.isFinite(factor) ? clamp(factor, 0, 1) : 1;
+    const rawTtl = Number.isFinite(ttlMs) ? ttlMs : 0;
+    const ttl = Math.max(0, Math.min(HYBRID_EVENT_TTL_MAX, rawTtl));
     const now = nowMs();
-    const expiresAt = ttlMs > 0 ? now + ttlMs : now;
+    const expiresAt = ttl > 0 ? now + ttl : 0;
     hybridBrakeState = {
-      factor,
+      factor: safeFactor,
       expiresAt,
       reason,
     };
+    if (typeof window !== "undefined") {
+      scheduleHybridVelocityRefresh();
+      applyHybridVelocity(hybridSilence);
+    }
+    if (isDevMode()) {
+      try {
+        console.info("[HYBRID_BRAKE] set", { factor: safeFactor, ttl, reason });
+      } catch {}
+    }
   }
 
   function getActiveAssistBoost(now = nowMs()) {
@@ -2084,9 +2096,6 @@ function handleHybridSilenceTimeout() {
         );
       } catch {}
     }
-
-    scheduleHybridVelocityRefresh();
-    applyHybridVelocity(hybridSilence);
   }
 
   function handleHybridAssistEvent(ev: Event) {

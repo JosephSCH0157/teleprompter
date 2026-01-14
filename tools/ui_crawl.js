@@ -266,6 +266,15 @@ const cp = require('child_process');
       }
     }
 
+    const uploadCandidate = await page.evaluate(() => {
+      const el = document.getElementById('uploadBtn');
+      if (!el) return null;
+      return { id: el.id, text: el.textContent && el.textContent.trim().slice(0,80) || null };
+    });
+    if (uploadCandidate && !out.clicked.find((c) => c && c.id === uploadCandidate.id)) {
+      out.clicked.push(uploadCandidate);
+    }
+
     // attempt to toggle a few checkboxes (use evaluate to avoid 'not clickable' issues)
     try {
       const boxCount = await page.evaluate(() => document.querySelectorAll('[type=checkbox]').length);

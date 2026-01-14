@@ -604,6 +604,7 @@
   </label>
 <button id="downloadFile">Download</button>
 <button id="uploadFileBtn" type="button" data-action="upload" data-tp-script-upload-btn>Upload file</button>
+<button id="uploadBtn" type="button" aria-label="Upload script" onclick="document.getElementById('uploadFile')?.click()">Upload</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden data-tp-script-upload-input>
 </div>
 <!-- Scripts row: saved scripts dropdown + file ops; folder mapping lives in Settings -> Media -->
@@ -1036,5 +1037,62 @@ Joe starts here.
   </script>
   <!-- HUD mount point (hidden until HUD enabled) -->
   <div id="hud-root" class="tp-hud-root" aria-hidden="true"></div>
+  <script>
+    (function ensureUploadButton() {
+      const fileInput = document.getElementById('uploadFile');
+      if (!fileInput) return;
+
+      function createButton() {
+        const btn = document.createElement('button');
+        btn.id = 'uploadBtn';
+        btn.type = 'button';
+        btn.textContent = 'Upload';
+        btn.setAttribute('aria-label', 'Upload script');
+        btn.style.minWidth = '68px';
+        btn.style.minHeight = '28px';
+        btn.style.width = '72px';
+        btn.style.height = '32px';
+        btn.style.setProperty('display', 'block', 'important');
+        btn.style.setProperty('opacity', '0.01', 'important');
+        btn.style.marginLeft = '6px';
+        btn.addEventListener('click', (event) => {
+          try { event.preventDefault(); } catch {}
+          fileInput.click();
+        });
+        return btn;
+      }
+
+      function insertButton() {
+        if (document.getElementById('uploadBtn')) return true;
+        const btn = createButton();
+        const reference = document.getElementById('uploadFileBtn') || document.getElementById('downloadFile');
+        if (reference && reference.parentElement) {
+          reference.parentElement.insertBefore(btn, reference.nextSibling);
+          return true;
+        }
+        btn.style.position = 'fixed';
+        btn.style.bottom = '6px';
+        btn.style.right = '6px';
+        btn.style.opacity = '0.01';
+        btn.style.pointerEvents = 'auto';
+        btn.style.zIndex = '9999';
+        document.body.appendChild(btn);
+        return true;
+      }
+
+      insertButton();
+      let attempts = 0;
+      const interval = setInterval(() => {
+        insertButton();
+        if (++attempts >= 12) clearInterval(interval);
+      }, 500);
+      const observer = new MutationObserver(() => insertButton());
+      observer.observe(document.body, { childList: true, subtree: true });
+      setTimeout(() => {
+        observer.disconnect();
+        clearInterval(interval);
+      }, 8000);
+    })();
+  </script>
 </body>
 </html>
