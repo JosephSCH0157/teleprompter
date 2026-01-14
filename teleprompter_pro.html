@@ -604,8 +604,16 @@
   </label>
 <button id="downloadFile">Download</button>
 <button id="uploadFileBtn" type="button" data-action="upload" data-tp-script-upload-btn>Upload file</button>
-<button id="uploadBtn" type="button" aria-label="Upload script" onclick="document.getElementById('uploadFile')?.click()">Upload</button>
+<button id="uploadBtn" type="button" aria-label="Upload script">Upload</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden data-tp-script-upload-input>
+<script>
+  (function () {
+    const btn = document.getElementById('uploadBtn');
+    const input = document.getElementById('uploadFile');
+    if (!btn || !input) return;
+    btn.addEventListener('click', () => input.click());
+  })();
+</script>
 </div>
 <!-- Scripts row: saved scripts dropdown + file ops; folder mapping lives in Settings -> Media -->
   <div class="row" id="sidebarScriptsRow">

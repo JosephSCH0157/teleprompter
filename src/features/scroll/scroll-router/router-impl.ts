@@ -910,6 +910,11 @@ const SILENCE_SCALE = 0.1;
 const GRACE_MIN_SCALE = 0.8;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
 const HYBRID_ASSIST_CAP_FRAC = 0.35;
+const HYBRID_EVENT_TTL_MIN = 20;
+const HYBRID_EVENT_TTL_MAX = 2000;
+const HYBRID_BRAKE_DEFAULT_TTL = 320;
+const HYBRID_ASSIST_DEFAULT_TTL = 320;
+const HYBRID_ASSIST_MAX_BOOST = 420;
   const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
   const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
   let lastHybridGateFingerprint: string | null = null;
@@ -936,6 +941,31 @@ let wpmSliderUserTouched = false;
 let suppressWpmUiEcho = false;
 let lastWpmIntent: { wpm: number; source?: string; at: number } | null = null;
 let userWpmLocked = false;
+
+function setHybridBrake(factor: number, ttlMs: number, reason: string | null = null) {
+  const safeFactor = Number.isFinite(factor) ? clamp(factor, 0, 1) : 1;
+  const rawTtl = Number.isFinite(ttlMs) ? ttlMs : 0;
+  const ttl = Math.max(0, Math.min(HYBRID_EVENT_TTL_MAX, rawTtl));
+  const now = nowMs();
+  const expiresAt = ttl > 0 ? now + ttl : 0;
+  hybridBrakeState = {
+    factor: safeFactor,
+    expiresAt,
+    reason,
+  };
+  scheduleHybridVelocityRefresh();
+  applyHybridVelocity(hybridSilence);
+  if (isDevMode()) {
+    try {
+      console.info('[HYBRID_BRAKE] set', {
+        factor: safeFactor,
+        ttl,
+        expiresAt: hybridBrakeState.expiresAt,
+        reason: hybridBrakeState.reason,
+      });
+    } catch {}
+  }
+}
 
 
 function recordUserWpmPx(pxs: number) {
@@ -1936,12 +1966,6 @@ function handleHybridSilenceTimeout() {
     applyHybridVelocity(hybridSilence);
     return true;
   }
-  const HYBRID_EVENT_TTL_MIN = 20;
-  const HYBRID_EVENT_TTL_MAX = 2000;
-  const HYBRID_BRAKE_DEFAULT_TTL = 320;
-  const HYBRID_ASSIST_DEFAULT_TTL = 320;
-  const HYBRID_ASSIST_MAX_BOOST = 420;
-
   function getActiveBrakeFactor(now = nowMs()) {
     if (hybridBrakeState.expiresAt <= now) {
       if (hybridBrakeState.factor !== 1 || hybridBrakeState.expiresAt !== 0) {
@@ -1951,28 +1975,6 @@ function handleHybridSilenceTimeout() {
     }
     return hybridBrakeState.factor;
   }
-  function setHybridBrake(factor: number, ttlMs: number, reason: string | null = null) {
-    const safeFactor = Number.isFinite(factor) ? clamp(factor, 0, 1) : 1;
-    const rawTtl = Number.isFinite(ttlMs) ? ttlMs : 0;
-    const ttl = Math.max(0, Math.min(HYBRID_EVENT_TTL_MAX, rawTtl));
-    const now = nowMs();
-    const expiresAt = ttl > 0 ? now + ttl : 0;
-    hybridBrakeState = {
-      factor: safeFactor,
-      expiresAt,
-      reason,
-    };
-    if (typeof window !== "undefined") {
-      scheduleHybridVelocityRefresh();
-      applyHybridVelocity(hybridSilence);
-    }
-    if (isDevMode()) {
-      try {
-        console.info("[HYBRID_BRAKE] set", { factor: safeFactor, ttl, reason });
-      } catch {}
-    }
-  }
-
   function getActiveAssistBoost(now = nowMs()) {
     if (hybridAssistState.expiresAt <= now) {
       if (hybridAssistState.boostPxps !== 0 || hybridAssistState.expiresAt !== 0) {
