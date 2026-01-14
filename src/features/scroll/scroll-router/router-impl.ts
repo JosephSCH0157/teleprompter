@@ -515,6 +515,9 @@ let lastHybridScaleLogAt = 0;
 let lastHybridPaceLogAt = 0;
 let lastHybridBrakeLogAt = 0;
 let lastHybridVelocityLogAt = 0;
+const HYBRID_MOTOR_LOG_THROTTLE_MS = 500;
+let lastHybridMotorVelocityLogAt = 0;
+let lastHybridMotorVelocitySignature = '';
 let lastHybridBrakeSignature = '';
 let lastHybridVelocitySignature = '';
 const isHybridVerboseDevMode = (() => {
@@ -609,6 +612,20 @@ function logHybridVelocityEvent(payload: any) {
   ];
   try {
     console.info(`[HYBRID_VELOCITY] ${summary.join(' ')}`, payload);
+  } catch {}
+}
+
+function logHybridMotorEvent(evt: string, data?: any) {
+  if (!isDevMode()) return;
+  if (evt === 'velocity') {
+    const now = nowMs();
+    const signature = `${Number(data?.velocityPxPerSec ?? 0).toFixed(2)}`;
+    if (signature === lastHybridMotorVelocitySignature && now - lastHybridMotorVelocityLogAt < HYBRID_MOTOR_LOG_THROTTLE_MS) return;
+    lastHybridMotorVelocitySignature = signature;
+    lastHybridMotorVelocityLogAt = now;
+  }
+  try {
+    console.debug('[HybridMotor]', evt, data);
   } catch {}
 }
 
@@ -932,9 +949,7 @@ const hybridMotor = createHybridWpmMotor({
   getWriter: () => scrollWriter,
   getScrollTop: () => (viewer ? (viewer.scrollTop || 0) : 0),
   getMaxScrollTop: () => (viewer ? Math.max(0, viewer.scrollHeight - viewer.clientHeight) : Number.POSITIVE_INFINITY),
-  log: isDevMode() ? (evt, data) => {
-    try { console.debug('[HybridMotor]', evt, data); } catch {}
-  } : () => {},
+  log: isDevMode() ? logHybridMotorEvent : () => {},
 });
 try {
   (window as any).__tpHybridMotor = hybridMotor;
