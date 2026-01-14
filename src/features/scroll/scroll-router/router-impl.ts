@@ -985,7 +985,9 @@ function startHybridGrace(reason: string) {
   hybridSilence.pausedBySilence = false;
   hybridSilence.lastSpeechAtMs = now;
   hybridSilence.offScriptActive = false;
-  clearHybridSilenceTimer();
+  if (typeof clearHybridSilenceTimer === 'function') {
+    clearHybridSilenceTimer();
+  }
   if (hybridWantedRunning) {
     armHybridSilenceTimer(HYBRID_GRACE_DURATION_MS);
   }
