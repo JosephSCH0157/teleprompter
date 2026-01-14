@@ -515,6 +515,8 @@ let lastHybridScaleLogAt = 0;
 let lastHybridPaceLogAt = 0;
 let lastHybridBrakeLogAt = 0;
 let lastHybridVelocityLogAt = 0;
+let lastHybridBrakeSignature = '';
+let lastHybridVelocitySignature = '';
 const isHybridVerboseDevMode = (() => {
   if (typeof window === 'undefined') return false;
   try {
@@ -570,20 +572,43 @@ function logHybridScaleDetail(obj: any) {
 function logHybridBrakeEvent(payload: any) {
   if (!isDevMode()) return;
   const now = nowMs();
-  if (now - lastHybridBrakeLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  const signature = `${payload.brakeFactor.toFixed(3)}|${payload.brakeReason ?? ''}|${Math.round(payload.brakeExpiresAt ?? 0)}`;
+  const changed = signature !== lastHybridBrakeSignature;
+  if (!changed && now - lastHybridBrakeLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  lastHybridBrakeSignature = signature;
   lastHybridBrakeLogAt = now;
+  const ttl = Math.max(0, (payload.brakeExpiresAt ?? 0) - (payload.now ?? now));
+  const desc = [
+    `brake=${payload.brakeFactor.toFixed(3)}`,
+    `ttl=${Math.round(ttl)}`,
+    `reason=${payload.brakeReason ?? 'none'}`,
+  ];
+  if (payload.graceActive) desc.push('grace');
   try {
-    console.info(`[HYBRID_BRAKE] ${JSON.stringify(payload)}`);
+    console.info(`[HYBRID_BRAKE] ${desc.join(' ')}`, payload);
   } catch {}
 }
 
 function logHybridVelocityEvent(payload: any) {
   if (!isDevMode()) return;
   const now = nowMs();
-  if (now - lastHybridVelocityLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  const signature = `${payload.velocity.toFixed(2)}|${payload.brakeFactor.toFixed(3)}|${payload.assistBoost.toFixed(3)}|${payload.reason}|${payload.brakeActive ? 'b' : ''}|${payload.assistActive ? 'a' : ''}`;
+  const changed = signature !== lastHybridVelocitySignature;
+  if (!changed && now - lastHybridVelocityLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  lastHybridVelocitySignature = signature;
   lastHybridVelocityLogAt = now;
+  const clampState = payload.chosenScale < 0.999 ? 'clamped' : 'free';
+  const summary = [
+    `base=${payload.basePxps.toFixed(1)}`,
+    `eff=${payload.velocity.toFixed(1)}`,
+    `scale=${payload.chosenScale.toFixed(2)}`,
+    `clamp=${clampState}`,
+    `brake=${payload.brakeFactor.toFixed(2)}${payload.brakeActive ? ` ttl=${Math.round(payload.brakeTtl)}` : ''}`,
+    `assist=${payload.assistBoost.toFixed(1)}${payload.assistActive ? ` ttl=${Math.round(payload.assistTtl)}` : ''}`,
+    `reason=${payload.reason}`,
+  ];
   try {
-    console.info(`[HYBRID_VELOCITY] ${JSON.stringify(payload)}`);
+    console.info(`[HYBRID_VELOCITY] ${summary.join(' ')}`, payload);
   } catch {}
 }
 
@@ -2217,6 +2242,10 @@ function handleHybridSilenceTimeout() {
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
     const velocity = Math.max(0, effective + assistBoost);
 
+    const brakeActive = hybridBrakeState.expiresAt > now;
+    const brakeTtl = Math.max(0, hybridBrakeState.expiresAt - now);
+    const assistActive = hybridAssistState.expiresAt > now;
+    const assistTtl = Math.max(0, hybridAssistState.expiresAt - now);
     logHybridVelocityEvent({
       basePxps: base,
       chosenScale: effectiveScale,
@@ -2228,6 +2257,10 @@ function handleHybridSilenceTimeout() {
       suppressAssist,
       velocity,
       reason,
+      brakeActive,
+      brakeTtl,
+      assistActive,
+      assistTtl,
     });
 
     hybridMotor.setVelocityPxPerSec(velocity);
