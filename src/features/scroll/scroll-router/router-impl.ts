@@ -922,7 +922,7 @@ const HYBRID_ASSIST_MAX_BOOST = 420;
   let hybridScale = RECOVERY_SCALE;
 let hybridBrakeState = { factor: 1, expiresAt: 0, reason: null as string | null };
 let hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null as string | null };
-let hybridEventRefreshTimer: number | null = null;
+let hybridVelocityRefreshRaf: number | null = null;
 let hybridTargetHintState: { top: number; confidence: number; reason?: string; ts: number } | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
@@ -1986,38 +1986,32 @@ function handleHybridSilenceTimeout() {
   }
 
   function scheduleHybridVelocityRefresh() {
-    if (hybridEventRefreshTimer != null) {
-      try {
-        window.clearTimeout(hybridEventRefreshTimer);
-      } catch {
-        // ignore
-      }
-      hybridEventRefreshTimer = null;
-    }
+    if (hybridVelocityRefreshRaf != null) return;
     if (typeof window === "undefined") return;
-    const now = nowMs();
-    const candidates: number[] = [];
-    if (hybridBrakeState.expiresAt > now) candidates.push(hybridBrakeState.expiresAt);
-    if (hybridAssistState.expiresAt > now) candidates.push(hybridAssistState.expiresAt);
-    if (!candidates.length) return;
-    const nextExpiry = Math.min(...candidates);
-    hybridEventRefreshTimer = window.setTimeout(() => {
-      hybridEventRefreshTimer = null;
-      if (state2.mode === "hybrid") {
+    hybridVelocityRefreshRaf = window.requestAnimationFrame(() => {
+      hybridVelocityRefreshRaf = null;
+      if (state2.mode !== "hybrid") return;
+      try {
         applyHybridVelocity(hybridSilence);
+      } catch (err) {
+        if (isDevMode()) {
+          try {
+            console.warn('[HYBRID] velocity refresh failed', err);
+          } catch {}
+        }
       }
-    }, Math.max(10, nextExpiry - now));
+    });
   }
 
   function cancelHybridVelocityRefresh() {
-    if (hybridEventRefreshTimer != null && typeof window !== "undefined") {
+    if (hybridVelocityRefreshRaf != null && typeof window !== "undefined") {
       try {
-        window.clearTimeout(hybridEventRefreshTimer);
+        window.cancelAnimationFrame(hybridVelocityRefreshRaf);
       } catch {
         // ignore
       }
     }
-    hybridEventRefreshTimer = null;
+    hybridVelocityRefreshRaf = null;
     hybridBrakeState = { factor: 1, expiresAt: 0, reason: null };
     hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
     hybridTargetHintState = null;
