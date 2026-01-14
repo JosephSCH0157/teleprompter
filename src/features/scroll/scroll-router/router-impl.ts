@@ -993,7 +993,13 @@ function startHybridGrace(reason: string) {
     hybridSilence.timeoutId = null;
   }
   if (hybridWantedRunning) {
-    armHybridSilenceTimer(HYBRID_GRACE_DURATION_MS);
+    const delay = Math.max(1, HYBRID_GRACE_DURATION_MS);
+    const handler = (window as any).__tp_handleHybridSilenceTimeout as (() => void) | undefined;
+    if (typeof handler === 'function') {
+      hybridSilence.timeoutId = window.setTimeout(() => handler(), delay);
+    } else {
+      hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), delay);
+    }
   }
   if (isDevMode()) {
     try {
@@ -1687,8 +1693,8 @@ function installScrollRouter(opts) {
       return false;
     }
   }
-  function handleHybridSilenceTimeout() {
-    hybridSilence.timeoutId = null;
+function handleHybridSilenceTimeout() {
+  hybridSilence.timeoutId = null;
     const now = nowMs();
     if (liveGraceWindowEndsAt != null && now >= liveGraceWindowEndsAt) {
       liveGraceWindowEndsAt = null;
@@ -1715,8 +1721,11 @@ function installScrollRouter(opts) {
     hybridMotor.stop();
     emitMotorState("hybridWpm", false);
     emitHybridSafety();
-    try { applyGate(); } catch {}
-  }
+  try { applyGate(); } catch {}
+}
+  try {
+    (window as any).__tp_handleHybridSilenceTimeout = handleHybridSilenceTimeout;
+  } catch {}
   function armHybridSilenceTimer(delay: number = HYBRID_SILENCE_STOP_MS) {
     clearHybridSilenceTimer();
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
