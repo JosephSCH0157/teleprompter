@@ -575,12 +575,14 @@ function logHybridScaleDetail(obj: any) {
 function logHybridBrakeEvent(payload: any) {
   if (!isDevMode()) return;
   const now = nowMs();
-  const signature = `${payload.brakeFactor.toFixed(3)}|${payload.brakeReason ?? ''}|${Math.round(payload.brakeExpiresAt ?? 0)}`;
+  const ttl = Math.max(0, (payload.brakeExpiresAt ?? 0) - (payload.now ?? now));
+  const shouldLog = payload.motorRunning || payload.graceActive || ttl > 0;
+  if (!shouldLog) return;
+  const signature = `${payload.brakeFactor.toFixed(3)}|${payload.brakeReason ?? ''}|${payload.brakeActive ? '1' : '0'}|${payload.motorRunning ? 'r' : 's'}`;
   const changed = signature !== lastHybridBrakeSignature;
   if (!changed && now - lastHybridBrakeLogAt < HYBRID_LOG_THROTTLE_MS) return;
   lastHybridBrakeSignature = signature;
   lastHybridBrakeLogAt = now;
-  const ttl = Math.max(0, (payload.brakeExpiresAt ?? 0) - (payload.now ?? now));
   const desc = [
     `brake=${payload.brakeFactor.toFixed(3)}`,
     `ttl=${Math.round(ttl)}`,
@@ -594,8 +596,15 @@ function logHybridBrakeEvent(payload: any) {
 
 function logHybridVelocityEvent(payload: any) {
   if (!isDevMode()) return;
+  const meaningful =
+    payload.motorRunning ||
+    payload.brakeTtl > 0 ||
+    payload.assistBoost > 0 ||
+    payload.graceActive ||
+    payload.chosenScale < 0.999;
+  if (!meaningful) return;
   const now = nowMs();
-  const signature = `${payload.velocity.toFixed(2)}|${payload.brakeFactor.toFixed(3)}|${payload.assistBoost.toFixed(3)}|${payload.reason}|${payload.brakeActive ? 'b' : ''}|${payload.assistActive ? 'a' : ''}`;
+  const signature = `${payload.velocity.toFixed(2)}|${payload.brakeFactor.toFixed(3)}|${payload.assistBoost.toFixed(3)}|${payload.reason}|${payload.brakeActive ? 'b' : ''}|${payload.assistActive ? 'a' : ''}|${payload.motorRunning ? 'r' : 's'}`;
   const changed = signature !== lastHybridVelocitySignature;
   if (!changed && now - lastHybridVelocityLogAt < HYBRID_LOG_THROTTLE_MS) return;
   lastHybridVelocitySignature = signature;
@@ -2048,11 +2057,20 @@ function handleHybridSilenceTimeout() {
   }
 
   function scheduleHybridVelocityRefresh() {
+    if (!shouldHybridRefresh()) {
+      stopHybridVelocityRefresh();
+      return;
+    }
     if (hybridVelocityRefreshRaf != null) return;
     if (typeof window === "undefined") return;
     hybridVelocityRefreshRaf = window.requestAnimationFrame(() => {
       hybridVelocityRefreshRaf = null;
       if (state2.mode !== "hybrid") return;
+      const now = nowMs();
+      if (!shouldHybridRefresh(now)) {
+        stopHybridVelocityRefresh();
+        return;
+      }
       try {
         applyHybridVelocity(hybridSilence);
       } catch (err) {
@@ -2077,6 +2095,28 @@ function handleHybridSilenceTimeout() {
     hybridBrakeState = { factor: 1, expiresAt: 0, reason: null };
     hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
     hybridTargetHintState = null;
+  }
+
+  function stopHybridVelocityRefresh() {
+    if (hybridVelocityRefreshRaf != null && typeof window !== "undefined") {
+      try {
+        window.cancelAnimationFrame(hybridVelocityRefreshRaf);
+      } catch {
+        // ignore
+      }
+    }
+    hybridVelocityRefreshRaf = null;
+  }
+
+  function shouldHybridRefresh(now: number = nowMs()) {
+    if (state2.mode !== "hybrid") return false;
+    if (hybridMotor.isRunning()) return true;
+    if (isHybridGraceActive(now)) return true;
+    const brakeActive = hybridBrakeState.expiresAt > now;
+    if (brakeActive) return true;
+    if (hybridAssistState.expiresAt > now) return true;
+    if (hybridTargetHintState != null) return true;
+    return false;
   }
 
   function handleHybridBrakeEvent(ev: Event) {
@@ -2239,6 +2279,7 @@ function handleHybridSilenceTimeout() {
     });
     const brakeRaw = getActiveBrakeFactor(now);
     const brakeFactor = graceActive ? 1 : brakeRaw;
+    const motorRunning = hybridMotor.isRunning();
     logHybridBrakeEvent({
       now,
       brakeRaw,
@@ -2246,6 +2287,9 @@ function handleHybridSilenceTimeout() {
       graceActive,
       brakeExpiresAt: hybridBrakeState.expiresAt,
       brakeReason: hybridBrakeState.reason,
+      brakeActive,
+      brakeTtl,
+      motorRunning,
     });
     const rawAssist = getActiveAssistBoost(now);
     const effective = base * effectiveScale * brakeFactor;
@@ -2276,6 +2320,8 @@ function handleHybridSilenceTimeout() {
       brakeTtl,
       assistActive,
       assistTtl,
+      graceActive,
+      motorRunning,
     });
 
     hybridMotor.setVelocityPxPerSec(velocity);
