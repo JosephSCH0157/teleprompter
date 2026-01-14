@@ -513,6 +513,8 @@ const HYBRID_LOG_THROTTLE_MS = 500;
 const HYBRID_VERBOSE_FLAG = 'hybrid-dev';
 let lastHybridScaleLogAt = 0;
 let lastHybridPaceLogAt = 0;
+let lastHybridBrakeLogAt = 0;
+let lastHybridVelocityLogAt = 0;
 const isHybridVerboseDevMode = (() => {
   if (typeof window === 'undefined') return false;
   try {
@@ -563,6 +565,26 @@ function logHybridScaleDetail(obj: any) {
       console.info(`[HYBRID] scale detail ${JSON.stringify(obj)}`);
     } catch {}
   }
+}
+
+function logHybridBrakeEvent(payload: any) {
+  if (!isDevMode()) return;
+  const now = nowMs();
+  if (now - lastHybridBrakeLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  lastHybridBrakeLogAt = now;
+  try {
+    console.info(`[HYBRID_BRAKE] ${JSON.stringify(payload)}`);
+  } catch {}
+}
+
+function logHybridVelocityEvent(payload: any) {
+  if (!isDevMode()) return;
+  const now = nowMs();
+  if (now - lastHybridVelocityLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  lastHybridVelocityLogAt = now;
+  try {
+    console.info(`[HYBRID_VELOCITY] ${JSON.stringify(payload)}`);
+  } catch {}
 }
 
 function convertWpmToPxPerSec(targetWpm: number) {
@@ -2177,20 +2199,14 @@ function handleHybridSilenceTimeout() {
     });
     const brakeRaw = getActiveBrakeFactor(now);
     const brakeFactor = graceActive ? 1 : brakeRaw;
-    if (isDevMode()) {
-      try {
-        console.info(
-          `[HYBRID_BRAKE] ${JSON.stringify({
-            now,
-            brakeRaw,
-            brakeFactor,
-            graceActive,
-            brakeExpiresAt: hybridBrakeState.expiresAt,
-            brakeReason: hybridBrakeState.reason,
-          })}`,
-        );
-      } catch {}
-    }
+    logHybridBrakeEvent({
+      now,
+      brakeRaw,
+      brakeFactor,
+      graceActive,
+      brakeExpiresAt: hybridBrakeState.expiresAt,
+      brakeReason: hybridBrakeState.reason,
+    });
     const rawAssist = getActiveAssistBoost(now);
     const effective = base * effectiveScale * brakeFactor;
     const suppressAssist =
@@ -2201,24 +2217,18 @@ function handleHybridSilenceTimeout() {
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
     const velocity = Math.max(0, effective + assistBoost);
 
-    if (isDevMode()) {
-      try {
-        console.info(
-          `[HYBRID_VELOCITY] ${JSON.stringify({
-            basePxps: base,
-            chosenScale: effectiveScale,
-            brakeFactor,
-            effective,
-            rawAssist,
-            assistCap,
-            assistBoost,
-            suppressAssist,
-            velocity,
-            reason,
-          })}`,
-        );
-      } catch {}
-    }
+    logHybridVelocityEvent({
+      basePxps: base,
+      chosenScale: effectiveScale,
+      brakeFactor,
+      effective,
+      rawAssist,
+      assistCap,
+      assistBoost,
+      suppressAssist,
+      velocity,
+      reason,
+    });
 
     hybridMotor.setVelocityPxPerSec(velocity);
     emitHybridSafety();
