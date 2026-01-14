@@ -1018,24 +1018,11 @@ function scheduleHybridVelocityRefresh() {
       return;
     }
     try {
-  ((silenceState: typeof hybridSilence) => {
-    const candidateGlobal =
-      typeof globalThis !== "undefined"
-        ? globalThis
-        : typeof window !== "undefined"
-        ? window
-        : null;
-    if (candidateGlobal) {
-      const g = candidateGlobal as any;
-      const runner =
-        typeof g.__tpApplyHybridVelocity === "function"
-          ? g.__tpApplyHybridVelocity
-          : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-      runner(silenceState);
-    } else {
-      applyHybridVelocityCore(silenceState);
-    }
-  })(hybridSilence);
+      (() => {
+        const target = typeof window !== 'undefined' ? window : globalThis;
+        const fn = (target as any).__tpApplyHybridVelocity;
+        (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+      })();
     } catch (err) {
       if (isDevMode()) {
         try {
@@ -1047,7 +1034,7 @@ function scheduleHybridVelocityRefresh() {
 }
 
 function cancelHybridVelocityRefresh() {
-  if (hybridVelocityRefreshRaf != null && typeof window === "undefined") {
+  if (hybridVelocityRefreshRaf != null && typeof window !== "undefined") {
     try {
       window.cancelAnimationFrame(hybridVelocityRefreshRaf);
     } catch {
@@ -1061,7 +1048,7 @@ function cancelHybridVelocityRefresh() {
 }
 
 function stopHybridVelocityRefresh() {
-  if (hybridVelocityRefreshRaf != null && typeof window === "undefined") {
+  if (hybridVelocityRefreshRaf != null && typeof window !== "undefined") {
     try {
       window.cancelAnimationFrame(hybridVelocityRefreshRaf);
     } catch {
@@ -1106,24 +1093,11 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     reason,
   };
   scheduleHybridVelocityRefresh();
-  ((silenceState: typeof hybridSilence) => {
-    const candidateGlobal =
-      typeof globalThis !== "undefined"
-        ? globalThis
-        : typeof window !== "undefined"
-        ? window
-        : null;
-    if (candidateGlobal) {
-      const g = candidateGlobal as any;
-      const runner =
-        typeof g.__tpApplyHybridVelocity === "function"
-          ? g.__tpApplyHybridVelocity
-          : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-      runner(silenceState);
-    } else {
-      applyHybridVelocityCore(silenceState);
-    }
-  })(hybridSilence);
+  (() => {
+    const target = typeof window !== 'undefined' ? window : globalThis;
+    const fn = (target as any).__tpApplyHybridVelocity;
+    (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+  })();
   if (isDevMode()) {
     try {
       console.info('[HYBRID_BRAKE] set', {
@@ -1936,24 +1910,11 @@ function handleHybridSilenceTimeout() {
     if (state2.mode !== "hybrid") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    ((silenceState: typeof hybridSilence) => {
-      const candidateGlobal =
-        typeof globalThis !== "undefined"
-          ? globalThis
-          : typeof window !== "undefined"
-          ? window
-          : null;
-      if (candidateGlobal) {
-        const g = candidateGlobal as any;
-        const runner =
-          typeof g.__tpApplyHybridVelocity === "function"
-            ? g.__tpApplyHybridVelocity
-            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-        runner(silenceState);
-      } else {
-        applyHybridVelocityCore(silenceState);
-      }
-    })(hybridSilence);
+    (() => {
+      const target = typeof window !== 'undefined' ? window : globalThis;
+      const fn = (target as any).__tpApplyHybridVelocity;
+      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+    })();
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
@@ -2149,24 +2110,11 @@ function handleHybridSilenceTimeout() {
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    ((silenceState: typeof hybridSilence) => {
-      const candidateGlobal =
-        typeof globalThis !== "undefined"
-          ? globalThis
-          : typeof window !== "undefined"
-          ? window
-          : null;
-      if (candidateGlobal) {
-        const g = candidateGlobal as any;
-        const runner =
-          typeof g.__tpApplyHybridVelocity === "function"
-            ? g.__tpApplyHybridVelocity
-            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-        runner(silenceState);
-      } else {
-        applyHybridVelocityCore(silenceState);
-      }
-    })(hybridSilence);
+    (() => {
+      const target = typeof window !== 'undefined' ? window : globalThis;
+      const fn = (target as any).__tpApplyHybridVelocity;
+      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+    })();
     return true;
   }
   function getActiveBrakeFactor(now = nowMs()) {
@@ -2283,24 +2231,11 @@ function handleHybridSilenceTimeout() {
       };
     }
     scheduleHybridVelocityRefresh();
-    ((silenceState: typeof hybridSilence) => {
-      const candidateGlobal =
-        typeof globalThis !== "undefined"
-          ? globalThis
-          : typeof window !== "undefined"
-          ? window
-          : null;
-      if (candidateGlobal) {
-        const g = candidateGlobal as any;
-        const runner =
-          typeof g.__tpApplyHybridVelocity === "function"
-            ? g.__tpApplyHybridVelocity
-            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-        runner(silenceState);
-      } else {
-        applyHybridVelocityCore(silenceState);
-      }
-    })(hybridSilence);
+    (() => {
+      const target = typeof window !== 'undefined' ? window : globalThis;
+      const fn = (target as any).__tpApplyHybridVelocity;
+      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+    })();
   }
 
   function handleHybridTargetHintEvent(ev: Event) {
@@ -2414,6 +2349,11 @@ function handleHybridSilenceTimeout() {
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
   }
+  try {
+    const target = typeof window !== 'undefined' ? window : globalThis;
+    (target as any).__tpApplyHybridVelocity = applyHybridVelocityCore;
+  } catch {}
+
   function _markHybridOffScript() {
     if (state2.mode !== "hybrid") return;
     const changed = setHybridScale(OFFSCRIPT_DEEP);
@@ -2550,24 +2490,11 @@ function handleHybridSilenceTimeout() {
         console.info(`[HYBRID] baseline updated from WPM: ${fmt(prev)} → ${fmt(candidate)}`);
       } catch {}
     }
-    ((silenceState: typeof hybridSilence) => {
-      const candidateGlobal =
-        typeof globalThis !== "undefined"
-          ? globalThis
-          : typeof window !== "undefined"
-          ? window
-          : null;
-      if (candidateGlobal) {
-        const g = candidateGlobal as any;
-        const runner =
-          typeof g.__tpApplyHybridVelocity === "function"
-            ? g.__tpApplyHybridVelocity
-            : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-        runner(silenceState);
-      } else {
-        applyHybridVelocityCore(silenceState);
-      }
-    })(hybridSilence);
+    (() => {
+      const target = typeof window !== 'undefined' ? window : globalThis;
+      const fn = (target as any).__tpApplyHybridVelocity;
+      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+    })();
     return candidate;
   }
 
@@ -3114,24 +3041,11 @@ function handleHybridSilenceTimeout() {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        ((silenceState: typeof hybridSilence) => {
-          const candidateGlobal =
-            typeof globalThis !== "undefined"
-              ? globalThis
-              : typeof window !== "undefined"
-              ? window
-              : null;
-          if (candidateGlobal) {
-            const g = candidateGlobal as any;
-            const runner =
-              typeof g.__tpApplyHybridVelocity === "function"
-                ? g.__tpApplyHybridVelocity
-                : (g.__tpApplyHybridVelocity = applyHybridVelocityCore);
-            runner(silenceState);
-          } else {
-            applyHybridVelocityCore(silenceState);
-          }
-        })(hybridSilence);
+        (() => {
+          const target = typeof window !== 'undefined' ? window : globalThis;
+          const fn = (target as any).__tpApplyHybridVelocity;
+          (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+        })();
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
