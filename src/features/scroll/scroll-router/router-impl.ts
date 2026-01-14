@@ -113,6 +113,15 @@ const nowMs = () =>
     ? performance.now()
     : Date.now();
 
+function clearHybridSilenceTimer() {
+  if (hybridSilence.timeoutId != null) {
+    try {
+      window.clearTimeout(hybridSilence.timeoutId);
+    } catch {}
+    hybridSilence.timeoutId = null;
+  }
+}
+
 let tpLastWriter: { from: string; at: number; y: number } | null = null;
 function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   if (!isMainViewer()) {
@@ -1670,12 +1679,6 @@ function installScrollRouter(opts) {
       return !!allow;
     } catch {
       return false;
-    }
-  }
-  function clearHybridSilenceTimer() {
-    if (hybridSilence.timeoutId != null) {
-      try { window.clearTimeout(hybridSilence.timeoutId); } catch {}
-      hybridSilence.timeoutId = null;
     }
   }
   function handleHybridSilenceTimeout() {
