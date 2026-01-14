@@ -500,18 +500,60 @@ function createAutoMotor() {
   return { setEnabled, setSpeed, setVelocity, stop, toggle, getState, tick, start, isRunning };
 }
 
-function logHybridPaceTelemetry(payload) {
-  if (!isDevMode()) return;
+const HYBRID_LOG_THROTTLE_MS = 500;
+const HYBRID_VERBOSE_FLAG = 'hybrid-dev';
+let lastHybridScaleLogAt = 0;
+let lastHybridPaceLogAt = 0;
+const isHybridVerboseDevMode = (() => {
+  if (typeof window === 'undefined') return false;
   try {
-    console.debug(`[HYBRID_WPM] ${JSON.stringify(payload)}`);
+    const params = new URLSearchParams(window.location.search || '');
+    return params.get(HYBRID_VERBOSE_FLAG) === '1';
+  } catch {
+    return false;
+  }
+})();
+
+function logHybridPaceTelemetry(payload: any) {
+  if (!isDevMode()) return;
+  const now = nowMs();
+  if (now - lastHybridPaceLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  lastHybridPaceLogAt = now;
+  const summary = {
+    mode: payload.mode,
+    wpm: payload.wpm,
+    finalTarget: payload.finalTarget,
+    accelCap: payload.accelCap,
+  };
+  try {
+    console.debug('[HYBRID_WPM]', summary);
   } catch {}
+  if (isHybridVerboseDevMode) {
+    try {
+      console.debug(`[HYBRID_WPM] ${JSON.stringify(payload)}`);
+    } catch {}
+  }
 }
 
 function logHybridScaleDetail(obj: any) {
   if (!isDevMode()) return;
+  const now = nowMs();
+  if (now - lastHybridScaleLogAt < HYBRID_LOG_THROTTLE_MS) return;
+  lastHybridScaleLogAt = now;
+  const summary = {
+    basePxps: obj.basePxps,
+    chosenScale: obj.chosenScale,
+    reason: obj.reason,
+    graceActive: obj.graceActive,
+  };
   try {
-    console.info(`[HYBRID] scale detail ${JSON.stringify(obj)}`);
+    console.info('[HYBRID] scale detail', summary);
   } catch {}
+  if (isHybridVerboseDevMode) {
+    try {
+      console.info(`[HYBRID] scale detail ${JSON.stringify(obj)}`);
+    } catch {}
+  }
 }
 
 function convertWpmToPxPerSec(targetWpm: number) {
@@ -929,7 +971,15 @@ function isSliderWpmSource(source?: unknown) {
 }
 
 function startHybridGrace(reason: string) {
-  hybridGraceUntil = nowMs() + HYBRID_GRACE_DURATION_MS;
+  const now = nowMs();
+  hybridGraceUntil = now + HYBRID_GRACE_DURATION_MS;
+  hybridSilence.pausedBySilence = false;
+  hybridSilence.lastSpeechAtMs = now;
+  hybridSilence.offScriptActive = false;
+  clearHybridSilenceTimer();
+  if (hybridWantedRunning) {
+    armHybridSilenceTimer(HYBRID_GRACE_DURATION_MS);
+  }
   if (isDevMode()) {
     try {
       console.info('[HYBRID] grace window', { reason, until: hybridGraceUntil });
@@ -1949,6 +1999,21 @@ function installScrollRouter(opts) {
     const ttlRaw = Number.isFinite(Number(detail.ttlMs)) ? Number(detail.ttlMs) : HYBRID_BRAKE_DEFAULT_TTL;
     const ttl = Math.max(HYBRID_EVENT_TTL_MIN, Math.min(HYBRID_EVENT_TTL_MAX, ttlRaw));
     const reason = typeof detail.reason === "string" ? detail.reason : null;
+    if (reason === "asr-pursuit") {
+      if (isDevMode()) {
+        try {
+          console.info(
+            `[HYBRID_BRAKE] ignored asr-pursuit ${JSON.stringify({
+              now,
+              safeFactor,
+              ttl,
+              reason,
+            })}`,
+          );
+        } catch {}
+      }
+      return;
+    }
 
     const prev = hybridBrakeState;
     const prevActive = prev.expiresAt > now;
