@@ -1553,11 +1553,16 @@ function installScrollRouter(opts) {
   
   // Initialize WPM target input from localStorage
   try {
-    const wpmTargetInput = document.getElementById('wpmTarget');
+    const wpmTargetInput = document.getElementById('wpmTarget') as HTMLInputElement | null;
       if (wpmTargetInput) {
         const stored = localStorage.getItem('tp_baseline_wpm');
-        if (stored) {
-          setSliderValueSilently(wpmTargetInput, stored);
+        const parsed = stored != null ? Number(stored) : NaN;
+        if (Number.isFinite(parsed) && parsed > 0) {
+          setSliderValueSilently(wpmTargetInput, String(parsed));
+        } else if (stored != null) {
+          try {
+            localStorage.removeItem('tp_baseline_wpm');
+          } catch {}
         }
       }
   } catch {
@@ -1939,6 +1944,7 @@ function handleHybridSilenceTimeout() {
     opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
   ) {
     const now = typeof ts === "number" ? ts : nowMs();
+    const wasSpeechActive = speechActive;
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
     setHybridSilence2(now);
@@ -1947,7 +1953,8 @@ function handleHybridSilenceTimeout() {
       typeof opts?.resumedFromSilence === "boolean" ? opts.resumedFromSilence : hybridSilence.pausedBySilence;
     hybridSilence.pausedBySilence = false;
     clearHybridSilenceTimer();
-    if (!opts?.noMatch) {
+    const shouldStartGrace = !opts?.noMatch && (wasPausedBySilence || !wasSpeechActive);
+    if (shouldStartGrace) {
       startHybridGrace(opts?.source ?? "speech-result");
     }
     const effectivePxps = Number.isFinite(hybridBasePxps) ? hybridBasePxps * hybridScale : 0;
