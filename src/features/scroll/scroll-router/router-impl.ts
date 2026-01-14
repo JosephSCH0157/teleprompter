@@ -1302,6 +1302,13 @@ function stopAllMotors(reason: string) {
   }
   const wasHybridRunning = hybridMotor.isRunning();
   hybridMotor.stop();
+  cancelHybridVelocityRefresh();
+  hybridGraceUntil = 0;
+  hybridSilence.pausedBySilence = false;
+  hybridSilence.offScriptActive = false;
+  hybridSilence.lastSpeechAtMs = nowMs();
+  clearHybridSilenceTimer();
+  speechActive = false;
   if (wasHybridRunning) {
     emitMotorState("hybridWpm", false);
   }
@@ -1445,7 +1452,7 @@ function installScrollRouter(opts) {
         const scroller = scrollerEl;
         if (!scroller || !target) return;
         if (scroller === target || scroller.contains(target)) {
-          startHybridGrace('manual-scroll');
+          setHybridBrake(1, 0, 'manual-scroll');
         }
       };
       window.addEventListener('scroll', scrollHandler, { capture: true, passive: true });
@@ -2527,12 +2534,15 @@ function handleHybridSilenceTimeout() {
   try {
     window.addEventListener('tp:autoSpeed', (ev) => {
       try {
-        if (state2.mode === 'hybrid') return;
         const detail = (ev as CustomEvent)?.detail || {};
         const raw = detail.pxPerSec ?? detail.px ?? detail.speed ?? detail.value;
         const pxs = Number(raw);
-        if (!Number.isFinite(pxs)) return;
-        setSpeed(pxs);
+        if (!Number.isFinite(pxs) || pxs <= 0) return;
+        if (state2.mode === 'hybrid') {
+          applyWpmBaselinePx(pxs, 'autoSpeed');
+        } else {
+          setSpeed(pxs);
+        }
       } catch {}
     });
   } catch {}
@@ -2859,7 +2869,6 @@ function handleHybridSilenceTimeout() {
     sliderTouchedThisSession = true;
     recordUserWpmPx(pxs);
     setHybridScale(RECOVERY_SCALE);
-    startHybridGrace(source);
     setHybridBasePxps(pxs);
     startHybridMotorFromSpeedChange();
     logHybridBaselineState(source);
