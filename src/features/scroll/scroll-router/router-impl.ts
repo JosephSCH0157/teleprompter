@@ -1002,18 +1002,6 @@ let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
 
-function applyHybridVelocity(silenceState = hybridSilence) {
-  return applyHybridVelocityImpl(silenceState);
-}
-
-function applyHybridVelocity2(silenceState = hybridSilence) {
-  return applyHybridVelocityImpl(silenceState);
-}
-
-function applyHybridVelocityImpl(...args: Parameters<typeof applyHybridVelocityImpl>) {
-  return applyHybridVelocityImpl(...args);
-}
-
 function scheduleHybridVelocityRefresh() {
   if (!shouldHybridRefresh()) {
     stopHybridVelocityRefresh();
@@ -2340,6 +2328,12 @@ function handleHybridSilenceTimeout() {
     hybridMotor.setVelocityPxPerSec(velocity);
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
+  }
+  function applyHybridVelocity(silenceState = hybridSilence) {
+    return applyHybridVelocityImpl(silenceState);
+  }
+  function applyHybridVelocity2(silenceState = hybridSilence) {
+    return applyHybridVelocityImpl(silenceState);
   }
   function _markHybridOffScript() {
     if (state2.mode !== "hybrid") return;
