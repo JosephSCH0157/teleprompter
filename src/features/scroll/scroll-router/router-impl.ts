@@ -576,7 +576,7 @@ function logHybridBrakeEvent(payload: any) {
   if (!isDevMode()) return;
   const now = nowMs();
   const ttl = Math.max(0, (payload.brakeExpiresAt ?? 0) - (payload.now ?? now));
-  const shouldLog = payload.motorRunning || payload.graceActive || ttl > 0;
+  const shouldLog = payload.graceActive || payload.brakeActive || ttl > 0;
   if (!shouldLog) return;
   const signature = `${payload.brakeFactor.toFixed(3)}|${payload.brakeReason ?? ''}|${payload.brakeActive ? '1' : '0'}|${payload.motorRunning ? 'r' : 's'}`;
   const changed = signature !== lastHybridBrakeSignature;
@@ -986,11 +986,12 @@ const HYBRID_EVENT_TTL_MAX = 2000;
 const HYBRID_BRAKE_DEFAULT_TTL = 320;
 const HYBRID_ASSIST_DEFAULT_TTL = 320;
 const HYBRID_ASSIST_MAX_BOOST = 420;
-  const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
-  const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
-  let lastHybridGateFingerprint: string | null = null;
-  let hybridBasePxps = 0;
-  let hybridScale = RECOVERY_SCALE;
+const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
+const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
+let lastHybridGateFingerprint: string | null = null;
+
+let hybridBasePxps = 0;
+let hybridScale = RECOVERY_SCALE;
 let hybridBrakeState = { factor: 1, expiresAt: 0, reason: null as string | null };
 let hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null as string | null };
 let hybridVelocityRefreshRaf: number | null = null;
@@ -1000,6 +1001,69 @@ let liveGraceWindowEndsAt: number | null = null;
 let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
+
+function scheduleHybridVelocityRefresh() {
+  if (!shouldHybridRefresh()) {
+    stopHybridVelocityRefresh();
+    return;
+  }
+  if (hybridVelocityRefreshRaf != null) return;
+  if (typeof window === "undefined") return;
+  hybridVelocityRefreshRaf = window.requestAnimationFrame(() => {
+    hybridVelocityRefreshRaf = null;
+    if (state2.mode !== "hybrid") return;
+    const now = nowMs();
+    if (!shouldHybridRefresh(now)) {
+      stopHybridVelocityRefresh();
+      return;
+    }
+    try {
+      applyHybridVelocity(hybridSilence);
+    } catch (err) {
+      if (isDevMode()) {
+        try {
+          console.warn('[HYBRID] velocity refresh failed', err);
+        } catch {}
+      }
+    }
+  });
+}
+
+function cancelHybridVelocityRefresh() {
+  if (hybridVelocityRefreshRaf != null && typeof window === "undefined") {
+    try {
+      window.cancelAnimationFrame(hybridVelocityRefreshRaf);
+    } catch {
+      // ignore
+    }
+  }
+  hybridVelocityRefreshRaf = null;
+  hybridBrakeState = { factor: 1, expiresAt: 0, reason: null };
+  hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
+  hybridTargetHintState = null;
+}
+
+function stopHybridVelocityRefresh() {
+  if (hybridVelocityRefreshRaf != null && typeof window === "undefined") {
+    try {
+      window.cancelAnimationFrame(hybridVelocityRefreshRaf);
+    } catch {
+      // ignore
+    }
+  }
+  hybridVelocityRefreshRaf = null;
+}
+
+function shouldHybridRefresh(now: number = nowMs()) {
+  if (state2.mode !== "hybrid") return false;
+  if (hybridMotor.isRunning()) return true;
+  if (isHybridGraceActive(now)) return true;
+  const brakeActive = hybridBrakeState.expiresAt > now;
+  if (brakeActive) return true;
+  if (hybridAssistState.expiresAt > now) return true;
+  if (hybridTargetHintState != null) return true;
+  return false;
+}
 let offScriptStreak = 0;
 let onScriptStreak = 0;
 let hybridGraceUntil = 0;
@@ -2056,68 +2120,6 @@ function handleHybridSilenceTimeout() {
     return hybridAssistState.boostPxps;
   }
 
-  function scheduleHybridVelocityRefresh() {
-    if (!shouldHybridRefresh()) {
-      stopHybridVelocityRefresh();
-      return;
-    }
-    if (hybridVelocityRefreshRaf != null) return;
-    if (typeof window === "undefined") return;
-    hybridVelocityRefreshRaf = window.requestAnimationFrame(() => {
-      hybridVelocityRefreshRaf = null;
-      if (state2.mode !== "hybrid") return;
-      const now = nowMs();
-      if (!shouldHybridRefresh(now)) {
-        stopHybridVelocityRefresh();
-        return;
-      }
-      try {
-        applyHybridVelocity(hybridSilence);
-      } catch (err) {
-        if (isDevMode()) {
-          try {
-            console.warn('[HYBRID] velocity refresh failed', err);
-          } catch {}
-        }
-      }
-    });
-  }
-
-  function cancelHybridVelocityRefresh() {
-    if (hybridVelocityRefreshRaf != null && typeof window !== "undefined") {
-      try {
-        window.cancelAnimationFrame(hybridVelocityRefreshRaf);
-      } catch {
-        // ignore
-      }
-    }
-    hybridVelocityRefreshRaf = null;
-    hybridBrakeState = { factor: 1, expiresAt: 0, reason: null };
-    hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
-    hybridTargetHintState = null;
-  }
-
-  function stopHybridVelocityRefresh() {
-    if (hybridVelocityRefreshRaf != null && typeof window !== "undefined") {
-      try {
-        window.cancelAnimationFrame(hybridVelocityRefreshRaf);
-      } catch {
-        // ignore
-      }
-    }
-    hybridVelocityRefreshRaf = null;
-  }
-
-  function shouldHybridRefresh(now: number = nowMs()) {
-    if (state2.mode !== "hybrid") return false;
-    if (hybridMotor.isRunning()) return true;
-    if (isHybridGraceActive(now)) return true;
-    const brakeActive = hybridBrakeState.expiresAt > now;
-    if (brakeActive) return true;
-    if (hybridAssistState.expiresAt > now) return true;
-    if (hybridTargetHintState != null) return true;
-    return false;
-  }
 
   function handleHybridBrakeEvent(ev: Event) {
     if (state2.mode !== "hybrid") return;

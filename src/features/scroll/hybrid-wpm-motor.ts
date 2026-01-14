@@ -73,7 +73,7 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
             console.warn("[HYBRID] nothing to scroll", { sh: writer.scrollHeight, h: writer.clientHeight });
           } catch {}
         }
-        stop();
+        rafId = raf(tick);
         return;
       }
       const prevTop = writer.scrollTop || 0;
