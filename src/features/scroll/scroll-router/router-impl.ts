@@ -563,6 +563,10 @@ function logHybridScaleDetail(obj: any) {
     reason: obj.reason,
     graceActive: obj.graceActive,
     pauseLikely: !!obj.pauseLikely,
+    offScriptActive: !!obj.offScriptActive,
+    pausedBySilence: !!obj.pausedBySilence,
+    onScriptStreak,
+    onScriptLocked: !!obj.onScriptLocked,
   };
   try {
     console.info('[HYBRID] scale detail', summary);
@@ -994,8 +998,9 @@ const HYBRID_EVENT_TTL_MAX = 2000;
 const HYBRID_BRAKE_DEFAULT_TTL = 320;
 const HYBRID_ASSIST_DEFAULT_TTL = 320;
 const HYBRID_ASSIST_MAX_BOOST = 420;
-const OFFSCRIPT_EVIDENCE_THRESHOLD = 2;
+const OFFSCRIPT_EVIDENCE_THRESHOLD = 4;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
+const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 let lastHybridGateFingerprint: string | null = null;
 
 let hybridBasePxps = 0;
@@ -1036,6 +1041,32 @@ function isPlannedPauseLikely() {
 }
 function computeHybridSilenceDelayMs() {
   return isPlannedPauseLikely() ? HYBRID_PAUSE_SILENCE_STOP_MS : HYBRID_SILENCE_STOP_MS;
+}
+function getTranscriptText(detail: any) {
+  const fromField = (detail?.transcript ?? detail?.text ?? detail?.transcriptText) as string | undefined;
+  if (typeof fromField === 'string' && fromField.trim()) return fromField.trim();
+  if (Array.isArray(detail?.nBest) && detail.nBest.length > 0) {
+    const first = detail.nBest[0];
+    if (typeof first?.transcript === 'string' && first.transcript.trim()) {
+      return first.transcript.trim();
+    }
+  }
+  if (detail?.bestTranscript) {
+    const v = String(detail.bestTranscript).trim();
+    if (v) return v;
+  }
+  if (detail?.result) {
+    const candidate = detail.result.transcript ?? detail.result.text;
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return '';
+}
+function isWeakNoMatch(detail: any) {
+  if (!detail) return true;
+  const transcript = getTranscriptText(detail);
+  if (!transcript) return true;
+  const words = transcript.split(/\s+/).filter(Boolean).length;
+  return words < 3 || transcript.length < 12;
 }
 let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
@@ -1109,6 +1140,7 @@ function shouldHybridRefresh(now: number = nowMs()) {
 }
 let offScriptStreak = 0;
 let onScriptStreak = 0;
+let lastGoodMatchAtMs = 0;
 let hybridGraceUntil = 0;
 const WPM_USER_DEDUPE_MS = 600;
 let lastUserWpmPx = 0;
@@ -2042,12 +2074,24 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const nextScale = determineHybridScaleFromDetail(detail);
     if (nextScale == null) return;
     const now = nowMs();
-    if (nextScale === RECOVERY_SCALE) {
+    const isNoMatch = detail.noMatch === true;
+    const significantNoMatch = isNoMatch && !isWeakNoMatch(detail);
+    const goodMatch = nextScale === RECOVERY_SCALE && !significantNoMatch;
+    if (goodMatch) {
+      onScriptStreak += 1;
+      lastGoodMatchAtMs = now;
       offScriptEvidence = 0;
       lastOffScriptEvidenceTs = 0;
       setHybridScale(RECOVERY_SCALE);
       return;
     }
+    if (significantNoMatch) {
+      onScriptStreak = 0;
+    }
+    const offscriptCandidate = nextScale < RECOVERY_SCALE;
+    const shouldCountOffscript = offscriptCandidate && (significantNoMatch || !isNoMatch);
+    if (!shouldCountOffscript) return;
+    onScriptStreak = 0;
     if (lastOffScriptEvidenceTs && now - lastOffScriptEvidenceTs > OFFSCRIPT_EVIDENCE_RESET_MS) {
       offScriptEvidence = 0;
     }
@@ -2315,9 +2359,25 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       : 1;
   const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
   const graceActive = isHybridGraceActive(now);
-  const scaleFromGrace = graceActive ? GRACE_MIN_SCALE : 1;
+  const scaleFromGrace = 1;
+  const onScriptLocked =
+    onScriptStreak >= 2 && now - lastGoodMatchAtMs < ON_SCRIPT_LOCK_HOLD_MS;
+  if (onScriptLocked) {
+    return {
+      scale: 1,
+      reason: 'on-script-lock',
+      scaleFromSilence,
+      scaleFromOffscript,
+      scaleFromGrace,
+      graceActive,
+      pauseLikely,
+      onScriptLocked,
+      offScriptActive: silenceState.offScriptActive,
+      pausedBySilence: silenceState.pausedBySilence,
+    };
+  }
   let chosenScale = 1;
-  let reason: 'base' | 'grace' | 'offscript' | 'silence' = 'base';
+  let reason: 'base' | 'grace' | 'offscript' | 'silence' | 'on-script-lock' = 'base';
   if (silenceState.pausedBySilence) {
     chosenScale = scaleFromSilence;
     reason = 'silence';
@@ -2331,30 +2391,36 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     chosenScale = 1;
     reason = 'base';
   }
-    return {
-      scale: chosenScale,
-      reason,
-      scaleFromSilence,
-      scaleFromOffscript,
-      scaleFromGrace,
-      graceActive,
-      pauseLikely,
-    };
-  }
-
-  function applyHybridVelocityCore(silenceState = hybridSilence) {
-    const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
-    const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
-    const now = nowMs();
-  const {
-    scale: effectiveScale,
+  return {
+    scale: chosenScale,
     reason,
     scaleFromSilence,
     scaleFromOffscript,
     scaleFromGrace,
     graceActive,
     pauseLikely,
-  } = computeEffectiveHybridScale(now, silenceState);
+    onScriptLocked,
+    offScriptActive: silenceState.offScriptActive,
+    pausedBySilence: silenceState.pausedBySilence,
+  };
+  }
+
+  function applyHybridVelocityCore(silenceState = hybridSilence) {
+    const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
+    const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
+    const now = nowMs();
+    const {
+      scale: effectiveScale,
+      reason,
+      scaleFromSilence,
+      scaleFromOffscript,
+      scaleFromGrace,
+      graceActive,
+      pauseLikely,
+      onScriptLocked,
+      offScriptActive,
+      pausedBySilence,
+    } = computeEffectiveHybridScale(now, silenceState);
     logHybridScaleDetail({
       basePxps: base,
       scaleFromSilence,
@@ -2364,6 +2430,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       chosenScale: effectiveScale,
       reason,
       pauseLikely,
+      onScriptLocked,
+      offScriptActive,
+      pausedBySilence,
     });
     const brakeActive = hybridBrakeState.expiresAt > now;
     const brakeTtl = Math.max(0, hybridBrakeState.expiresAt - now);
