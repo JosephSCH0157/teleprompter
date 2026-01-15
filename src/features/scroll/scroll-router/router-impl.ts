@@ -977,7 +977,9 @@ function refreshHybridWriter() {
     hybridMotor.setWriter(viewer ?? scrollerEl ?? null);
   } catch {}
 }
-const HYBRID_SILENCE_STOP_MS = 3000;
+const HYBRID_SILENCE_SOFT_MS = 3000;
+const HYBRID_PAUSE_SILENCE_SOFT_MS = 9000;
+const HYBRID_SILENCE_HARD_STOP_MS = 25000;
 const LIVE_GRACE_MS = 1800;
 const OFFSCRIPT_MILD = 0.75;
 const OFFSCRIPT_DEEP = 0.55;
@@ -987,7 +989,6 @@ const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const HYBRID_GRACE_DURATION_MS = 900;
 const OFFSCRIPT_SCALE = 0.65;
 const SILENCE_SCALE = 0.25;
-const HYBRID_PAUSE_SILENCE_STOP_MS = 9000;
 const PAUSE_SILENCE_SCALE = 0.65;
 const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
 const GRACE_MIN_SCALE = 0.9;
@@ -1040,7 +1041,7 @@ function isPlannedPauseLikely() {
   return false;
 }
 function computeHybridSilenceDelayMs() {
-  return isPlannedPauseLikely() ? HYBRID_PAUSE_SILENCE_STOP_MS : HYBRID_SILENCE_STOP_MS;
+  return isPlannedPauseLikely() ? HYBRID_PAUSE_SILENCE_SOFT_MS : HYBRID_SILENCE_SOFT_MS;
 }
 function getTranscriptText(detail: any) {
   const fromField = (detail?.transcript ?? detail?.text ?? detail?.transcriptText) as string | undefined;
@@ -1952,33 +1953,45 @@ function installScrollRouter(opts) {
   }
 function handleHybridSilenceTimeout() {
   hybridSilence.timeoutId = null;
-    const now = nowMs();
-    if (liveGraceWindowEndsAt != null && now >= liveGraceWindowEndsAt) {
-      liveGraceWindowEndsAt = null;
-    }
-    if (liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt) {
-      const delay = Math.max(0, liveGraceWindowEndsAt - now);
-      armHybridSilenceTimer(delay || computeHybridSilenceDelayMs());
-      return;
-    }
-    if (state2.mode !== "hybrid") return;
-    const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
-    const stillEligibleForSpeech =
-      sessionPhase === "live" &&
-      userEnabled &&
-      hybridWantedRunning;
-    const silenceStopMs = computeHybridSilenceDelayMs();
-    if (stillEligibleForSpeech && lastSpeechAgeMs < silenceStopMs) {
-      const delay = Math.max(1, silenceStopMs - lastSpeechAgeMs);
-      armHybridSilenceTimer(delay);
-      return;
-    }
-    if (!hybridMotor.isRunning()) return;
-    hybridSilence.pausedBySilence = true;
-    speechActive = false;
+  const now = nowMs();
+  if (liveGraceWindowEndsAt != null && now >= liveGraceWindowEndsAt) {
+    liveGraceWindowEndsAt = null;
+  }
+  if (liveGraceWindowEndsAt != null && now < liveGraceWindowEndsAt) {
+    const delay = Math.max(0, liveGraceWindowEndsAt - now);
+    armHybridSilenceTimer(delay || computeHybridSilenceDelayMs());
+    return;
+  }
+  if (state2.mode !== "hybrid") return;
+  const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
+  const stillEligibleForSpeech =
+    sessionPhase === "live" &&
+    userEnabled &&
+    hybridWantedRunning;
+  const silenceDelayMs = computeHybridSilenceDelayMs();
+  if (stillEligibleForSpeech && lastSpeechAgeMs < silenceDelayMs) {
+    const delay = Math.max(1, silenceDelayMs - lastSpeechAgeMs);
+    armHybridSilenceTimer(delay);
+    return;
+  }
+  if (!hybridMotor.isRunning()) return;
+  hybridSilence.pausedBySilence = true;
+  speechActive = false;
+  const exceededHardStop = lastSpeechAgeMs >= HYBRID_SILENCE_HARD_STOP_MS;
+  if (!stillEligibleForSpeech || exceededHardStop) {
     hybridMotor.stop();
     emitMotorState("hybridWpm", false);
     emitHybridSafety();
+    try { applyGate(); } catch {}
+    return;
+  }
+  (() => {
+    const target = typeof window !== 'undefined' ? window : globalThis;
+    const fn = (target as any).__tpApplyHybridVelocity;
+    (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+  })();
+  emitHybridSafety();
+  armHybridSilenceTimer(silenceDelayMs);
   try { applyGate(); } catch {}
 }
   try {
@@ -2106,6 +2119,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const now = typeof detail.timestamp === "number" ? detail.timestamp : nowMs();
     const isNoMatch = detail.noMatch === true;
     const wasSilent = hybridSilence.pausedBySilence;
+    hybridSilence.lastSpeechAtMs = now;
     hybridSilence.pausedBySilence = false;
     clearHybridSilenceTimer();
     noteHybridSpeechActivity(now, {
@@ -3150,21 +3164,22 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   } catch {
   }
   try {
-    window.addEventListener("tp:asr:silence", (ev) => {
-      try {
-        const detail = (ev as CustomEvent).detail || {};
-        const silent = !!detail.silent;
-        const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
-        if (silent) {
-          hybridSilence.lastSpeechAtMs = ts - HYBRID_SILENCE_STOP_MS - 1;
-          hybridSilence.pausedBySilence = true;
-          clearHybridSilenceTimer();
-          handleHybridSilenceTimeout();
-        } else {
-          noteHybridSpeechActivity(ts, { source: "silence" });
-        }
-      } catch {}
-    });
+      window.addEventListener("tp:asr:silence", (ev) => {
+        try {
+          const detail = (ev as CustomEvent).detail || {};
+          const silent = !!detail.silent;
+          const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
+          if (silent) {
+            const delay = computeHybridSilenceDelayMs();
+            hybridSilence.lastSpeechAtMs = ts - delay - 1;
+            hybridSilence.pausedBySilence = true;
+            clearHybridSilenceTimer();
+            handleHybridSilenceTimeout();
+          } else {
+            noteHybridSpeechActivity(ts, { source: "silence" });
+          }
+        } catch {}
+      });
   } catch {
   }
   try {
