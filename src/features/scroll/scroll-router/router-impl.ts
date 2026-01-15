@@ -986,7 +986,7 @@ const SILENCE_SCALE = 0.25;
 const HYBRID_PAUSE_SILENCE_STOP_MS = 9000;
 const PAUSE_SILENCE_SCALE = 0.65;
 const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
-const GRACE_MIN_SCALE = 0.8;
+const GRACE_MIN_SCALE = 0.9;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
 const HYBRID_ASSIST_CAP_FRAC = 0.35;
 const HYBRID_EVENT_TTL_MIN = 20;
@@ -2307,26 +2307,30 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
   function computeEffectiveHybridScale(now: number, silenceState = hybridSilence) {
   const pauseLikely = isPlannedPauseLikely();
-  const scaleFromSilence = silenceState.pausedBySilence
-    ? pauseLikely
+  const scaleFromSilence =
+    silenceState.pausedBySilence && pauseLikely
       ? PAUSE_SILENCE_SCALE
-      : SILENCE_SCALE
-    : 1;
+      : silenceState.pausedBySilence
+      ? SILENCE_SCALE
+      : 1;
   const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
   const graceActive = isHybridGraceActive(now);
-  const scaleFromGrace = graceActive ? Math.max(GRACE_MIN_SCALE, 1) : 1;
-    let chosenScale = 1;
-    let reason: 'base' | 'grace' | 'offscript' | 'silence' = 'base';
-    if (silenceState.pausedBySilence) {
-      chosenScale = Math.min(chosenScale, scaleFromSilence);
-      reason = 'silence';
-    } else if (silenceState.offScriptActive) {
-      chosenScale = Math.min(chosenScale, scaleFromOffscript);
-      reason = 'offscript';
-    } else {
-      chosenScale = scaleFromGrace;
-      reason = graceActive ? 'grace' : 'base';
-    }
+  const scaleFromGrace = graceActive ? GRACE_MIN_SCALE : 1;
+  let chosenScale = 1;
+  let reason: 'base' | 'grace' | 'offscript' | 'silence' = 'base';
+  if (silenceState.pausedBySilence) {
+    chosenScale = scaleFromSilence;
+    reason = 'silence';
+  } else if (silenceState.offScriptActive) {
+    chosenScale = scaleFromOffscript;
+    reason = 'offscript';
+  } else if (graceActive) {
+    chosenScale = scaleFromGrace;
+    reason = 'grace';
+  } else {
+    chosenScale = 1;
+    reason = 'base';
+  }
     return {
       scale: chosenScale,
       reason,
