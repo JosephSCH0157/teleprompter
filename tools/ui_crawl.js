@@ -50,8 +50,8 @@ const cp = require('child_process');
       }
     });
     page.on('pageerror', err => { out.errors.push({ type: 'pageerror', message: String(err), stack: err && err.stack ? err.stack : null }); });
-    let CURRENT_HOST = '127.0.0.1';
-    page.on('response', res => {
+  let CURRENT_HOST = '127.0.0.1';
+  page.on('response', res => {
       try {
         if (res.status() < 400) return;
         const u = new URL(res.url());
@@ -69,6 +69,19 @@ const cp = require('child_process');
   // Optional: start static server in-process only when explicitly requested
   if (String(process.env.START_STATIC_SERVER || '') === '1') {
     try { require('./static_server.js'); } catch { /* ignore */ }
+  }
+
+  let startedStaticServer = false;
+  function maybeStartStaticServer() {
+    if (startedStaticServer) return false;
+    startedStaticServer = true;
+    try {
+      require('./static_server.js');
+      return true;
+    } catch (err) {
+      console.warn('[UI-CRAWL] static server start failed', err?.message || err);
+      return false;
+    }
   }
 
     await page.evaluateOnNewDocument((cfg) => {
@@ -98,16 +111,26 @@ const cp = require('child_process');
       out.meta.target = { host, port, url: u };
       return u;
     };
+    const tryAttempt = async (host, port) => {
+      try {
+        return await attempt(host, port);
+      } catch (err) {
+        if (maybeStartStaticServer()) {
+          return await attempt(host, port);
+        }
+        throw err;
+      }
+    };
     let ok = false;
     try {
-      const u = await attempt(HOST, PORT);
+      const u = await tryAttempt(HOST, PORT);
       out.notes.push(`Navigated to ${u}`);
       ok = true;
     } catch {}
     if (!ok) {
       try {
         PORT = '8080';
-        const u = await attempt(HOST, PORT);
+        const u = await tryAttempt(HOST, PORT);
         out.notes.push(`Navigated (fallback) to ${u}`);
         ok = true;
       } catch {}

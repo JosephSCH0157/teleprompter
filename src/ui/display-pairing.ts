@@ -123,6 +123,12 @@ function ensureStyles() {
     .display-pairing-panel .btn {
       cursor: pointer;
     }
+    .display-pairing-tip {
+      font-size: 0.75rem;
+      color: #9fb4c9;
+      margin-top: 4px;
+      line-height: 1.25;
+    }
   `;
   const style = document.createElement('style');
   style.id = 'displayPairingStyles';
@@ -164,6 +170,9 @@ function buildModal(): Elements | null {
               <span class="display-pairing-status-expiry">Waiting for token...</span>
             </div>
           </div>
+        </div>
+        <div class="display-pairing-tip">
+          Make sure both devices are on the same LAN (guest Wi-Fi / client isolation may block the WS connection). Allow inbound connections from Windows Firewall when using a Private network profile.
         </div>
       </div>
     </div>

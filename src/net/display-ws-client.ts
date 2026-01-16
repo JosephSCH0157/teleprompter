@@ -17,6 +17,34 @@ let socket: WebSocket | null = null;
 let reconnectDelay = 1000;
 let reconnectTimer: number | null = null;
 let sendQueue: string[] = [];
+const SCROLL_THROTTLE_MS = 60;
+let scrollTimer: number | null = null;
+let pendingScroll: string | null = null;
+
+const flushScroll = () => {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    scrollTimer = null;
+    pendingScroll = null;
+    return;
+  }
+  if (pendingScroll) {
+    try {
+      socket.send(pendingScroll);
+    } catch {
+      // ignore
+    }
+  }
+  pendingScroll = null;
+  scrollTimer = null;
+};
+
+const queueScrollMessage = (serialized: string) => {
+  pendingScroll = serialized;
+  if (scrollTimer) return;
+  scrollTimer = window.setTimeout(() => {
+    flushScroll();
+  }, SCROLL_THROTTLE_MS);
+};
 
 const isDisplayContext = () => {
   if (typeof window === 'undefined') return false;
@@ -150,11 +178,22 @@ if (isSupported) {
 export function publishToNetworkDisplays(payload: unknown): void {
   if (!isSupported || typeof payload === 'undefined') return;
   try {
-    const str = JSON.stringify(payload);
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(str);
-      return;
+  const str = JSON.stringify(payload);
+  let payloadType: string | null = null;
+  if (payload && typeof payload === 'object') {
+    const candidate = (payload as Record<string, unknown>).type;
+    if (typeof candidate === 'string') {
+      payloadType = candidate;
     }
+  }
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      if (payloadType === 'scroll') {
+      queueScrollMessage(str);
+    } else {
+      socket.send(str);
+    }
+    return;
+  }
     sendQueue.push(str);
     if (sendQueue.length > 256) {
       sendQueue.shift();
