@@ -32,12 +32,14 @@ function contentType(p) {
 
 const { createDisplayRelay } = (() => {
   try {
-    // eslint-disable-next-line import/no-dynamic-require, global-require
-    return require('../dist/net/display-ws-server.js') || {};
+    const relay = require('../dist/net/display-ws-server.cjs');
+    if (relay && typeof relay.createDisplayRelay === 'function') {
+      return relay;
+    }
   } catch (err) {
     console.warn('[display-relay] display relay module not built yet (run npm run build:relay)', err?.message || err);
-    return {};
   }
+  return {};
 })();
 
 let displayRelay = null;

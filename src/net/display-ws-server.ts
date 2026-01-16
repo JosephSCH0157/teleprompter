@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
-import http from 'node:http';
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse, Server as HttpServer } from 'node:http';
+import type { TLSSocket } from 'node:tls';
 import type { Socket } from 'node:net';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { DisplayRelayOptions, PairingInfo } from './display-ws-protocol';
@@ -11,14 +11,14 @@ const DEFAULT_MAX_PAIRING_TOKENS = 64;
 type RelayRole = 'main' | 'display';
 
 export interface DisplayRelay {
-	attach(server: http.Server): void;
+	attach(server: HttpServer): void;
 	tryHandleApi(req: IncomingMessage, res: ServerResponse): boolean;
 	getConnectedDisplays(): number;
 	getPendingTokens(): number;
 }
 
 export function createDisplayRelay(options?: DisplayRelayOptions): DisplayRelay {
-	let attachedServer: http.Server | null = null;
+	let attachedServer: HttpServer | null = null;
 	const pairingTokenTTL = Math.max(1000, options?.pairingTokenTTL ?? DEFAULT_PAIRING_TOKEN_TTL);
 	const maxPairingTokens = Math.max(8, options?.maxPairingTokens ?? DEFAULT_MAX_PAIRING_TOKENS);
 
@@ -73,7 +73,8 @@ export function createDisplayRelay(options?: DisplayRelayOptions): DisplayRelay 
 		const forwardedProto = typeof req.headers['x-forwarded-proto'] === 'string'
 			? String(req.headers['x-forwarded-proto']).split(',')[0].trim()
 			: '';
-		const scheme = forwardedProto || (req.socket.encrypted ? 'https' : 'http');
+		const socket = req.socket as TLSSocket;
+		const scheme = forwardedProto || (socket?.encrypted ? 'https' : 'http');
 		const host = String(req.headers.host || req.socket.localAddress || '127.0.0.1');
 		const origin = `${scheme}://${host}`;
 		const wsScheme = scheme === 'https' ? 'wss' : 'ws';
@@ -167,7 +168,7 @@ export function createDisplayRelay(options?: DisplayRelayOptions): DisplayRelay 
 		}
 	};
 
-	const handleHandshake = (ws: WebSocket, raw: string, req: IncomingMessage): RelayRole | null => {
+	const handleHandshake = (ws: WebSocket, raw: string): RelayRole | null => {
 		let parsed: { type?: string; role?: RelayRole; token?: string } | null = null;
 		try {
 			parsed = JSON.parse(raw);
@@ -198,7 +199,7 @@ export function createDisplayRelay(options?: DisplayRelayOptions): DisplayRelay 
 		return role;
 	};
 
-	const handleWsConnection = (ws: WebSocket, req: IncomingMessage) => {
+	const handleWsConnection = (ws: WebSocket, _req: IncomingMessage) => {
 		let role: RelayRole | null = null;
 		let handshakeDone = false;
 		const cleanup = () => {
@@ -210,7 +211,7 @@ export function createDisplayRelay(options?: DisplayRelayOptions): DisplayRelay 
 			const payload = typeof data === 'string' ? data : Buffer.isBuffer(data) ? data.toString('utf8') : null;
 			if (!payload) return;
 			if (!handshakeDone) {
-				role = handleHandshake(ws, payload, req);
+				role = handleHandshake(ws, payload);
 				if (!role) return;
 				handshakeDone = true;
 				return;
@@ -240,7 +241,7 @@ export function createDisplayRelay(options?: DisplayRelayOptions): DisplayRelay 
 	};
 
 	return {
-		attach(server: http.Server) {
+		attach(server: HttpServer) {
 			if (attachedServer === server) return;
 			attachedServer = server;
 			server.on('upgrade', handleUpgrade);

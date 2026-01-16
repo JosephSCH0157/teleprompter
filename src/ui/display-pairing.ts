@@ -23,7 +23,6 @@ let modalElements: Elements | null = null;
 let currentPairing: PairingResponse | null = null;
 let isRefreshing = false;
 let expiryTimer: number | null = null;
-let unsubscribeStatus: (() => void) | null = null;
 
 function isDisplayContext(): boolean {
   try {
@@ -324,7 +323,7 @@ function initDisplayPairingPanel() {
   const elements = buildModal();
   if (!elements) return;
   bindModalEvents();
-  unsubscribeStatus = onNetworkDisplayStatus(({ connectedDisplays }) => {
+  onNetworkDisplayStatus(({ connectedDisplays }) => {
     elements.status.textContent = `Connected: ${connectedDisplays}`;
   });
 
