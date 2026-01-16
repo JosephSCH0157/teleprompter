@@ -33,6 +33,7 @@
     } catch {}
   </script>
   <script src="./dist/display-renderer.js"></script>
+  <script type="module" src="./dist/net/display-ws-display-client.js"></script>
   <!-- TS bundle intentionally omitted in display window to keep it mirror-only and avoid double wiring -->
   <style>
           :root{--bg:#000;--fg:#e7ebf0;--edge:#1e2936;--muted:#96a0aa;--s1-color:#60a5fa;--s2-color:#facc15;--g1-color:#34d399;--g2-color:#f472b6}
@@ -708,8 +709,8 @@
               });
             } catch {}
 
-            window.addEventListener('message', ev => {
-              const d = ev.data||{};
+            function handleDisplayMessage(payload) {
+              const d = payload || {};
               if (d && d.type === 'speaker-bindings') {
                 handleSpeakerBindingsMessage(d);
                 return;
@@ -814,6 +815,12 @@
               if(d.type==='toggle-ck'){
                 document.body.classList.toggle('ck', !!d.on);
               }
+            }
+            window.__tpDisplayHandleRemote = handleDisplayMessage;
+            window.addEventListener('message', (ev) => {
+              try {
+                handleDisplayMessage(ev?.data);
+              } catch {}
             });
             document.getElementById('flip').onclick = flip;
             document.getElementById('invert').onclick = invert;

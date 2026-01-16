@@ -1,3 +1,5 @@
+import { publishToNetworkDisplays } from '../net/display-ws-client';
+
 // Single source of truth: BroadcastChannel transport for raw script text only
 let displayCh: BroadcastChannel | null = null;
 let lastPayloadKey = '';
@@ -62,6 +64,9 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean; 
     if (ch) {
       try { ch.postMessage(payload as any); } catch (err) { try { console.warn('[display-sync] failed to post tp_display', err); } catch {} }
     }
+    try {
+      publishToNetworkDisplays(payload);
+    } catch {}
   } finally {
     w.__TP_PUBLISHING_DISPLAY = false;
   }

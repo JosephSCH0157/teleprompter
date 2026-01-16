@@ -16,6 +16,11 @@ if exist teleprompter_pro.html (
 echo Serving root: %ROOT%
 echo URL: http://127.0.0.1:5180/
 
+where node >nul 2>nul && (
+  node "%ROOT%tools\static_server.js"
+  goto :eof
+)
+
 rem Prefer local http-server if installed
 if exist "%ROOT%node_modules\.bin\http-server.cmd" (
   rem Note: use "." instead of "%ROOT%" to avoid trailing backslash escaping the closing quote

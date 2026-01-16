@@ -1,4 +1,5 @@
 import { getLatestRawScript, publishDisplayScript } from '../features/display-sync';
+import { publishToNetworkDisplays } from '../net/display-ws-client';
 
 export type DisplayPayload = { type?: string } & Record<string, unknown>;
 
@@ -106,6 +107,9 @@ export {};
   }
 
   function sendToDisplay(payload: DisplayPayload): void {
+    try {
+      publishToNetworkDisplays(payload);
+    } catch {}
     try {
       if (!displayWin || displayWin.closed) return;
       if (payload && payload.type === 'scroll') {

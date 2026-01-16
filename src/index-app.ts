@@ -1359,6 +1359,7 @@ import { bindCoreUI } from './wiring/ui-binds';
 import { initHud } from './hud/loader';
 import { wireHudToggle } from './hud/toggle';
 import { bindStaticDom, initLegend, wireTopbarHeightVar } from './ui/dom';
+import { initDisplayPairingPanel } from './ui/display-pairing';
 // Feature initializers (TS-owned)
 
 type AnyFn = (...args: any[]) => any;
@@ -1465,6 +1466,7 @@ function onDomReady(fn: () => void): void {
         // Display window is a passive mirror; skip main UI wiring to avoid duplicate observers
         if (isDisplayContext()) return;
         try { bindStaticDom(); } catch (e) { try { console.warn('[index] bindStaticDom failed', e); } catch {} }
+        try { initDisplayPairingPanel(); } catch (e) { try { console.warn('[index] initDisplayPairingPanel failed', e); } catch {} }
 				const brain = getScrollBrain();
 				installWpmSpeedBridge({
 					api: {

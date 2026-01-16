@@ -30,8 +30,31 @@ function contentType(p) {
   return 'application/octet-stream';
 }
 
+const { createDisplayRelay } = (() => {
+  try {
+    // eslint-disable-next-line import/no-dynamic-require, global-require
+    return require('../dist/net/display-ws-server.js') || {};
+  } catch (err) {
+    console.warn('[display-relay] display relay module not built yet (run npm run build:relay)', err?.message || err);
+    return {};
+  }
+})();
+
+let displayRelay = null;
+if (typeof createDisplayRelay === 'function') {
+  try {
+    displayRelay = createDisplayRelay();
+  } catch (err) {
+    console.warn('[display-relay] failed to initialize relay', err?.message || err);
+  }
+}
+
 const server = http.createServer((req, res) => {
   try {
+    if (displayRelay?.tryHandleApi(req, res)) {
+      return;
+    }
+
     const u = decodeURI(req.url.split('?')[0]);
     let file = path.join(ROOT, u);
     // Directory default to teleprompter_pro.html for '/'
@@ -74,6 +97,10 @@ const server = http.createServer((req, res) => {
   }
 });
 
+if (displayRelay) {
+  displayRelay.attach(server);
+}
+
 server.on('error', (err) => {
   if (err && err.code === 'EADDRINUSE') {
     // Port already in use: assume another step already started the server.
@@ -97,6 +124,11 @@ server.on('error', (err) => {
 
 server.listen(PORT, HOST, () => {
   console.log('[static-server] serving', ROOT, 'on', `${HOST}:${PORT}`);
+  if (displayRelay) {
+    const hostLabel = HOST === '0.0.0.0' ? 'localhost' : HOST;
+    console.log(`[display-relay] pairing API at http://${hostLabel}:${PORT}/display/pair`);
+    console.log(`[display-relay] ws endpoint at ws://${hostLabel}:${PORT}/ws/display`);
+  }
 });
 
 // Graceful shutdown
