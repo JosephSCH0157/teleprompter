@@ -998,7 +998,7 @@ const RECOVERY_SCALE = 1;
 const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const HYBRID_GRACE_DURATION_MS = 900;
-const OFFSCRIPT_SCALE = 0.65;
+const OFFSCRIPT_SCALE = 0.85;
 const SILENCE_SCALE = 0.65;
 const PAUSE_DRIFT_SCALE = 0.95;
 const PAUSE_LOOKAHEAD_LINES = 10;
@@ -1424,6 +1424,8 @@ function stopAllMotors(reason: string) {
   hybridSilence.pausedBySilence = false;
   hybridSilence.offScriptActive = false;
   hybridSilence.lastSpeechAtMs = nowMs();
+  pauseAssistTailBoost = 0;
+  pauseAssistTailUntil = 0;
   clearHybridSilenceTimer();
   speechActive = false;
   if (wasHybridRunning) {
@@ -2459,7 +2461,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         : 1;
   const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
   const graceActive = isHybridGraceActive(now);
-  const scaleFromGrace = 1;
+  const scaleFromGrace = GRACE_MIN_SCALE;
   const onScriptLocked =
     onScriptStreak >= 2 && now - lastGoodMatchAtMs < ON_SCRIPT_LOCK_HOLD_MS;
   if (onScriptLocked) {
@@ -3265,15 +3267,20 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         const perfNow = nowMs();
         const rawTs = typeof detail.ts === "number" ? detail.ts : perfNow;
         const normalizedTs = normalizePerfTimestamp(rawTs, perfNow);
-        if (silent) {
-          hybridSilence.lastSpeechAtMs = normalizedTs;
-          hybridSilence.pausedBySilence = false;
-          speechActive = false;
-          clearHybridSilenceTimer();
-          armHybridSilenceTimer();
-        } else {
-          noteHybridSpeechActivity(normalizedTs, { source: "silence" });
-        }
+    if (silent) {
+      hybridSilence.lastSpeechAtMs = normalizedTs;
+      hybridSilence.pausedBySilence = true;
+      speechActive = false;
+      clearHybridSilenceTimer();
+      (() => {
+        const target = typeof window !== 'undefined' ? window : globalThis;
+        const fn = (target as any).__tpApplyHybridVelocity;
+        (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
+      })();
+      armHybridSilenceTimer();
+    } else {
+      noteHybridSpeechActivity(normalizedTs, { source: "silence" });
+    }
       } catch {}
     });
   } catch {
