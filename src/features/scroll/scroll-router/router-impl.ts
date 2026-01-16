@@ -999,8 +999,9 @@ const HYBRID_ON_SCRIPT_SIM = 0.32;
 const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const HYBRID_GRACE_DURATION_MS = 900;
 const OFFSCRIPT_SCALE = 0.65;
-const SILENCE_SCALE = 0.25;
-const PAUSE_DRIFT_SCALE = 0.9;
+const SILENCE_SCALE = 0.65;
+const PAUSE_DRIFT_SCALE = 0.95;
+const PAUSE_LOOKAHEAD_LINES = 10;
 const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
 const GRACE_MIN_SCALE = 0.9;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
@@ -1016,6 +1017,7 @@ const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
 let lastHybridGateFingerprint: string | null = null;
+let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 
 let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
@@ -1034,26 +1036,53 @@ function isPauseTokenText(text?: string | null) {
   if (!normalized) return false;
   return HYBRID_PAUSE_TOKENS.some((token) => normalized.includes(token));
 }
-function isPlannedPauseLikely() {
-  if (typeof document === 'undefined') return false;
-  const container =
-    viewer ?? scrollerEl ?? (typeof document !== 'undefined' ? document.getElementById('viewer') : null);
-  if (!container) return false;
-  try {
-    const rect = container.getBoundingClientRect();
-    const nearTopY = rect.top + rect.height * 0.15;
-    const nearBottomY = rect.top + rect.height * 0.85;
-    const candidates = Array.from(container.querySelectorAll('span, div, p, li')).slice(0, 800);
-    for (const el of candidates) {
-      const text = (el.textContent ?? '').trim();
-      if (!isPauseTokenText(text)) continue;
-      const r = el.getBoundingClientRect();
-      const midY = (r.top + r.bottom) / 2;
-      if (midY >= nearTopY && midY <= nearBottomY) {
-        return true;
-      }
+function getAsrParaText(entry: any): string {
+  if (!entry) return '';
+  const candidates: Array<string | undefined> = [
+    typeof entry.key === 'string' ? entry.key : undefined,
+    typeof entry.text === 'string' ? entry.text : undefined,
+    typeof entry.lineText === 'string' ? entry.lineText : undefined,
+    typeof entry.paragraph === 'string' ? entry.paragraph : undefined,
+    typeof entry.raw === 'string' ? entry.raw : undefined,
+    typeof entry.html === 'string' ? entry.html : undefined,
+    entry?.el?.textContent,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate.trim();
     }
-  } catch {}
+  }
+  return '';
+}
+
+function isPlannedPauseLikely() {
+  if (typeof window === 'undefined') return false;
+  const rawParaIndex = Array.isArray((window as any).paraIndex) ? (window as any).paraIndex : [];
+  if (!rawParaIndex.length) return false;
+  const bestIdx =
+    Number.isFinite(lastAsrMatch.bestIndex) && lastAsrMatch.bestIndex >= 0
+      ? Math.floor(lastAsrMatch.bestIndex)
+      : -1;
+  const currentIdx =
+    Number.isFinite(lastAsrMatch.currentIndex) && lastAsrMatch.currentIndex >= 0
+      ? Math.floor(lastAsrMatch.currentIndex)
+      : -1;
+  let baseIndex = bestIdx >= 0 ? bestIdx : currentIdx;
+  if (baseIndex < 0) {
+    const fallbackRaw = typeof (window as any).currentIndex === 'number' ? (window as any).currentIndex : -1;
+    baseIndex = Number.isFinite(fallbackRaw) && fallbackRaw >= 0 ? Math.floor(fallbackRaw) : -1;
+  }
+  if (baseIndex < 0) return false;
+  const lookahead = Math.max(1, PAUSE_LOOKAHEAD_LINES);
+  const start = Math.max(0, Math.min(rawParaIndex.length - 1, baseIndex));
+  const end = Math.min(rawParaIndex.length - 1, start + lookahead);
+  for (let idx = start; idx <= end; idx++) {
+    const entry = rawParaIndex[idx];
+    const paragraphText = getAsrParaText(entry);
+    if (isPauseTokenText(paragraphText)) {
+      return true;
+    }
+  }
   return false;
 }
 function computeHybridSilenceDelayMs() {
@@ -2198,6 +2227,11 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       const bestIdx = Number.isFinite(bestIdxRaw) ? bestIdxRaw : -1;
       const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
       const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
+      lastAsrMatch = {
+        currentIndex: currentIdx,
+        bestIndex: bestIdx,
+        bestSim: Number.isFinite(bestSim) ? bestSim : Number.NaN,
+      };
       updateHybridScaleFromDetail(detail);
       if (isDevMode()) {
         try {
@@ -3224,24 +3258,24 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   } catch {
   }
   try {
-        window.addEventListener("tp:asr:silence", (ev) => {
-          try {
-            const detail = (ev as CustomEvent).detail || {};
-            const silent = !!detail.silent;
-            const perfNow = nowMs();
-            const rawTs = typeof detail.ts === "number" ? detail.ts : perfNow;
-            const normalizedTs = normalizePerfTimestamp(rawTs, perfNow);
-            if (silent) {
-              const delay = computeHybridSilenceDelayMs();
-              hybridSilence.lastSpeechAtMs = Math.max(0, normalizedTs - delay - 1);
-              hybridSilence.pausedBySilence = true;
-              clearHybridSilenceTimer();
-              handleHybridSilenceTimeout();
-            } else {
-              noteHybridSpeechActivity(normalizedTs, { source: "silence" });
-            }
-          } catch {}
-        });
+    window.addEventListener("tp:asr:silence", (ev) => {
+      try {
+        const detail = (ev as CustomEvent).detail || {};
+        const silent = !!detail.silent;
+        const perfNow = nowMs();
+        const rawTs = typeof detail.ts === "number" ? detail.ts : perfNow;
+        const normalizedTs = normalizePerfTimestamp(rawTs, perfNow);
+        if (silent) {
+          hybridSilence.lastSpeechAtMs = normalizedTs;
+          hybridSilence.pausedBySilence = false;
+          speechActive = false;
+          clearHybridSilenceTimer();
+          armHybridSilenceTimer();
+        } else {
+          noteHybridSpeechActivity(normalizedTs, { source: "silence" });
+        }
+      } catch {}
+    });
   } catch {
   }
   try {
