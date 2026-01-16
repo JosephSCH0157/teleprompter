@@ -978,7 +978,7 @@ function refreshHybridWriter() {
   } catch {}
 }
 const HYBRID_SILENCE_SOFT_MS = 3000;
-const HYBRID_PAUSE_SILENCE_SOFT_MS = 9000;
+const HYBRID_PAUSE_SILENCE_SOFT_MS = 7500;
 const HYBRID_SILENCE_HARD_STOP_MS = 25000;
 const LIVE_GRACE_MS = 1800;
 const OFFSCRIPT_MILD = 0.75;
@@ -989,7 +989,7 @@ const HYBRID_OFFSCRIPT_MILD_SIM = 0.2;
 const HYBRID_GRACE_DURATION_MS = 900;
 const OFFSCRIPT_SCALE = 0.65;
 const SILENCE_SCALE = 0.25;
-const PAUSE_SILENCE_SCALE = 0.65;
+const PAUSE_DRIFT_SCALE = 0.9;
 const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
 const GRACE_MIN_SCALE = 0.9;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
@@ -1002,12 +1002,17 @@ const HYBRID_ASSIST_MAX_BOOST = 420;
 const OFFSCRIPT_EVIDENCE_THRESHOLD = 4;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
 const ON_SCRIPT_LOCK_HOLD_MS = 1500;
+const PAUSE_ASSIST_TAIL_MS = 2000;
+const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
 let lastHybridGateFingerprint: string | null = null;
 
 let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
 let hybridBrakeState = { factor: 1, expiresAt: 0, reason: null as string | null };
 let hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null as string | null };
+let pauseAssistTailBoost = 0;
+let pauseAssistTailUntil = 0;
+let lastIgnoredAsrPursuitLogAt = 0;
 let hybridVelocityRefreshRaf: number | null = null;
 let hybridTargetHintState: { top: number; confidence: number; reason?: string; ts: number } | null = null;
 let hybridWantedRunning = false;
@@ -2243,14 +2248,23 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     return hybridBrakeState.factor;
   }
-  function getActiveAssistBoost(now = nowMs()) {
-    if (hybridAssistState.expiresAt <= now) {
-      if (hybridAssistState.boostPxps !== 0 || hybridAssistState.expiresAt !== 0) {
-        hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
-      }
-      return 0;
+  function getActiveAssistBoost(now = nowMs(), pauseTailEligible = false) {
+    if (hybridAssistState.expiresAt > now) {
+      return hybridAssistState.boostPxps;
     }
-    return hybridAssistState.boostPxps;
+    const tailActive =
+      pauseTailEligible && pauseAssistTailBoost > 0 && pauseAssistTailUntil > now;
+    if (tailActive) {
+      return pauseAssistTailBoost;
+    }
+    if (pauseAssistTailBoost !== 0 || pauseAssistTailUntil !== 0) {
+      pauseAssistTailBoost = 0;
+      pauseAssistTailUntil = 0;
+    }
+    if (hybridAssistState.boostPxps !== 0 || hybridAssistState.expiresAt !== 0) {
+      hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
+    }
+    return 0;
   }
 
 
@@ -2265,16 +2279,20 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const reason = typeof detail.reason === "string" ? detail.reason : null;
     if (reason === "asr-pursuit") {
       if (isDevMode()) {
-        try {
-          console.info(
-            `[HYBRID_BRAKE] ignored asr-pursuit ${JSON.stringify({
-              now,
-              safeFactor,
-              ttl,
-              reason,
-            })}`,
-          );
-        } catch {}
+        const elapsed = now - lastIgnoredAsrPursuitLogAt;
+        if (elapsed >= IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS) {
+          lastIgnoredAsrPursuitLogAt = now;
+          try {
+            console.info(
+              `[HYBRID_BRAKE] ignored asr-pursuit ${JSON.stringify({
+                now,
+                safeFactor,
+                ttl,
+                reason,
+              })}`,
+            );
+          } catch {}
+        }
       }
       return;
     }
@@ -2338,16 +2356,18 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const boost = boostRaw > 0 ? Math.min(HYBRID_ASSIST_MAX_BOOST, boostRaw) : 0;
     const ttlRaw = Number.isFinite(Number(detail.ttlMs)) ? Number(detail.ttlMs) : HYBRID_ASSIST_DEFAULT_TTL;
     const ttl = Math.max(HYBRID_EVENT_TTL_MIN, Math.min(HYBRID_EVENT_TTL_MAX, ttlRaw));
-    if (boost <= 0) {
-      hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
-    } else {
-      hybridAssistState = {
-        boostPxps: boost,
-        expiresAt: nowMs() + ttl,
-        reason: typeof detail.reason === "string" ? detail.reason : null,
-      };
-    }
-    scheduleHybridVelocityRefresh();
+  if (boost <= 0) {
+    hybridAssistState = { boostPxps: 0, expiresAt: 0, reason: null };
+  } else {
+    hybridAssistState = {
+      boostPxps: boost,
+      expiresAt: nowMs() + ttl,
+      reason: typeof detail.reason === "string" ? detail.reason : null,
+    };
+  }
+  pauseAssistTailBoost = 0;
+  pauseAssistTailUntil = 0;
+  scheduleHybridVelocityRefresh();
     (() => {
       const target = typeof window !== 'undefined' ? window : globalThis;
       const fn = (target as any).__tpApplyHybridVelocity;
@@ -2368,14 +2388,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       ts: nowMs(),
     };
   }
-  function computeEffectiveHybridScale(now: number, silenceState = hybridSilence) {
-  const pauseLikely = isPlannedPauseLikely();
-  const scaleFromSilence =
-    silenceState.pausedBySilence && pauseLikely
-      ? PAUSE_SILENCE_SCALE
-      : silenceState.pausedBySilence
-      ? SILENCE_SCALE
-      : 1;
+  function computeEffectiveHybridScale(
+    now: number,
+    silenceState = hybridSilence,
+    pauseLikelyOverride?: boolean,
+  ) {
+    const pauseLikely =
+      typeof pauseLikelyOverride === "boolean" ? pauseLikelyOverride : isPlannedPauseLikely();
+    const scaleFromSilence =
+      silenceState.pausedBySilence && pauseLikely
+        ? PAUSE_DRIFT_SCALE
+        : silenceState.pausedBySilence
+        ? SILENCE_SCALE
+        : 1;
   const scaleFromOffscript = silenceState.offScriptActive ? OFFSCRIPT_SCALE : 1;
   const graceActive = isHybridGraceActive(now);
   const scaleFromGrace = 1;
@@ -2440,6 +2465,14 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptActive,
       pausedBySilence,
     } = computeEffectiveHybridScale(now, silenceState);
+    const pauseTailEligible = pauseLikely && silenceState.pausedBySilence;
+    if (pauseTailEligible && hybridAssistState.boostPxps > 0) {
+      pauseAssistTailBoost = hybridAssistState.boostPxps;
+      pauseAssistTailUntil = Math.max(pauseAssistTailUntil, now + PAUSE_ASSIST_TAIL_MS);
+    } else if (!pauseTailEligible) {
+      pauseAssistTailBoost = 0;
+      pauseAssistTailUntil = 0;
+    }
     logHybridScaleDetail({
       basePxps: base,
       scaleFromSilence,
@@ -2471,7 +2504,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       brakeTtl,
       motorRunning,
     });
-    const rawAssist = getActiveAssistBoost(now);
+    const rawAssist = getActiveAssistBoost(now, pauseTailEligible);
     const effective = base * effectiveScale * brakeFactor;
     const suppressAssist =
       reason === 'silence' ||
