@@ -1965,9 +1965,9 @@ function handleHybridSilenceTimeout() {
   if (state2.mode !== "hybrid") return;
   const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
   const stillEligibleForSpeech =
+    state2.mode === "hybrid" &&
     sessionPhase === "live" &&
-    userEnabled &&
-    hybridWantedRunning;
+    userEnabled;
   const silenceDelayMs = computeHybridSilenceDelayMs();
   if (stillEligibleForSpeech && lastSpeechAgeMs < silenceDelayMs) {
     const delay = Math.max(1, silenceDelayMs - lastSpeechAgeMs);
@@ -1999,7 +1999,10 @@ function handleHybridSilenceTimeout() {
   } catch {}
 function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     clearHybridSilenceTimer();
-    if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    if (state2.mode !== "hybrid") return;
+
+    // Keep tracking silence while the motor is running, even if the intent flag flickers.
+    if (!hybridWantedRunning && !hybridMotor.isRunning()) return;
     const nextDelay = Math.max(1, delay);
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), nextDelay);
   }
@@ -2035,7 +2038,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     ts?: number,
     opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
   ) {
-    const now = typeof ts === "number" ? ts : nowMs();
+    const perfNow = nowMs();
+    const now =
+      typeof ts === "number" && ts > 0 && ts < 1_000_000_000 ? ts : perfNow;
     const wasSpeechActive = speechActive;
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
