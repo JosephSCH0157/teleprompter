@@ -113,6 +113,17 @@ const nowMs = () =>
     ? performance.now()
     : Date.now();
 
+function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
+  const perfNow = Number.isFinite(referenceNow) ? referenceNow : nowMs();
+  if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate < 0) {
+    return perfNow;
+  }
+  if (candidate > perfNow + 5000) {
+    return perfNow;
+  }
+  return candidate;
+}
+
 function clearHybridSilenceTimer() {
   if (hybridSilence.timeoutId != null) {
     try {
@@ -166,12 +177,12 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   return ok;
 }
 
-  function beginHybridLiveGraceWindow() {
-    if (state2.mode !== "hybrid") return;
-    const now = nowMs();
-    seedHybridBaseSpeed();
-    setHybridScale(RECOVERY_SCALE);
-    liveGraceWindowEndsAt = now + LIVE_GRACE_MS;
+function beginHybridLiveGraceWindow() {
+  if (state2.mode !== "hybrid") return;
+  const now = nowMs();
+  seedHybridBaseSpeed();
+  setHybridScale(RECOVERY_SCALE);
+  liveGraceWindowEndsAt = now + LIVE_GRACE_MS;
   hybridSilence.lastSpeechAtMs = now;
   hybridSilence.pausedBySilence = false;
   clearHybridSilenceTimer();
@@ -1946,16 +1957,19 @@ function installScrollRouter(opts) {
     } catch {}
   }
 
-  function canRunHybridMotor() {
-    try {
-      const phase = appStore.get("session.phase");
-      const allow = appStore.get("session.scrollAutoOnLive");
-      if (phase !== "live") return false;
-      return !!allow;
-    } catch {
-      return false;
-    }
+function canRunHybridMotor() {
+  try {
+    const phase = appStore.get("session.phase");
+    const allow = appStore.get("session.scrollAutoOnLive");
+    if (phase !== "live") return false;
+    return !!allow;
+  } catch {
+    return false;
   }
+}
+function isHybridSessionEligible() {
+  return state2.mode === "hybrid" && sessionPhase === "live" && userEnabled;
+}
 function handleHybridSilenceTimeout() {
   hybridSilence.timeoutId = null;
   const now = nowMs();
@@ -1967,36 +1981,44 @@ function handleHybridSilenceTimeout() {
     armHybridSilenceTimer(delay || computeHybridSilenceDelayMs());
     return;
   }
-  if (state2.mode !== "hybrid") return;
-  const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
-  const stillEligibleForSpeech =
-    state2.mode === "hybrid" &&
-    sessionPhase === "live" &&
-    userEnabled;
-  const silenceDelayMs = computeHybridSilenceDelayMs();
-  if (stillEligibleForSpeech && lastSpeechAgeMs < silenceDelayMs) {
-    const delay = Math.max(1, silenceDelayMs - lastSpeechAgeMs);
-    armHybridSilenceTimer(delay);
-    return;
-  }
-  if (!hybridMotor.isRunning()) return;
-  hybridSilence.pausedBySilence = true;
-  speechActive = false;
-  const exceededHardStop = lastSpeechAgeMs >= HYBRID_SILENCE_HARD_STOP_MS;
-  if (!stillEligibleForSpeech || exceededHardStop) {
-    hybridMotor.stop();
-    emitMotorState("hybridWpm", false);
+  const softDelayMs = computeHybridSilenceDelayMs();
+  const hardStopMs = HYBRID_SILENCE_HARD_STOP_MS;
+  const lastSpeechAtMs = hybridSilence.lastSpeechAtMs > 0 ? hybridSilence.lastSpeechAtMs : now;
+  const silentForMs = Math.max(0, now - lastSpeechAtMs);
+  const eligible = isHybridSessionEligible();
+  const motorRunning = hybridMotor.isRunning();
+  if (!eligible) {
+    if (motorRunning) {
+      hybridMotor.stop();
+      emitMotorState("hybridWpm", false);
+    }
+    hybridSilence.pausedBySilence = false;
+    speechActive = false;
     emitHybridSafety();
     try { applyGate(); } catch {}
     return;
   }
+  if (silentForMs >= hardStopMs) {
+    if (motorRunning) {
+      hybridMotor.stop();
+      emitMotorState("hybridWpm", false);
+    }
+    hybridSilence.pausedBySilence = false;
+    speechActive = false;
+    emitHybridSafety();
+    try { applyGate(); } catch {}
+    return;
+  }
+  if (!motorRunning) return;
+  hybridSilence.pausedBySilence = true;
+  speechActive = false;
   (() => {
     const target = typeof window !== 'undefined' ? window : globalThis;
     const fn = (target as any).__tpApplyHybridVelocity;
     (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
   })();
   emitHybridSafety();
-  armHybridSilenceTimer(silenceDelayMs);
+  armHybridSilenceTimer(softDelayMs);
   try { applyGate(); } catch {}
 }
   try {
@@ -2004,10 +2026,10 @@ function handleHybridSilenceTimeout() {
   } catch {}
 function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     clearHybridSilenceTimer();
-    if (state2.mode !== "hybrid") return;
+    if (!isHybridSessionEligible()) return;
 
     // Keep tracking silence while the motor is running, even if the intent flag flickers.
-    if (!hybridWantedRunning && !hybridMotor.isRunning()) return;
+    if (!hybridMotor.isRunning() && !hybridWantedRunning) return;
     const nextDelay = Math.max(1, delay);
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), nextDelay);
   }
@@ -2044,8 +2066,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
   ) {
     const perfNow = nowMs();
-    const now =
-      typeof ts === "number" && ts > 0 && ts < 1_000_000_000 ? ts : perfNow;
+    const now = normalizePerfTimestamp(ts, perfNow);
     const wasSpeechActive = speechActive;
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
@@ -2126,7 +2147,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
   }
   function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
-    const now = typeof detail.timestamp === "number" ? detail.timestamp : nowMs();
+    const perfNow = nowMs();
+    const now = normalizePerfTimestamp(detail.timestamp, perfNow);
     const isNoMatch = detail.noMatch === true;
     const wasSilent = hybridSilence.pausedBySilence;
     hybridSilence.lastSpeechAtMs = now;
@@ -3202,22 +3224,24 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   } catch {
   }
   try {
-      window.addEventListener("tp:asr:silence", (ev) => {
-        try {
-          const detail = (ev as CustomEvent).detail || {};
-          const silent = !!detail.silent;
-          const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
-          if (silent) {
-            const delay = computeHybridSilenceDelayMs();
-            hybridSilence.lastSpeechAtMs = ts - delay - 1;
-            hybridSilence.pausedBySilence = true;
-            clearHybridSilenceTimer();
-            handleHybridSilenceTimeout();
-          } else {
-            noteHybridSpeechActivity(ts, { source: "silence" });
-          }
-        } catch {}
-      });
+        window.addEventListener("tp:asr:silence", (ev) => {
+          try {
+            const detail = (ev as CustomEvent).detail || {};
+            const silent = !!detail.silent;
+            const perfNow = nowMs();
+            const rawTs = typeof detail.ts === "number" ? detail.ts : perfNow;
+            const normalizedTs = normalizePerfTimestamp(rawTs, perfNow);
+            if (silent) {
+              const delay = computeHybridSilenceDelayMs();
+              hybridSilence.lastSpeechAtMs = Math.max(0, normalizedTs - delay - 1);
+              hybridSilence.pausedBySilence = true;
+              clearHybridSilenceTimer();
+              handleHybridSilenceTimeout();
+            } else {
+              noteHybridSpeechActivity(normalizedTs, { source: "silence" });
+            }
+          } catch {}
+        });
   } catch {
   }
   try {
