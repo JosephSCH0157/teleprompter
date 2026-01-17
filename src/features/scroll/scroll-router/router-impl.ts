@@ -2,6 +2,7 @@
 export {};
 
 import { getScrollWriter } from '../../../scroll/scroll-writer';
+import { getViewportMetrics } from '../../../scroll/scroll-helpers';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -122,6 +123,138 @@ function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
     return perfNow;
   }
   return candidate;
+}
+
+function getMarkerPercent() {
+  try {
+    if (typeof window === "undefined") return 0.4;
+    const pct = (window as any).__TP_MARKER_PCT;
+    return Number.isFinite(pct) ? pct : 0.4;
+  } catch {
+    return 0.4;
+  }
+}
+
+function computeMarkerY(scroller = scrollerEl) {
+  if (!scroller) return null;
+  const markerPct = getMarkerPercent();
+  const height = scroller.clientHeight || 0;
+  const currentTop = scroller.scrollTop || 0;
+  const offset = height * markerPct;
+  return currentTop + offset;
+}
+
+function computeHybridErrorPx(now = nowMs()) {
+  const scroller = scrollerEl;
+  const hint = hybridTargetHintState;
+  if (!scroller || !hint) return null;
+  const markerPct = getMarkerPercent();
+  const offset = (scroller.clientHeight || 0) * markerPct;
+  const anchorY = hint.top + offset;
+  const markerY = (scroller.scrollTop || 0) + offset;
+  const errorPx = anchorY - markerY;
+  const anchorAgeMs = Math.max(0, now - hint.ts);
+  return {
+    errorPx,
+    anchorY,
+    markerY,
+    confidence: hint.confidence,
+    anchorAgeMs,
+  };
+}
+
+function getSilenceMs(now = nowMs()) {
+  const lastSpeech = hybridSilence.lastSpeechAtMs ?? now;
+  return Math.max(0, now - lastSpeech);
+}
+
+function isHybridCorrectionEligible(now = nowMs()) {
+  if (state2.mode !== "hybrid") return false;
+  if (getHybridSessionPhase() !== "live") return false;
+  const hint = hybridTargetHintState;
+  if (!hint) return false;
+  if (hint.confidence < HYBRID_CTRL_CONF_MIN) return false;
+  if (now - hint.ts > HYBRID_CTRL_ANCHOR_RECENCY_MS) return false;
+  return true;
+}
+
+function logHybridCtrlState(
+  basePxps: number,
+  now: number,
+  errorInfo: ReturnType<typeof computeHybridErrorPx> | null,
+  silenceMs: number,
+  eligible: boolean,
+  normalizedError: number,
+  targetMult: number,
+  appliedTargetMult: number,
+  silenceCap: number,
+) {
+  if (!isDevMode()) return;
+  if (!HYBRID_CTRL_ENABLED) return;
+  if (now - lastHybridCtrlLogAt < HYBRID_CTRL_LOG_THROTTLE_MS) return;
+  lastHybridCtrlLogAt = now;
+  try {
+    console.info("[HYBRID_CTRL]", {
+      errorPx: errorInfo?.errorPx ?? null,
+      anchorY: errorInfo?.anchorY ?? null,
+      markerY: errorInfo?.markerY ?? null,
+      confidence: errorInfo?.confidence ?? null,
+      anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
+      silenceMs,
+      eligible,
+      basePxps,
+      normalizedError,
+      targetMult,
+      appliedTargetMult,
+      silenceCap,
+      hybridMult: hybridCtrl.mult,
+    });
+  } catch {}
+}
+
+function getLinePx() {
+  try {
+    const metrics = getViewportMetrics(() => scrollerEl);
+    return Number.isFinite(metrics.pxPerLine) && metrics.pxPerLine > 0
+      ? metrics.pxPerLine
+      : HYBRID_CTRL_LINE_PX_DEFAULT;
+  } catch {
+    return HYBRID_CTRL_LINE_PX_DEFAULT;
+  }
+}
+
+function normalizeHybridError(errorPx: number) {
+  const linePx = getLinePx();
+  const bandPx = linePx * 1.5;
+  const deadbandPx = linePx * 0.45;
+  if (Math.abs(errorPx) < deadbandPx) return 0;
+  return clamp(errorPx / bandPx, -1, 1);
+}
+
+function computeTargetMultiplier(e: number) {
+  const raw = 1 + HYBRID_CTRL_KP * e;
+  return clamp(raw, HYBRID_CTRL_BRAKE_MIN, HYBRID_CTRL_ASSIST_MAX);
+}
+
+function updateHybridMultiplier(targetMult: number, dtMs: number) {
+  if (!Number.isFinite(dtMs) || dtMs <= 0) {
+    hybridCtrl.mult = targetMult;
+    return hybridCtrl.mult;
+  }
+  const alpha = Math.min(1, HYBRID_CTRL_SMOOTH_ALPHA + dtMs * 0.001);
+  const next = hybridCtrl.mult + (targetMult - hybridCtrl.mult) * alpha;
+  hybridCtrl.mult = Number.isFinite(next) ? next : 1;
+  return hybridCtrl.mult;
+}
+
+function computeSilenceCapMultiplier(silenceMs: number) {
+  if (silenceMs > HYBRID_CTRL_SILENCE_LONG_MS) {
+    return HYBRID_CTRL_SILENCE_LONG_CAP;
+  }
+  if (silenceMs > HYBRID_CTRL_SILENCE_SHORT_MS) {
+    return HYBRID_CTRL_SILENCE_SHORT_CAP;
+  }
+  return 1;
 }
 
 let hybridProgrammaticScrollUntilMs = 0;
@@ -1026,6 +1159,29 @@ const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
 const MANUAL_SCROLL_LOG_THROTTLE_MS = 1500;
+const HYBRID_CTRL_LOG_THROTTLE_MS = 500;
+const HYBRID_CTRL_CONF_MIN = 0.5;
+const HYBRID_CTRL_ANCHOR_RECENCY_MS = 1200;
+const HYBRID_CTRL_ENABLED = (() => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('hybridCtrl') === '1') return true;
+    if ((window as any).__TP_HYBRID_CTRL === true) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+})();
+const HYBRID_CTRL_KP = 0.22;
+const HYBRID_CTRL_ASSIST_MAX = 1.25;
+const HYBRID_CTRL_BRAKE_MIN = 0.6;
+const HYBRID_CTRL_SMOOTH_ALPHA = 0.12;
+const HYBRID_CTRL_SILENCE_SHORT_MS = 700;
+const HYBRID_CTRL_SILENCE_LONG_MS = 2000;
+const HYBRID_CTRL_SILENCE_SHORT_CAP = 0.75;
+const HYBRID_CTRL_SILENCE_LONG_CAP = 0.6;
+const HYBRID_CTRL_LINE_PX_DEFAULT = 56;
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 
@@ -1041,6 +1197,17 @@ let hybridTargetHintState: { top: number; confidence: number; reason?: string; t
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
+let lastHybridCtrlLogAt = 0;
+const hybridCtrl = {
+  mult: 1,
+  lastTs: 0,
+  lastErrorPx: 0,
+  lastAnchorTs: 0,
+};
+let hybridSessionPhase = 'idle';
+function getHybridSessionPhase() {
+  return hybridSessionPhase;
+}
 function isPauseTokenText(text?: string | null) {
   if (!text) return false;
   const normalized = text.trim().toLowerCase();
@@ -1727,6 +1894,7 @@ function installScrollRouter(opts) {
   let speechActive = false;
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
+  hybridSessionPhase = sessionPhase;
   const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
   function isFatalAutoStopReason(reason?: string | null): boolean {
     if (!reason) return false;
@@ -1746,6 +1914,7 @@ function installScrollRouter(opts) {
     const storedPhase = appStore.get?.('session.phase');
     if (storedPhase) {
       sessionPhase = String(storedPhase);
+      hybridSessionPhase = sessionPhase;
     }
   } catch {
     // ignore
@@ -2536,6 +2705,29 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
+    const silenceMs = getSilenceMs(now);
+    const errorInfo = computeHybridErrorPx(now);
+    const eligible = isHybridCorrectionEligible(now);
+    const normalizedError = eligible && errorInfo ? normalizeHybridError(errorInfo.errorPx) : 0;
+    const targetMult = eligible ? computeTargetMultiplier(normalizedError) : 1;
+    const silenceCap = computeSilenceCapMultiplier(silenceMs);
+    const appliedTargetMult = Math.min(targetMult, silenceCap);
+    const dtMs = hybridCtrl.lastTs > 0 ? Math.max(0, now - hybridCtrl.lastTs) : 0;
+    updateHybridMultiplier(appliedTargetMult, dtMs);
+    hybridCtrl.lastErrorPx = errorInfo?.errorPx ?? 0;
+    hybridCtrl.lastAnchorTs = errorInfo?.anchorAgeMs ?? 0;
+    hybridCtrl.lastTs = now;
+    logHybridCtrlState(
+      base,
+      now,
+      errorInfo,
+      silenceMs,
+      eligible,
+      normalizedError,
+      targetMult,
+      appliedTargetMult,
+      silenceCap,
+    );
     const {
       scale: effectiveScale,
       reason,
@@ -2588,7 +2780,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       motorRunning,
     });
     const rawAssist = getActiveAssistBoost(now, pauseTailEligible);
-    const effective = base * effectiveScale * brakeFactor;
+    const baseWithCorrection = base * hybridCtrl.mult;
+    const effective = baseWithCorrection * effectiveScale * brakeFactor;
     const suppressAssist =
       reason === 'silence' ||
       effectiveScale <= OFFSCRIPT_SCALE ||
@@ -3025,6 +3218,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         appStore.subscribe("session.phase", (phase) => {
           const prevPhase = sessionPhase;
           sessionPhase = String(phase || "idle");
+          hybridSessionPhase = sessionPhase;
         if (sessionPhase !== "live") {
           stopAllMotors("phase change");
           liveSessionWpmLocked = false;
