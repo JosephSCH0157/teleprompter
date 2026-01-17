@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
+const FALLBACK_HTML = path.join(ROOT, 'teleprompter_pro.html');
 
 // Choose host/port (allow overrides via env or argv)
 const DEFAULT_HOST = process.env.CI_HOST || '0.0.0.0';
@@ -66,6 +67,39 @@ function sendJson(res, status, body) {
   }
 }
 
+function serveFile(res, file, req) {
+  fs.readFile(file, (err2, data) => {
+    if (err2) {
+      if (req && req.method === 'GET') {
+        serveFallback(res, req);
+        return;
+      }
+      res.statusCode = 404;
+      res.end('Not found');
+      return;
+    }
+    res.setHeader('Content-Type', contentType(file));
+    res.end(data);
+  });
+}
+
+function serveFallback(res, req) {
+  if (req.method !== 'GET') {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
+  fs.readFile(FALLBACK_HTML, (fallbackErr, fallbackData) => {
+    if (fallbackErr) {
+      res.statusCode = 500;
+      res.end('Fallback not available');
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.end(fallbackData);
+  });
+}
+
 function getLanHostCandidate() {
   if (process.env.DISPLAY_HOST) {
     return String(process.env.DISPLAY_HOST).trim() || null;
@@ -108,11 +142,10 @@ const server = http.createServer((req, res) => {
     }
     fs.stat(file, (err, st) => {
       if (err) {
-        res.statusCode = 404;
-        res.end('Not found');
+        serveFallback(res, req);
         return;
       }
-    if (st.isDirectory()) {
+      if (st.isDirectory()) {
         const candidate = path.join(file, 'teleprompter_pro.html');
         if (fs.existsSync(candidate)) {
           file = candidate;
@@ -120,15 +153,7 @@ const server = http.createServer((req, res) => {
           file = path.join(file, 'index.html');
         }
       }
-      fs.readFile(file, (err2, data) => {
-        if (err2) {
-          res.statusCode = 404;
-          res.end('Not found');
-          return;
-        }
-        res.setHeader('Content-Type', contentType(file));
-        res.end(data);
-      });
+      serveFile(res, file, req);
     });
   } catch (e) {
     res.statusCode = 500;

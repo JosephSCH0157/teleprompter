@@ -216,6 +216,66 @@ function logHybridCtrlState(
   } catch {}
 }
 
+type HybridCtrlHudState = {
+  basePxps: number;
+  errorPx: number | null;
+  anchorAgeMs: number | null;
+  normalizedError: number;
+  targetMult: number;
+  appliedTargetMult: number;
+  mult: number;
+  silenceMs: number;
+  silenceCap: number;
+  offScriptSeverity: number;
+  offScriptCap: number;
+  eligible: boolean;
+};
+
+function formatHudNumber(value: number | null | undefined, digits = 2) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';
+}
+
+function renderHybridCtrlHud(state: HybridCtrlHudState) {
+  if (!HYBRID_CTRL_ENABLED) return;
+  if (typeof document === 'undefined') return;
+  const container = document.body || document.documentElement;
+  if (!container) return;
+  let hud = document.getElementById('tpHybridHud');
+  if (!hud) {
+    hud = document.createElement('div');
+    hud.id = 'tpHybridHud';
+    hud.style.position = 'fixed';
+    hud.style.bottom = '8px';
+    hud.style.right = '8px';
+    hud.style.zIndex = '2147483647';
+    hud.style.padding = '6px 8px';
+    hud.style.fontSize = '11px';
+    hud.style.fontFamily = 'system-ui, sans-serif';
+    hud.style.background = 'rgba(0, 0, 0, 0.65)';
+    hud.style.color = '#fff';
+    hud.style.borderRadius = '4px';
+    hud.style.pointerEvents = 'none';
+    hud.style.whiteSpace = 'nowrap';
+    container.appendChild(hud);
+  }
+  const parts = [
+    `base=${formatHudNumber(state.basePxps)}`,
+    `err=${formatHudNumber(state.errorPx, 1)}`,
+    `anchor=${formatHudNumber(state.anchorAgeMs, 0)}ms`,
+    `norm=${formatHudNumber(state.normalizedError, 2)}`,
+    `target=${formatHudNumber(state.targetMult, 2)}`,
+    `applied=${formatHudNumber(state.appliedTargetMult, 2)}`,
+    `mult=${formatHudNumber(state.mult, 2)}`,
+    `silence=${formatHudNumber(state.silenceMs, 0)}ms`,
+    `silenceCap=${formatHudNumber(state.silenceCap, 2)}`,
+    `off=${formatHudNumber(state.offScriptSeverity, 2)}`,
+    `offCap=${formatHudNumber(state.offScriptCap, 2)}`,
+    `eligible=${state.eligible ? 'yes' : 'no'}`,
+  ];
+  hud.textContent = parts.join(' | ');
+}
+
 function getLinePx() {
   try {
     const metrics = getViewportMetrics(() => scrollerEl);
@@ -2769,6 +2829,20 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptSeverity,
       offScriptCap,
     );
+    renderHybridCtrlHud({
+      basePxps: base,
+      errorPx: errorInfo?.errorPx ?? null,
+      anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
+      normalizedError,
+      targetMult,
+      appliedTargetMult,
+      mult: hybridCtrl.mult,
+      silenceMs,
+      silenceCap,
+      offScriptSeverity,
+      offScriptCap,
+      eligible,
+    });
     const {
       scale: effectiveScale,
       reason,
