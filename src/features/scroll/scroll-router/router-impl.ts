@@ -124,6 +124,14 @@ function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
   return candidate;
 }
 
+let hybridProgrammaticScrollUntilMs = 0;
+function markHybridProgrammaticScroll(durationMs = 80) {
+  hybridProgrammaticScrollUntilMs = nowMs() + durationMs;
+}
+function isHybridProgrammaticScroll() {
+  return nowMs() < hybridProgrammaticScrollUntilMs;
+}
+
 function clearHybridSilenceTimer() {
   if (hybridSilence.timeoutId != null) {
     try {
@@ -469,6 +477,7 @@ function createAutoMotor() {
     carry -= step;
     const before = el.scrollTop || 0;
     const next = Math.min(room, before + step);
+    markHybridProgrammaticScroll();
     el.scrollTop = next;
     const after = el.scrollTop || 0;
     if (after > before) {
@@ -1016,6 +1025,7 @@ const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
 const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
+const MANUAL_SCROLL_LOG_THROTTLE_MS = 1500;
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 
@@ -1030,6 +1040,7 @@ let hybridVelocityRefreshRaf: number | null = null;
 let hybridTargetHintState: { top: number; confidence: number; reason?: string; ts: number } | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
+let lastManualScrollBrakeLogAt = 0;
 function isPauseTokenText(text?: string | null) {
   if (!text) return false;
   const normalized = text.trim().toLowerCase();
@@ -1216,14 +1227,25 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
   })();
   if (isDevMode()) {
-    try {
-      console.info('[HYBRID_BRAKE] set', {
-        factor: safeFactor,
-        ttl,
-        expiresAt: hybridBrakeState.expiresAt,
-        reason: hybridBrakeState.reason,
-      });
-    } catch {}
+    let shouldLogBrake = true;
+    if (reason === 'manual-scroll') {
+      const elapsed = now - lastManualScrollBrakeLogAt;
+      if (elapsed < MANUAL_SCROLL_LOG_THROTTLE_MS) {
+        shouldLogBrake = false;
+      } else {
+        lastManualScrollBrakeLogAt = now;
+      }
+    }
+    if (shouldLogBrake) {
+      try {
+        console.info('[HYBRID_BRAKE] set', {
+          factor: safeFactor,
+          ttl,
+          expiresAt: hybridBrakeState.expiresAt,
+          reason: hybridBrakeState.reason,
+        });
+      } catch {}
+    }
   }
 }
 
@@ -1563,10 +1585,13 @@ function installScrollRouter(opts) {
     const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
     scrollerEl = fallback;
   }
-  if (!hybridScrollGraceListenerInstalled) {
+    if (!hybridScrollGraceListenerInstalled) {
     try {
       const scrollHandler = (event: Event) => {
         if (!event.isTrusted) return;
+        if (state2.mode === 'hybrid' && isHybridProgrammaticScroll()) {
+          return;
+        }
         const target = event.target as HTMLElement | null;
         const scroller = scrollerEl;
         if (!scroller || !target) return;

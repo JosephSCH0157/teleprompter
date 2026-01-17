@@ -17,6 +17,7 @@ type Elements = {
   close: HTMLButtonElement;
   refresh: HTMLButtonElement;
   copy: HTMLButtonElement;
+  expiry: HTMLElement;
 };
 
 let modalElements: Elements | null = null;
@@ -213,6 +214,7 @@ function buildModal(): Elements | null {
   const input = panel.querySelector<HTMLInputElement>('input');
   const qr = panel.querySelector<HTMLImageElement>('img');
   const status = panel.querySelector<HTMLElement>('.display-pairing-status-text');
+  const expiry = panel.querySelector<HTMLElement>('.display-pairing-status-expiry');
   const wsLabel = panel.querySelector<HTMLElement>('.display-pairing-status-ws');
   const close = panel.querySelector<HTMLButtonElement>('.display-pairing-btn-close');
   const refresh = panel.querySelector<HTMLButtonElement>('.display-pairing-btn-refresh');
@@ -223,7 +225,12 @@ function buildModal(): Elements | null {
     return null;
   }
 
-  modalElements = { mask, input, qr, status, wsLabel, close, refresh, copy };
+  if (!expiry) {
+    mask.remove();
+    return null;
+  }
+
+  modalElements = { mask, input, qr, status, wsLabel, close, refresh, copy, expiry };
   return modalElements;
 }
 
@@ -247,8 +254,8 @@ function toggleModal(on: boolean) {
 }
 
 function updateStatusText(text: string) {
-  if (modalElements?.status) {
-    modalElements.status.textContent = text;
+  if (modalElements?.expiry) {
+    modalElements.expiry.textContent = text;
   }
 }
 

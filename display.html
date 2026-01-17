@@ -711,6 +711,17 @@
 
             function handleDisplayMessage(payload) {
               const d = payload || {};
+              if (d && (d.type === 'tp:script' || d.kind === 'tp:script')) {
+                const raw = d.rawText ?? d.text ?? d.html ?? '';
+                if (raw) {
+                  applyScriptSnapshot(raw);
+                } else if (d && typeof d.rawText === 'string') {
+                  applyScriptSnapshot(d.rawText);
+                }
+                applyScaled();
+                applyBottomPad();
+                return;
+              }
               if (d && d.type === 'speaker-bindings') {
                 handleSpeakerBindingsMessage(d);
                 return;
