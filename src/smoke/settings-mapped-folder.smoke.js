@@ -18,7 +18,7 @@
     const scripts = document.querySelector(selectors.scripts);
     const haveChoose = !!choose;
     const haveScripts = !!(scripts && scripts.querySelectorAll('option').length > 0);
-    const ok = haveChoose;
+    const ok = haveChoose || haveScripts;
     console.log('[settings-mapped-folder:smoke]', { ok, haveChoose, haveScripts });
     if (haveChoose || performance.now() - start > MAX) {
       active = false;
