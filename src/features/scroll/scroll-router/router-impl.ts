@@ -148,16 +148,14 @@ function computeHybridErrorPx(now = nowMs()) {
   const scroller = scrollerEl;
   const hint = hybridTargetHintState;
   if (!scroller || !hint) return null;
-  const markerPct = getMarkerPercent();
-  const offset = (scroller.clientHeight || 0) * markerPct;
-  const anchorY = hint.top + offset;
-  const markerY = (scroller.scrollTop || 0) + offset;
-  const errorPx = anchorY - markerY;
+  const currentScrollTop = scroller.scrollTop || 0;
+  const targetScrollTop = hint.top;
+  const errorPx = targetScrollTop - currentScrollTop;
   const anchorAgeMs = Math.max(0, now - hint.ts);
   return {
     errorPx,
-    anchorY,
-    markerY,
+    targetScrollTop,
+    currentScrollTop,
     confidence: hint.confidence,
     anchorAgeMs,
   };
@@ -188,6 +186,8 @@ function logHybridCtrlState(
   targetMult: number,
   appliedTargetMult: number,
   silenceCap: number,
+  offScriptSeverity: number,
+  offScriptCap: number,
 ) {
   if (!isDevMode()) return;
   if (!HYBRID_CTRL_ENABLED) return;
@@ -197,7 +197,9 @@ function logHybridCtrlState(
     console.info("[HYBRID_CTRL]", {
       errorPx: errorInfo?.errorPx ?? null,
       anchorY: errorInfo?.anchorY ?? null,
-      markerY: errorInfo?.markerY ?? null,
+      currentScrollTop: errorInfo?.currentScrollTop ?? null,
+      targetScrollTop: errorInfo?.targetScrollTop ?? null,
+      markerY: null,
       confidence: errorInfo?.confidence ?? null,
       anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
       silenceMs,
@@ -207,6 +209,8 @@ function logHybridCtrlState(
       targetMult,
       appliedTargetMult,
       silenceCap,
+      offScriptSeverity,
+      offScriptCap,
       hybridMult: hybridCtrl.mult,
     });
   } catch {}
@@ -229,6 +233,20 @@ function normalizeHybridError(errorPx: number) {
   const deadbandPx = linePx * 0.45;
   if (Math.abs(errorPx) < deadbandPx) return 0;
   return clamp(errorPx / bandPx, -1, 1);
+}
+
+function computeOffScriptSeverity() {
+  const bestSim = Number.isFinite(lastAsrMatch?.bestSim ?? NaN) ? lastAsrMatch.bestSim : NaN;
+  const simSeverity =
+    Number.isFinite(bestSim) && bestSim < HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD
+      ? (HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD - bestSim) / HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD
+      : 0;
+  const deltaLines =
+    Number.isFinite(lastAsrMatch?.bestIndex) && Number.isFinite(lastAsrMatch?.currentIndex)
+      ? Math.abs(lastAsrMatch.bestIndex - lastAsrMatch.currentIndex)
+      : 0;
+  const deltaSeverity = clamp(deltaLines / HYBRID_CTRL_OFFSCRIPT_LINE_DELTA, 0, 1);
+  return Math.min(1, Math.max(simSeverity, deltaSeverity));
 }
 
 function computeTargetMultiplier(e: number) {
@@ -1175,13 +1193,17 @@ const HYBRID_CTRL_ENABLED = (() => {
 })();
 const HYBRID_CTRL_KP = 0.22;
 const HYBRID_CTRL_ASSIST_MAX = 1.25;
-const HYBRID_CTRL_BRAKE_MIN = 0.6;
+const HYBRID_CTRL_BRAKE_MIN = 0.65;
 const HYBRID_CTRL_SMOOTH_ALPHA = 0.12;
 const HYBRID_CTRL_SILENCE_SHORT_MS = 700;
 const HYBRID_CTRL_SILENCE_LONG_MS = 2000;
 const HYBRID_CTRL_SILENCE_SHORT_CAP = 0.75;
 const HYBRID_CTRL_SILENCE_LONG_CAP = 0.6;
 const HYBRID_CTRL_LINE_PX_DEFAULT = 56;
+const HYBRID_CTRL_MIN_PXPS = 12;
+const HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD = 0.45;
+const HYBRID_CTRL_OFFSCRIPT_LINE_DELTA = 3;
+const HYBRID_CTRL_OFFSCRIPT_PENALTY = 0.35;
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 
@@ -1203,6 +1225,7 @@ const hybridCtrl = {
   lastTs: 0,
   lastErrorPx: 0,
   lastAnchorTs: 0,
+  engagedLogged: false,
 };
 let hybridSessionPhase = 'idle';
 function getHybridSessionPhase() {
@@ -2705,13 +2728,28 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
+    if (isDevMode() && !hybridCtrl.engagedLogged) {
+      hybridCtrl.engagedLogged = true;
+      try {
+        console.info('[HYBRID_CTRL] engaged', {
+          hasTargetHint: !!hybridTargetHintState,
+        });
+      } catch {}
+    }
     const silenceMs = getSilenceMs(now);
     const errorInfo = computeHybridErrorPx(now);
     const eligible = isHybridCorrectionEligible(now);
     const normalizedError = eligible && errorInfo ? normalizeHybridError(errorInfo.errorPx) : 0;
     const targetMult = eligible ? computeTargetMultiplier(normalizedError) : 1;
     const silenceCap = computeSilenceCapMultiplier(silenceMs);
-    const appliedTargetMult = Math.min(targetMult, silenceCap);
+    let appliedTargetMult = Math.min(targetMult, silenceCap);
+    const offScriptSeverity = computeOffScriptSeverity();
+    const offScriptCap = Math.max(
+      HYBRID_CTRL_MIN_MULT,
+      1 - offScriptSeverity * HYBRID_CTRL_OFFSCRIPT_PENALTY,
+    );
+    appliedTargetMult = Math.min(appliedTargetMult, offScriptCap);
+    appliedTargetMult = Math.max(appliedTargetMult, HYBRID_CTRL_MIN_MULT);
     const dtMs = hybridCtrl.lastTs > 0 ? Math.max(0, now - hybridCtrl.lastTs) : 0;
     updateHybridMultiplier(appliedTargetMult, dtMs);
     hybridCtrl.lastErrorPx = errorInfo?.errorPx ?? 0;
@@ -2727,6 +2765,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       targetMult,
       appliedTargetMult,
       silenceCap,
+      offScriptSeverity,
+      offScriptCap,
     );
     const {
       scale: effectiveScale,
