@@ -35,11 +35,12 @@
       check();
     });
   };
+  const startSmoke = () => setTimeout(() => schedule(), 300);
   if (document.readyState === 'loading') {
-    document.addEventListener('tp:settings-folder:ready', schedule, { once: true });
-    document.addEventListener('tp:settings:rendered', schedule, { once: true });
-    document.addEventListener('DOMContentLoaded', schedule, { once: true });
+    document.addEventListener('tp:settings-folder:ready', startSmoke, { once: true });
+    document.addEventListener('tp:settings:rendered', startSmoke, { once: true });
+    document.addEventListener('DOMContentLoaded', startSmoke, { once: true });
   } else {
-    schedule();
+    startSmoke();
   }
 })();
