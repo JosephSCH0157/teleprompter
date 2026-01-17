@@ -1,5 +1,6 @@
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -51,13 +52,49 @@ if (typeof createDisplayRelay === 'function') {
   }
 }
 
+function sendJson(res, status, body) {
+  try {
+    const payload = JSON.stringify(body);
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.end(payload);
+  } catch (err) {
+    res.statusCode = 500;
+    res.end('json error');
+    console.warn('[static-server] sendJson failed', err);
+  }
+}
+
+function getLanHostCandidate() {
+  if (process.env.DISPLAY_HOST) {
+    return String(process.env.DISPLAY_HOST).trim() || null;
+  }
+  const interfaces = os.networkInterfaces();
+  for (const device of Object.values(interfaces)) {
+    if (!device) continue;
+    for (const entry of device) {
+      if (entry.family !== 'IPv4' || entry.internal) continue;
+      if (entry.address.startsWith('169.254.')) continue;
+      return entry.address;
+    }
+  }
+  return null;
+}
+
 const server = http.createServer((req, res) => {
   try {
+    const basePath = (req.url || '/').split('?')[0];
+    if (basePath === '/display/host') {
+      sendJson(res, 200, { host: getLanHostCandidate() });
+      return;
+    }
+
     if (displayRelay?.tryHandleApi(req, res)) {
       return;
     }
 
-    const u = decodeURI(req.url.split('?')[0]);
+    const u = decodeURI(basePath);
     let file = path.join(ROOT, u);
     // Directory default to teleprompter_pro.html for '/'
     if (u === '/' || u === '') {

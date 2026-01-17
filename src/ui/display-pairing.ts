@@ -24,6 +24,32 @@ let currentPairing: PairingResponse | null = null;
 let isRefreshing = false;
 let expiryTimer: number | null = null;
 
+async function getLanHostFromServer(): Promise<string | null> {
+  try {
+    const response = await fetch('/display/host', { cache: 'no-store' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data && typeof data.host === 'string') {
+      const trimmed = data.host.trim();
+      return trimmed || null;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function rewriteUrlHost(sourceUrl: string, hostOverride: string | null) {
+  if (!hostOverride) return sourceUrl;
+  try {
+    const parsed = new URL(sourceUrl);
+    parsed.hostname = hostOverride;
+    return parsed.toString();
+  } catch {
+    return sourceUrl;
+  }
+}
+
 function isDisplayContext(): boolean {
   try {
     const params = new URLSearchParams(location.search || '');
@@ -269,11 +295,14 @@ async function ensurePairingToken() {
       currentPairing = null;
       return;
     }
-    currentPairing = pairing;
-    updateInput(pairing.displayUrl);
-    updateWsLabel(pairing.wsUrl);
+    const hostOverride = await getLanHostFromServer();
+    const displayUrl = rewriteUrlHost(pairing.displayUrl, hostOverride);
+    const wsUrl = rewriteUrlHost(pairing.wsUrl, hostOverride);
+    currentPairing = { ...pairing, displayUrl, wsUrl };
+    updateInput(displayUrl);
+    updateWsLabel(wsUrl);
     updateStatusText(`Expires at ${new Date(pairing.expiresAt).toLocaleTimeString()}`);
-    updateQr(pairing.displayUrl);
+    updateQr(displayUrl);
     clearExpiryTimer();
     expiryTimer = window.setInterval(() => {
       if (!currentPairing) return;
