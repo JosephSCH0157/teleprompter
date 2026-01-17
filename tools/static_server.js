@@ -5,7 +5,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 
 // Choose host/port (allow overrides via env or argv)
-const DEFAULT_HOST = process.env.CI_HOST || '127.0.0.1';
+const DEFAULT_HOST = process.env.CI_HOST || '0.0.0.0';
 let PORT = 5180; // default for CI
 const envPort = parseInt(process.env.PORT || process.env.CI_PORT, 10);
 if (!Number.isNaN(envPort) && envPort >= 0 && envPort < 65536) {
