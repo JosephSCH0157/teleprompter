@@ -188,6 +188,10 @@ function logHybridCtrlState(
   silenceCap: number,
   offScriptSeverity: number,
   offScriptCap: number,
+  finalPxps: number,
+  ctrlMultApplied: number,
+  effectiveScaleApplied: number,
+  modeHint: string,
 ) {
   if (!isDevMode()) return;
   if (!HYBRID_CTRL_ENABLED) return;
@@ -212,6 +216,10 @@ function logHybridCtrlState(
       offScriptSeverity,
       offScriptCap,
       hybridMult: hybridCtrl.mult,
+      finalPxps,
+      ctrlMultApplied,
+      effectiveScaleApplied,
+      modeHint,
     });
   } catch {}
 }
@@ -229,11 +237,25 @@ type HybridCtrlHudState = {
   offScriptSeverity: number;
   offScriptCap: number;
   eligible: boolean;
+  targetTop: number | null;
+  currentTop: number | null;
+  modeHint: string;
+  ctrlMultApplied: number;
+  effectiveScaleApplied: number;
+  finalPxps: number;
 };
 
 function formatHudNumber(value: number | null | undefined, digits = 2) {
   const num = Number(value);
   return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';
+}
+
+function computeHybridModeHint(errorPx: number | null) {
+  const error = Number(errorPx);
+  if (!Number.isFinite(error)) return 'NEAR';
+  const threshold = Math.max(getLinePx() * 0.45, 1);
+  if (Math.abs(error) < threshold) return 'NEAR';
+  return error > 0 ? 'AHEAD' : 'BEHIND';
 }
 
 function renderHybridCtrlHud(state: HybridCtrlHudState) {
@@ -260,13 +282,15 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     container.appendChild(hud);
   }
   const parts = [
-    `base=${formatHudNumber(state.basePxps)}`,
+    `mode=${state.modeHint}`,
+    `target=${formatHudNumber(state.targetTop, 1)}`,
+    `curr=${formatHudNumber(state.currentTop, 1)}`,
     `err=${formatHudNumber(state.errorPx, 1)}`,
-    `anchor=${formatHudNumber(state.anchorAgeMs, 0)}ms`,
-    `norm=${formatHudNumber(state.normalizedError, 2)}`,
-    `target=${formatHudNumber(state.targetMult, 2)}`,
-    `applied=${formatHudNumber(state.appliedTargetMult, 2)}`,
+    `base=${formatHudNumber(state.basePxps, 1)}`,
     `mult=${formatHudNumber(state.mult, 2)}`,
+    `ctrl=${formatHudNumber(state.ctrlMultApplied, 2)}`,
+    `scale=${formatHudNumber(state.effectiveScaleApplied, 2)}`,
+    `final=${formatHudNumber(state.finalPxps, 1)}`,
     `silence=${formatHudNumber(state.silenceMs, 0)}ms`,
     `silenceCap=${formatHudNumber(state.silenceCap, 2)}`,
     `off=${formatHudNumber(state.offScriptSeverity, 2)}`,
@@ -1265,6 +1289,45 @@ const HYBRID_CTRL_MIN_PXPS = 12;
 const HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD = 0.45;
 const HYBRID_CTRL_OFFSCRIPT_LINE_DELTA = 3;
 const HYBRID_CTRL_OFFSCRIPT_PENALTY = 0.35;
+const HYBRID_CTRL_PARAM_ENABLED = (() => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    return params.get('hybridCtrl') === '1';
+  } catch {
+    return false;
+  }
+})();
+const HYBRID_CTRL_DEV_OVERRIDE_PHASES_MS = [3000, 6000, 10000];
+const HYBRID_CTRL_DEV_OVERRIDE_MULTS = [1.4, 0.7, 1.0];
+const HYBRID_CTRL_DEV_OVERRIDE_DURATION_MS = 10000;
+let hybridCtrlDevOverrideStart: number | null = null;
+let hybridCtrlDevOverrideDone = false;
+
+function getHybridCtrlDevOverride(now: number) {
+  if (
+    !HYBRID_CTRL_ENABLED ||
+    !HYBRID_CTRL_PARAM_ENABLED ||
+    hybridCtrlDevOverrideDone ||
+    typeof window === 'undefined'
+  ) {
+    return null;
+  }
+  if (hybridCtrlDevOverrideStart === null) {
+    hybridCtrlDevOverrideStart = now;
+  }
+  const elapsed = Math.max(0, now - hybridCtrlDevOverrideStart);
+  if (elapsed >= HYBRID_CTRL_DEV_OVERRIDE_DURATION_MS) {
+    hybridCtrlDevOverrideDone = true;
+    return null;
+  }
+  for (let i = 0; i < HYBRID_CTRL_DEV_OVERRIDE_PHASES_MS.length; i += 1) {
+    if (elapsed < HYBRID_CTRL_DEV_OVERRIDE_PHASES_MS[i]) {
+      return HYBRID_CTRL_DEV_OVERRIDE_MULTS[i];
+    }
+  }
+  return null;
+}
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 
@@ -2816,33 +2879,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridCtrl.lastErrorPx = errorInfo?.errorPx ?? 0;
     hybridCtrl.lastAnchorTs = errorInfo?.anchorAgeMs ?? 0;
     hybridCtrl.lastTs = now;
-    logHybridCtrlState(
-      base,
-      now,
-      errorInfo,
-      silenceMs,
-      eligible,
-      normalizedError,
-      targetMult,
-      appliedTargetMult,
-      silenceCap,
-      offScriptSeverity,
-      offScriptCap,
-    );
-    renderHybridCtrlHud({
-      basePxps: base,
-      errorPx: errorInfo?.errorPx ?? null,
-      anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
-      normalizedError,
-      targetMult,
-      appliedTargetMult,
-      mult: hybridCtrl.mult,
-      silenceMs,
-      silenceCap,
-      offScriptSeverity,
-      offScriptCap,
-      eligible,
-    });
+    const devOverrideMult = getHybridCtrlDevOverride(now);
+    const ctrlMultApplied = Number.isFinite(devOverrideMult) ? devOverrideMult : hybridCtrl.mult;
+    const modeHint = computeHybridModeHint(errorInfo?.errorPx ?? null);
     const {
       scale: effectiveScale,
       reason,
@@ -2895,15 +2934,53 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       motorRunning,
     });
     const rawAssist = getActiveAssistBoost(now, pauseTailEligible);
-    const baseWithCorrection = base * hybridCtrl.mult;
-    const effective = baseWithCorrection * effectiveScale * brakeFactor;
+    const baseWithCorrection = base * ctrlMultApplied;
+    const effectiveScaleApplied = effectiveScale * brakeFactor;
+    const effective = baseWithCorrection * effectiveScaleApplied;
     const suppressAssist =
       reason === 'silence' ||
       effectiveScale <= OFFSCRIPT_SCALE ||
       reason === 'grace';
     const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
-    const velocity = Math.max(0, effective + assistBoost);
+    const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, effective + assistBoost);
+    logHybridCtrlState(
+      base,
+      now,
+      errorInfo,
+      silenceMs,
+      eligible,
+      normalizedError,
+      targetMult,
+      appliedTargetMult,
+      silenceCap,
+      offScriptSeverity,
+      offScriptCap,
+      finalPxps,
+      ctrlMultApplied,
+      effectiveScaleApplied,
+      modeHint,
+    );
+    renderHybridCtrlHud({
+      basePxps: base,
+      errorPx: errorInfo?.errorPx ?? null,
+      anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
+      normalizedError,
+      targetMult,
+      appliedTargetMult,
+      mult: hybridCtrl.mult,
+      silenceMs,
+      silenceCap,
+      offScriptSeverity,
+      offScriptCap,
+      eligible,
+      targetTop: errorInfo?.targetScrollTop ?? null,
+      currentTop: errorInfo?.currentScrollTop ?? null,
+      modeHint,
+      ctrlMultApplied,
+      effectiveScaleApplied,
+      finalPxps,
+    });
     logHybridVelocityEvent({
       basePxps: base,
       chosenScale: effectiveScale,
@@ -2913,7 +2990,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       assistCap,
       assistBoost,
       suppressAssist,
-      velocity,
+      velocity: finalPxps,
       reason,
       brakeActive,
       brakeTtl,
@@ -2923,7 +3000,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       motorRunning,
     });
 
-    hybridMotor.setVelocityPxPerSec(velocity);
+    hybridMotor.setVelocityPxPerSec(finalPxps);
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
   }
@@ -3209,16 +3286,16 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       hybridBlockedReason = "blocked:silence";
     }
     const hybridRunning = hybridMotor.isRunning();
-    let effectivePxPerSec = 0;
-    if (!silencePaused) {
-      const now = nowMs();
-      const scale = computeEffectiveHybridScale(now);
-      const brake = getActiveBrakeFactor(now);
-      const pxCandidate = baseHybridPxPerSec * scale * brake;
-      const fallback = Math.max(1, Number.isFinite(baseHybridPxPerSec) ? baseHybridPxPerSec : 1);
-      effectivePxPerSec = Number.isFinite(pxCandidate) && pxCandidate > 0 ? pxCandidate : fallback;
-    }
-    const shouldRunHybrid = wantEnabled && !silencePaused && effectivePxPerSec >= 1;
+    const scale = computeEffectiveHybridScale(now);
+    const brake = getActiveBrakeFactor(now);
+    const pxCandidate = baseHybridPxPerSec * scale * brake;
+    const fallback = Math.max(
+      HYBRID_CTRL_MIN_PXPS,
+      Number.isFinite(baseHybridPxPerSec) ? baseHybridPxPerSec : HYBRID_CTRL_MIN_PXPS,
+    );
+    const effectivePxPerSec =
+      Number.isFinite(pxCandidate) && pxCandidate > 0 ? pxCandidate : fallback;
+    const shouldRunHybrid = wantEnabled && effectivePxPerSec >= HYBRID_CTRL_MIN_PXPS;
     const viewerEl = viewer;
     const guardSlowActive = hybridSilence.offScriptActive;
     const snap = {
@@ -3276,18 +3353,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         console.warn("[HYBRID] gate", snap);
       } catch {}
     }
-    if (silencePaused) {
-      if (silenceTimer) {
-        try { clearTimeout(silenceTimer); } catch {}
-        silenceTimer = void 0;
-      }
-      if (hybridRunning) {
-        hybridMotor.stop();
-        emitMotorState("hybridWpm", false);
-        clearHybridSilenceTimer();
-        emitHybridSafety();
-      }
-    } else if (shouldRunHybrid) {
+    if (shouldRunHybrid) {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
