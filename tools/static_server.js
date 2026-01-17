@@ -67,11 +67,22 @@ function sendJson(res, status, body) {
   }
 }
 
-function serveFile(res, file, req) {
+function shouldUseFallback(req, basePath) {
+  if (!req || req.method !== 'GET') return false;
+  if (!basePath) basePath = (req.url || '/').split('?')[0];
+  const clean = (basePath || '').toLowerCase();
+  if (clean === '/login' || clean === '/login.html') return false;
+  if (clean.startsWith('/display/')) return false;
+  if (clean.startsWith('/ws/')) return false;
+  return true;
+}
+
+function serveFile(res, file, req, basePath) {
   fs.readFile(file, (err2, data) => {
     if (err2) {
-      if (req && req.method === 'GET') {
-        serveFallback(res, req);
+      const targetPath = basePath || (req ? (req.url || '/').split('?')[0] : '/');
+      if (shouldUseFallback(req, targetPath)) {
+        serveFallback(res, req, targetPath);
         return;
       }
       res.statusCode = 404;
@@ -83,7 +94,12 @@ function serveFile(res, file, req) {
   });
 }
 
-function serveFallback(res, req) {
+function serveFallback(res, req, basePath) {
+  if (!shouldUseFallback(req, basePath)) {
+    res.statusCode = 404;
+    res.end('Not found');
+    return;
+  }
   if (req.method !== 'GET') {
     res.statusCode = 404;
     res.end('Not found');
@@ -124,6 +140,13 @@ const server = http.createServer((req, res) => {
       return;
     }
 
+    if (basePath === '/login') {
+      res.statusCode = 302;
+      res.setHeader('Location', '/login.html');
+      res.end();
+      return;
+    }
+
     if (displayRelay?.tryHandleApi(req, res)) {
       return;
     }
@@ -142,7 +165,12 @@ const server = http.createServer((req, res) => {
     }
     fs.stat(file, (err, st) => {
       if (err) {
-        serveFallback(res, req);
+        if (shouldUseFallback(req, basePath)) {
+          serveFallback(res, req, basePath);
+        } else {
+          res.statusCode = 404;
+          res.end('Not found');
+        }
         return;
       }
       if (st.isDirectory()) {
@@ -153,7 +181,7 @@ const server = http.createServer((req, res) => {
           file = path.join(file, 'index.html');
         }
       }
-      serveFile(res, file, req);
+      serveFile(res, file, req, basePath);
     });
   } catch (e) {
     res.statusCode = 500;

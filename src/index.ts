@@ -45,7 +45,30 @@ function getRedirectTarget(): string {
   return window.location.pathname + window.location.search + window.location.hash;
 }
 
+function isLoginPath(path: string): boolean {
+  const clean = (path || '').toLowerCase();
+  return clean === '/login' || clean === '/login.html';
+}
+
+function isLoginPage(): boolean {
+  return isLoginPath(window.location.pathname);
+}
+
+function buildLoginUrl(): string {
+  return `/login.html?redirect=${encodeURIComponent(getRedirectTarget())}`;
+}
+
+function redirectToLogin(): void {
+  if (isLoginPage()) return;
+  try {
+    window.location.assign(buildLoginUrl());
+  } catch {
+    // ignore
+  }
+}
+
 async function gateAuth(): Promise<boolean> {
+  if (isLoginPage()) return false;
   if (!shouldGateAuth()) return true;
   try {
     const { data, error } = await supabase.auth.getUser();
@@ -54,13 +77,7 @@ async function gateAuth(): Promise<boolean> {
     // fall through to redirect
   }
 
-  try {
-    const loginUrl = `/login?redirect=${encodeURIComponent(getRedirectTarget())}`;
-    window.location.assign(loginUrl);
-  } catch {
-    // ignore
-  }
-
+  redirectToLogin();
   return false;
 }
 
@@ -74,10 +91,7 @@ async function gateAuth(): Promise<boolean> {
   try { console.error('[TP-BOOT] preflight failed', err); } catch {}
   if (isDisplayContext()) return;
   if (shouldGateAuth()) {
-    try {
-      const loginUrl = `/login?redirect=${encodeURIComponent(getRedirectTarget())}`;
-      window.location.assign(loginUrl);
-    } catch {}
+    redirectToLogin();
     return;
   }
   void import('./index-app');
