@@ -318,9 +318,10 @@ function formatHudNumber(value: number | null | undefined, digits = 2) {
 
 function computeHybridModeHint(errorLines: number | null) {
   const lines = Number.isFinite(errorLines ?? NaN) ? Number(errorLines) : null;
-  if (lines == null) return 'ON TARGET';
-  if (Math.abs(lines) <= HYBRID_CTRL_MODE_DEADBAND_LINES) return 'ON TARGET';
-  return lines > 0 ? 'AHEAD' : 'BEHIND';
+  if (lines == null || Math.abs(lines) <= HYBRID_CTRL_MODE_DEADBAND_LINES) {
+    return 'ON TARGET';
+  }
+  return lines > 0 ? 'CATCHING UP' : 'LETTING YOU CATCH UP';
 }
 
 function renderHybridCtrlHud(state: HybridCtrlHudState) {
@@ -426,11 +427,18 @@ function computeTargetMultiplier(e: number) {
 
 function computeLineTargetMultiplier(errorLines: number | null, eligible: boolean) {
   if (!eligible || errorLines == null) return null;
-  if (Math.abs(errorLines) <= HYBRID_CTRL_MODE_DEADBAND_LINES) return 1;
   const clamped = clamp(errorLines, -HYBRID_CTRL_LINE_ERROR_RANGE, HYBRID_CTRL_LINE_ERROR_RANGE);
-  const normalized = clamped / HYBRID_CTRL_LINE_ERROR_RANGE;
-  const raw = 1 + normalized * HYBRID_CTRL_LINE_MULT_DELTA;
-  return clamp(raw, HYBRID_CTRL_BRAKE_MIN, HYBRID_CTRL_ASSIST_MAX);
+  if (Math.abs(clamped) <= HYBRID_CTRL_MODE_DEADBAND_LINES) return 1;
+  const offset = Math.abs(clamped) - HYBRID_CTRL_MODE_DEADBAND_LINES;
+  const range = HYBRID_CTRL_LINE_ERROR_RANGE - HYBRID_CTRL_MODE_DEADBAND_LINES;
+  const normalized = Number.isFinite(range) && range > 0 ? offset / range : 0;
+  const curve = Math.pow(Math.min(Math.max(normalized, 0), 1), HYBRID_CTRL_LINE_CURVE_EXP);
+  if (clamped > 0) {
+    const scaled = 1 + curve * HYBRID_CTRL_LINE_POS_MULT_DELTA;
+    return clamp(scaled, HYBRID_CTRL_LINE_MIN_MULT, HYBRID_CTRL_LINE_MAX_MULT);
+  }
+  const scaled = 1 - curve * HYBRID_CTRL_LINE_NEG_MULT_DELTA;
+  return clamp(scaled, HYBRID_CTRL_LINE_MIN_MULT, HYBRID_CTRL_LINE_MAX_MULT);
 }
 
 function updateHybridLineMult(targetMult: number | null, dtMs: number) {
@@ -1388,10 +1396,14 @@ const HYBRID_CTRL_MIN_PXPS = 12;
 const HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD = 0.45;
 const HYBRID_CTRL_OFFSCRIPT_LINE_DELTA = 3;
 const HYBRID_CTRL_OFFSCRIPT_PENALTY = 0.35;
-const HYBRID_CTRL_LINE_ERROR_RANGE = 8;
-const HYBRID_CTRL_LINE_MULT_DELTA = 0.35;
-const HYBRID_CTRL_LINE_SMOOTH_TAU_MS = 350;
-const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.5;
+const HYBRID_CTRL_LINE_ERROR_RANGE = 16;
+const HYBRID_CTRL_LINE_CURVE_EXP = 1.6;
+const HYBRID_CTRL_LINE_POS_MULT_DELTA = 0.9;
+const HYBRID_CTRL_LINE_NEG_MULT_DELTA = 0.5;
+const HYBRID_CTRL_LINE_MAX_MULT = 1.9;
+const HYBRID_CTRL_LINE_MIN_MULT = 0.5;
+const HYBRID_CTRL_LINE_SMOOTH_TAU_MS = 450;
+const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.8;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
 type HybridCtrlLineSource = 'lines' | 'px' | 'none';
 const HYBRID_CTRL_PARAM_ENABLED = (() => {
