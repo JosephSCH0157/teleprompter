@@ -2,7 +2,7 @@
 export {};
 
 import { getScrollWriter } from '../../../scroll/scroll-writer';
-import { getViewportMetrics } from '../../../scroll/scroll-helpers';
+import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -144,6 +144,20 @@ function computeMarkerY(scroller = scrollerEl) {
   return currentTop + offset;
 }
 
+function getMarkerLineIndex(scroller = scrollerEl, markerY: number | null = null) {
+  try {
+    const toCheck = scroller ?? undefined;
+    const anchorIdx = computeAnchorLineIndex(toCheck);
+    if (Number.isFinite(anchorIdx)) {
+      return Math.max(0, Math.floor(anchorIdx));
+    }
+  } catch {}
+  if (!scroller || markerY == null || !Number.isFinite(markerY)) return null;
+  const linePx = getLinePx();
+  if (!Number.isFinite(linePx) || linePx <= 0) return null;
+  return Math.max(0, Math.round(markerY / linePx));
+}
+
 function computeHybridErrorPx(now = nowMs()) {
   const scroller = scrollerEl;
   const hint = hybridTargetHintState;
@@ -159,9 +173,7 @@ function computeHybridErrorPx(now = nowMs()) {
     Number.isFinite(hint.anchorTop ?? NaN) && hint.anchorTop != null ? hint.anchorTop : hint.top;
   const errorPx = anchorY - markerY;
   const anchorAgeMs = Math.max(0, now - hint.ts);
-  const linePx = getLinePx();
-  const markerLineIndex =
-    Number.isFinite(linePx) && linePx > 0 ? Math.max(0, Math.round(markerY / linePx)) : null;
+  const markerIdx = getMarkerLineIndex(scroller, markerY);
   const fallbackBestIdx =
     Number.isFinite(lastAsrMatch.bestIndex) && lastAsrMatch.bestIndex >= 0
       ? lastAsrMatch.bestIndex
@@ -170,8 +182,7 @@ function computeHybridErrorPx(now = nowMs()) {
     Number.isFinite(hint.lineIndex ?? NaN) && hint.lineIndex != null
       ? hint.lineIndex
       : fallbackBestIdx;
-  const errorLines =
-    bestIdx != null && markerLineIndex != null ? bestIdx - markerLineIndex : null;
+  const errorLines = bestIdx != null && markerIdx != null ? bestIdx - markerIdx : null;
   return {
     errorPx,
     targetScrollTop: hint.top,
@@ -180,7 +191,7 @@ function computeHybridErrorPx(now = nowMs()) {
     anchorAgeMs,
     anchorTop: anchorY,
     markerY,
-    markerLineIndex,
+    markerIdx,
     bestIdx,
     errorLines,
   };
@@ -258,7 +269,7 @@ function logHybridCtrlState(
       modeHint,
       targetMultSource,
       errorLines: errorInfo?.errorLines ?? null,
-      markerLineIndex: errorInfo?.markerLineIndex ?? null,
+      markerIdx: errorInfo?.markerIdx ?? null,
       bestIdx: errorInfo?.bestIdx ?? null,
       writerSource: getLastWriterSource(),
     });
@@ -287,7 +298,7 @@ type HybridCtrlHudState = {
   baseWithCorrection: number;
   eligibleReason: string;
   errorLines: number | null;
-  markerLineIndex: number | null;
+  markerIdx: number | null;
   bestIdx: number | null;
   writerSource: string | null;
   targetMultSource: string;
@@ -298,12 +309,11 @@ function formatHudNumber(value: number | null | undefined, digits = 2) {
   return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';
 }
 
-function computeHybridModeHint(errorPx: number | null) {
-  const error = Number(errorPx);
-  if (!Number.isFinite(error)) return 'NEAR';
-  const threshold = Math.max(getLinePx() * 0.45, 1);
-  if (Math.abs(error) < threshold) return 'NEAR';
-  return error > 0 ? 'AHEAD' : 'BEHIND';
+function computeHybridModeHint(errorLines: number | null) {
+  const lines = Number.isFinite(errorLines ?? NaN) ? Number(errorLines) : null;
+  if (lines == null) return 'ON TARGET';
+  if (Math.abs(lines) <= HYBRID_CTRL_MODE_DEADBAND_LINES) return 'ON TARGET';
+  return lines > 0 ? 'AHEAD' : 'BEHIND';
 }
 
 function renderHybridCtrlHud(state: HybridCtrlHudState) {
@@ -335,7 +345,7 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     `curr=${formatHudNumber(state.currentTop, 1)}`,
     `err=${formatHudNumber(state.errorPx, 1)}`,
     `errLines=${formatHudNumber(state.errorLines, 1)}`,
-    `markerLine=${formatHudNumber(state.markerLineIndex, 0)}`,
+    `markerIdx=${formatHudNumber(state.markerIdx, 0)}`,
     `bestIdx=${formatHudNumber(state.bestIdx, 0)}`,
     `base=${formatHudNumber(state.basePxps, 1)}`,
     `baseCorr=${formatHudNumber(state.baseWithCorrection, 1)}`,
@@ -1357,6 +1367,7 @@ const HYBRID_CTRL_OFFSCRIPT_LINE_DELTA = 3;
 const HYBRID_CTRL_OFFSCRIPT_PENALTY = 0.35;
 const HYBRID_CTRL_LINE_ERROR_RANGE = 8;
 const HYBRID_CTRL_LINE_MULT_DELTA = 0.35;
+const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
 const HYBRID_CTRL_PARAM_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
   try {
@@ -2984,7 +2995,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridCtrl.lastTs = now;
     const devOverrideMult = getHybridCtrlDevOverride(now);
     const ctrlMultApplied = Number.isFinite(devOverrideMult) ? devOverrideMult : hybridCtrl.mult;
-    const modeHint = computeHybridModeHint(errorInfo?.errorPx ?? null);
+    const modeHint = computeHybridModeHint(errorInfo?.errorLines ?? null);
     const {
       scale: effectiveScale,
       reason,
@@ -3089,7 +3100,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       finalPxps,
       eligibleReason,
       errorLines: errorInfo?.errorLines ?? null,
-      markerLineIndex: errorInfo?.markerLineIndex ?? null,
+      markerIdx: errorInfo?.markerIdx ?? null,
       bestIdx: errorInfo?.bestIdx ?? null,
       targetMultSource,
       writerSource: getLastWriterSource(),
