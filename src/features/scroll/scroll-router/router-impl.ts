@@ -1374,14 +1374,27 @@ const HYBRID_CTRL_ANCHOR_RECENCY_MS = 2500;
 const HYBRID_CTRL_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
   try {
-    const params = new URLSearchParams(window.location.search || '');
-    if (params.get('hybridCtrl') === '1') return true;
+    const current = window.location.href || window.location.hash || window.location.search || '';
+    const url = new URL(current, window.location.origin || undefined);
+    const fromSearch = url.searchParams.get('hybridCtrl');
+    const fromHash = new URLSearchParams((url.hash || '').replace(/^#/, '')).get('hybridCtrl');
+    if (fromSearch === '1' || fromHash === '1') return true;
     if ((window as any).__TP_HYBRID_CTRL === true) return true;
   } catch {
-    // ignore
+    try {
+      if ((window as any).__TP_HYBRID_CTRL === true) return true;
+    } catch {}
   }
   return false;
 })();
+try {
+  if (typeof window !== 'undefined') {
+    console.info('[HYBRID_CTRL] flag', {
+      href: window.location.href,
+      enabled: HYBRID_CTRL_ENABLED,
+    });
+  }
+} catch {}
 const HYBRID_CTRL_KP = 0.22;
 const HYBRID_CTRL_ASSIST_MAX = 1.25;
 const HYBRID_CTRL_BRAKE_MIN = 0.65;
@@ -2750,6 +2763,11 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     window.addEventListener("tp:hybrid:brake", handleHybridBrakeEvent);
     window.addEventListener("tp:hybrid:assist", handleHybridAssistEvent);
     window.addEventListener("tp:hybrid:targetHint", handleHybridTargetHintEvent);
+    if (typeof document !== 'undefined') {
+      document.addEventListener("tp:hybrid:brake", handleHybridBrakeEvent as any);
+      document.addEventListener("tp:hybrid:assist", handleHybridAssistEvent as any);
+      document.addEventListener("tp:hybrid:targetHint", handleHybridTargetHintEvent as any);
+    }
     try { (window as any).__tpHybridListenersReady = true; } catch {}
   } catch {}
   function setHybridScale(nextScale: number) {
@@ -2906,6 +2924,13 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
 
   function handleHybridTargetHintEvent(ev: Event) {
     const detail = (ev as CustomEvent)?.detail || {};
+    try {
+      console.info('[HYBRID_CTRL] targetHint recv', {
+        confidence: detail?.confidence,
+        top: detail?.top,
+        reason: detail?.reason,
+      });
+    } catch {}
     const top = Number(detail.targetTop);
     if (!Number.isFinite(top)) return;
     const confidenceRaw = Number.isFinite(Number(detail.confidence)) ? Number(detail.confidence) : 0;
