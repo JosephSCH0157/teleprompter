@@ -135,15 +135,6 @@ function getMarkerPercent() {
   }
 }
 
-function computeMarkerY(scroller = scrollerEl) {
-  if (!scroller) return null;
-  const markerPct = getMarkerPercent();
-  const height = scroller.clientHeight || 0;
-  const currentTop = scroller.scrollTop || 0;
-  const offset = height * markerPct;
-  return currentTop + offset;
-}
-
 function getMarkerLineIndex(scroller = scrollerEl, markerY: number | null = null) {
   try {
     const toCheck = scroller ?? undefined;
@@ -214,9 +205,6 @@ function evaluateHybridEligibility(now = nowMs()): HybridEligibility {
   return { eligible: true, reason: "ok" };
 }
 
-function isHybridCorrectionEligible(now = nowMs()) {
-  return evaluateHybridEligibility(now).eligible;
-}
 
 function logHybridCtrlState(
   basePxps: number,
@@ -1399,7 +1387,6 @@ const HYBRID_CTRL_KP = 0.22;
 const HYBRID_CTRL_ASSIST_MAX = 1.25;
 const HYBRID_CTRL_BRAKE_MIN = 0.65;
 const HYBRID_CTRL_MIN_MULT = 0.65;
-const HYBRID_CTRL_SMOOTH_ALPHA = 0.12;
 const HYBRID_CTRL_SILENCE_SHORT_MS = 700;
 const HYBRID_CTRL_SILENCE_LONG_MS = 2000;
 const HYBRID_CTRL_SILENCE_SHORT_CAP = 0.75;
