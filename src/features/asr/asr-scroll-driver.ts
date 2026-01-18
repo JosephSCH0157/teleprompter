@@ -482,7 +482,7 @@ function emitHybridTargetHint(
   confidence: number,
   reason?: string,
   ttlMs?: number,
-  anchorLine?: number,
+  lineIndex?: number,
 ) {
   if (!isHybridMode() || !Number.isFinite(top)) return;
   const now = getNowMs();
@@ -499,8 +499,10 @@ function emitHybridTargetHint(
   const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
    const safeConfidence = Math.max(0, Math.min(1, confidence));
    const scroller = getScroller();
-   const anchorLineIndex =
-     typeof anchorLine === 'number' && Number.isFinite(anchorLine) ? Math.max(0, Math.floor(anchorLine)) : null;
+  const anchorLineIndex =
+    typeof lineIndex === 'number' && Number.isFinite(lineIndex)
+      ? Math.max(0, Math.floor(lineIndex))
+      : null;
    let anchorTop: number | null = null;
    if (scroller && anchorLineIndex !== null) {
      const lineEl = getLineElementByIndex(scroller, anchorLineIndex);
@@ -515,9 +517,10 @@ function emitHybridTargetHint(
      confidence: safeConfidence,
      reason,
      ttlMs: safeTtl,
-     anchorTop,
-     markerPct,
-     anchorLine: anchorLineIndex,
+      anchorTop,
+      markerPct,
+      anchorLine: anchorLineIndex,
+      lineIndex: anchorLineIndex,
    });
 }
 

@@ -159,6 +159,19 @@ function computeHybridErrorPx(now = nowMs()) {
     Number.isFinite(hint.anchorTop ?? NaN) && hint.anchorTop != null ? hint.anchorTop : hint.top;
   const errorPx = anchorY - markerY;
   const anchorAgeMs = Math.max(0, now - hint.ts);
+  const linePx = getLinePx();
+  const markerLineIndex =
+    Number.isFinite(linePx) && linePx > 0 ? Math.max(0, Math.round(markerY / linePx)) : null;
+  const fallbackBestIdx =
+    Number.isFinite(lastAsrMatch.bestIndex) && lastAsrMatch.bestIndex >= 0
+      ? lastAsrMatch.bestIndex
+      : null;
+  const bestIdx =
+    Number.isFinite(hint.lineIndex ?? NaN) && hint.lineIndex != null
+      ? hint.lineIndex
+      : fallbackBestIdx;
+  const errorLines =
+    bestIdx != null && markerLineIndex != null ? bestIdx - markerLineIndex : null;
   return {
     errorPx,
     targetScrollTop: hint.top,
@@ -167,6 +180,9 @@ function computeHybridErrorPx(now = nowMs()) {
     anchorAgeMs,
     anchorTop: anchorY,
     markerY,
+    markerLineIndex,
+    bestIdx,
+    errorLines,
   };
 }
 
@@ -175,14 +191,20 @@ function getSilenceMs(now = nowMs()) {
   return Math.max(0, now - lastSpeech);
 }
 
-function isHybridCorrectionEligible(now = nowMs()) {
-  if (state2.mode !== "hybrid") return false;
-  if (getHybridSessionPhase() !== "live") return false;
+type HybridEligibility = { eligible: boolean; reason: string };
+
+function evaluateHybridEligibility(now = nowMs()): HybridEligibility {
+  if (state2.mode !== "hybrid") return { eligible: false, reason: "mode" };
+  if (getHybridSessionPhase() !== "live") return { eligible: false, reason: "phase" };
   const hint = hybridTargetHintState;
-  if (!hint) return false;
-  if (hint.confidence < HYBRID_CTRL_CONF_MIN) return false;
-  if (now - hint.ts > HYBRID_CTRL_ANCHOR_RECENCY_MS) return false;
-  return true;
+  if (!hint) return { eligible: false, reason: "no-hint" };
+  if (hint.confidence < HYBRID_CTRL_CONF_MIN) return { eligible: false, reason: "low-confidence" };
+  if (now - hint.ts > HYBRID_CTRL_ANCHOR_RECENCY_MS) return { eligible: false, reason: "stale-hint" };
+  return { eligible: true, reason: "ok" };
+}
+
+function isHybridCorrectionEligible(now = nowMs()) {
+  return evaluateHybridEligibility(now).eligible;
 }
 
 function logHybridCtrlState(
@@ -192,8 +214,10 @@ function logHybridCtrlState(
   errorInfo: ReturnType<typeof computeHybridErrorPx> | null,
   silenceMs: number,
   eligible: boolean,
+  eligibleReason: string,
   normalizedError: number,
   targetMult: number,
+  targetMultSource: string,
   appliedTargetMult: number,
   silenceCap: number,
   offScriptSeverity: number,
@@ -218,6 +242,7 @@ function logHybridCtrlState(
       anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
       silenceMs,
       eligible,
+      eligibleReason,
       basePxps,
       baseWithCorrection,
       normalizedError,
@@ -231,6 +256,11 @@ function logHybridCtrlState(
       ctrlMultApplied,
       effectiveScaleApplied,
       modeHint,
+      targetMultSource,
+      errorLines: errorInfo?.errorLines ?? null,
+      markerLineIndex: errorInfo?.markerLineIndex ?? null,
+      bestIdx: errorInfo?.bestIdx ?? null,
+      writerSource: getLastWriterSource(),
     });
   } catch {}
 }
@@ -255,6 +285,12 @@ type HybridCtrlHudState = {
   effectiveScaleApplied: number;
   finalPxps: number;
   baseWithCorrection: number;
+  eligibleReason: string;
+  errorLines: number | null;
+  markerLineIndex: number | null;
+  bestIdx: number | null;
+  writerSource: string | null;
+  targetMultSource: string;
 };
 
 function formatHudNumber(value: number | null | undefined, digits = 2) {
@@ -298,6 +334,9 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     `target=${formatHudNumber(state.targetTop, 1)}`,
     `curr=${formatHudNumber(state.currentTop, 1)}`,
     `err=${formatHudNumber(state.errorPx, 1)}`,
+    `errLines=${formatHudNumber(state.errorLines, 1)}`,
+    `markerLine=${formatHudNumber(state.markerLineIndex, 0)}`,
+    `bestIdx=${formatHudNumber(state.bestIdx, 0)}`,
     `base=${formatHudNumber(state.basePxps, 1)}`,
     `baseCorr=${formatHudNumber(state.baseWithCorrection, 1)}`,
     `mult=${formatHudNumber(state.mult, 2)}`,
@@ -308,9 +347,23 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     `silenceCap=${formatHudNumber(state.silenceCap, 2)}`,
     `off=${formatHudNumber(state.offScriptSeverity, 2)}`,
     `offCap=${formatHudNumber(state.offScriptCap, 2)}`,
-    `eligible=${state.eligible ? 'yes' : 'no'}`,
+    `eligible=${state.eligible ? 'yes' : 'no'}(${state.eligibleReason})`,
+    `writer=${state.writerSource ?? 'n/a'}`,
   ];
   hud.textContent = parts.join(' | ');
+}
+
+function getLastWriterSource() {
+  try {
+    const scroller = scrollerEl;
+    const datasetSource = scroller?.dataset?.tpLastWriter;
+    if (datasetSource) return datasetSource;
+    const globalWriter = (window as any).__tpLastWriter;
+    if (globalWriter && typeof globalWriter.from === 'string') {
+      return globalWriter.from;
+    }
+  } catch {}
+  return null;
 }
 
 function getLinePx() {
@@ -1302,6 +1355,8 @@ const HYBRID_CTRL_MIN_PXPS = 12;
 const HYBRID_CTRL_OFFSCRIPT_SIM_THRESHOLD = 0.45;
 const HYBRID_CTRL_OFFSCRIPT_LINE_DELTA = 3;
 const HYBRID_CTRL_OFFSCRIPT_PENALTY = 0.35;
+const HYBRID_CTRL_LINE_ERROR_RANGE = 8;
+const HYBRID_CTRL_LINE_MULT_DELTA = 0.35;
 const HYBRID_CTRL_PARAM_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
   try {
@@ -1360,6 +1415,7 @@ let hybridTargetHintState:
       ts: number;
       anchorTop?: number | null;
       markerPct?: number | null;
+      lineIndex?: number | null;
     }
   | null = null;
 let hybridWantedRunning = false;
@@ -2807,6 +2863,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const markerPctRaw = Number(detail.markerPct);
     const markerPct =
       Number.isFinite(markerPctRaw) && markerPctRaw >= 0 && markerPctRaw <= 1 ? markerPctRaw : null;
+    const lineIndexRaw = Number(detail.lineIndex ?? detail.anchorLine ?? detail.targetLine);
+    const lineIndex =
+      Number.isFinite(lineIndexRaw) && lineIndexRaw >= 0 ? lineIndexRaw : null;
     hybridTargetHintState = {
       top,
       confidence,
@@ -2814,6 +2873,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       ts: nowMs(),
       anchorTop,
       markerPct,
+      lineIndex,
     };
   }
   function computeEffectiveHybridScale(
@@ -2891,9 +2951,23 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     const silenceMs = getSilenceMs(now);
     const errorInfo = computeHybridErrorPx(now);
-    const eligible = isHybridCorrectionEligible(now);
+    const eligibility = evaluateHybridEligibility(now);
+    const eligible = eligibility.eligible;
+    const eligibleReason = eligibility.reason;
     const normalizedError = eligible && errorInfo ? normalizeHybridError(errorInfo.errorPx) : 0;
-    const targetMult = eligible ? computeTargetMultiplier(normalizedError) : 1;
+    const targetMultFromPx = eligible ? computeTargetMultiplier(normalizedError) : 1;
+    const errorLines =
+      Number.isFinite(errorInfo?.errorLines ?? NaN) && errorInfo?.errorLines != null
+        ? errorInfo.errorLines
+        : null;
+    const normalizedLineError =
+      errorLines != null ? clamp(errorLines / HYBRID_CTRL_LINE_ERROR_RANGE, -1, 1) : null;
+    const targetMultFromLine =
+      eligible && normalizedLineError != null
+        ? 1 + normalizedLineError * HYBRID_CTRL_LINE_MULT_DELTA
+        : null;
+    const targetMult = targetMultFromLine ?? targetMultFromPx;
+    const targetMultSource = targetMultFromLine != null ? 'line' : 'px';
     const silenceCap = computeSilenceCapMultiplier(silenceMs);
     let appliedTargetMult = Math.min(targetMult, silenceCap);
     const offScriptSeverity = computeOffScriptSeverity();
@@ -2980,8 +3054,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       errorInfo,
       silenceMs,
       eligible,
+      eligibleReason,
       normalizedError,
       targetMult,
+      targetMultSource,
       appliedTargetMult,
       silenceCap,
       offScriptSeverity,
@@ -3011,6 +3087,12 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       ctrlMultApplied,
       effectiveScaleApplied,
       finalPxps,
+      eligibleReason,
+      errorLines: errorInfo?.errorLines ?? null,
+      markerLineIndex: errorInfo?.markerLineIndex ?? null,
+      bestIdx: errorInfo?.bestIdx ?? null,
+      targetMultSource,
+      writerSource: getLastWriterSource(),
     });
     logHybridVelocityEvent({
       basePxps: base,
