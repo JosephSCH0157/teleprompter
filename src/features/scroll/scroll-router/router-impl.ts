@@ -149,15 +149,24 @@ function computeHybridErrorPx(now = nowMs()) {
   const hint = hybridTargetHintState;
   if (!scroller || !hint) return null;
   const currentScrollTop = scroller.scrollTop || 0;
-  const targetScrollTop = hint.top;
-  const errorPx = targetScrollTop - currentScrollTop;
+  const height = scroller.clientHeight || 0;
+  const markerPct =
+    Number.isFinite(hint.markerPct ?? NaN) && hint.markerPct != null
+      ? hint.markerPct
+      : getMarkerPercent();
+  const markerY = currentScrollTop + height * markerPct;
+  const anchorY =
+    Number.isFinite(hint.anchorTop ?? NaN) && hint.anchorTop != null ? hint.anchorTop : hint.top;
+  const errorPx = anchorY - markerY;
   const anchorAgeMs = Math.max(0, now - hint.ts);
   return {
     errorPx,
-    targetScrollTop,
+    targetScrollTop: hint.top,
     currentScrollTop,
     confidence: hint.confidence,
     anchorAgeMs,
+    anchorTop: anchorY,
+    markerY,
   };
 }
 
@@ -178,6 +187,7 @@ function isHybridCorrectionEligible(now = nowMs()) {
 
 function logHybridCtrlState(
   basePxps: number,
+  baseWithCorrection: number,
   now: number,
   errorInfo: ReturnType<typeof computeHybridErrorPx> | null,
   silenceMs: number,
@@ -209,6 +219,7 @@ function logHybridCtrlState(
       silenceMs,
       eligible,
       basePxps,
+      baseWithCorrection,
       normalizedError,
       targetMult,
       appliedTargetMult,
@@ -243,6 +254,7 @@ type HybridCtrlHudState = {
   ctrlMultApplied: number;
   effectiveScaleApplied: number;
   finalPxps: number;
+  baseWithCorrection: number;
 };
 
 function formatHudNumber(value: number | null | undefined, digits = 2) {
@@ -287,6 +299,7 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     `curr=${formatHudNumber(state.currentTop, 1)}`,
     `err=${formatHudNumber(state.errorPx, 1)}`,
     `base=${formatHudNumber(state.basePxps, 1)}`,
+    `baseCorr=${formatHudNumber(state.baseWithCorrection, 1)}`,
     `mult=${formatHudNumber(state.mult, 2)}`,
     `ctrl=${formatHudNumber(state.ctrlMultApplied, 2)}`,
     `scale=${formatHudNumber(state.effectiveScaleApplied, 2)}`,
@@ -1262,8 +1275,8 @@ const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
 const MANUAL_SCROLL_LOG_THROTTLE_MS = 1500;
 const HYBRID_CTRL_LOG_THROTTLE_MS = 500;
-const HYBRID_CTRL_CONF_MIN = 0.5;
-const HYBRID_CTRL_ANCHOR_RECENCY_MS = 1200;
+const HYBRID_CTRL_CONF_MIN = 0.25;
+const HYBRID_CTRL_ANCHOR_RECENCY_MS = 2500;
 const HYBRID_CTRL_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
   try {
@@ -1339,7 +1352,16 @@ let pauseAssistTailBoost = 0;
 let pauseAssistTailUntil = 0;
 let lastIgnoredAsrPursuitLogAt = 0;
 let hybridVelocityRefreshRaf: number | null = null;
-let hybridTargetHintState: { top: number; confidence: number; reason?: string; ts: number } | null = null;
+let hybridTargetHintState:
+  | {
+      top: number;
+      confidence: number;
+      reason?: string;
+      ts: number;
+      anchorTop?: number | null;
+      markerPct?: number | null;
+    }
+  | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
@@ -2780,11 +2802,18 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (!Number.isFinite(top)) return;
     const confidenceRaw = Number.isFinite(Number(detail.confidence)) ? Number(detail.confidence) : 0;
     const confidence = Math.max(0, Math.min(1, confidenceRaw));
+    const anchorTopRaw = Number(detail.anchorTop);
+    const anchorTop = Number.isFinite(anchorTopRaw) ? anchorTopRaw : null;
+    const markerPctRaw = Number(detail.markerPct);
+    const markerPct =
+      Number.isFinite(markerPctRaw) && markerPctRaw >= 0 && markerPctRaw <= 1 ? markerPctRaw : null;
     hybridTargetHintState = {
       top,
       confidence,
       reason: typeof detail.reason === "string" ? detail.reason : undefined,
       ts: nowMs(),
+      anchorTop,
+      markerPct,
     };
   }
   function computeEffectiveHybridScale(
@@ -2946,6 +2975,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, effective + assistBoost);
     logHybridCtrlState(
       base,
+      baseWithCorrection,
       now,
       errorInfo,
       silenceMs,
@@ -2963,6 +2993,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     );
     renderHybridCtrlHud({
       basePxps: base,
+      baseWithCorrection,
       errorPx: errorInfo?.errorPx ?? null,
       anchorAgeMs: errorInfo?.anchorAgeMs ?? null,
       normalizedError,

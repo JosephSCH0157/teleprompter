@@ -477,7 +477,13 @@ function emitHybridAssist(boostPxps: number, reason: string, targetTop?: number,
   });
 }
 
-function emitHybridTargetHint(top: number, confidence: number, reason?: string, ttlMs?: number) {
+function emitHybridTargetHint(
+  top: number,
+  confidence: number,
+  reason?: string,
+  ttlMs?: number,
+  anchorLine?: number,
+) {
   if (!isHybridMode() || !Number.isFinite(top)) return;
   const now = getNowMs();
   if (
@@ -491,13 +497,28 @@ function emitHybridTargetHint(top: number, confidence: number, reason?: string, 
   lastHybridTargetHintTs = now;
   const requestedTtl = typeof ttlMs === 'number' ? ttlMs : HYBRID_TARGET_HINT_TTL_MS;
   const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
-  const safeConfidence = Math.max(0, Math.min(1, confidence));
-  dispatchHybridEvent('tp:hybrid:targetHint', {
-    targetTop: top,
-    confidence: safeConfidence,
-    reason,
-    ttlMs: safeTtl,
-  });
+   const safeConfidence = Math.max(0, Math.min(1, confidence));
+   const scroller = getScroller();
+   const anchorLineIndex =
+     typeof anchorLine === 'number' && Number.isFinite(anchorLine) ? Math.max(0, Math.floor(anchorLine)) : null;
+   let anchorTop: number | null = null;
+   if (scroller && anchorLineIndex !== null) {
+     const lineEl = getLineElementByIndex(scroller, anchorLineIndex);
+     if (lineEl) {
+       anchorTop = lineEl.offsetTop || 0;
+     }
+   }
+   const markerPct =
+     typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4;
+   dispatchHybridEvent('tp:hybrid:targetHint', {
+     targetTop: top,
+     confidence: safeConfidence,
+     reason,
+     ttlMs: safeTtl,
+     anchorTop,
+     markerPct,
+     anchorLine: anchorLineIndex,
+   });
 }
 
 function getScroller(): HTMLElement | null {
@@ -2016,7 +2037,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 lastEvidenceAt = now;
                 ensurePursuitActive();
                 logDev('no_target_nudge', { line: targetLine, px: Math.round(limitedTarget - base), conf });
-                emitHybridTargetHint(limitedTarget, isFinal ? 0.75 : 0.55, 'asr-no-target');
+                emitHybridTargetHint(limitedTarget, isFinal ? 0.75 : 0.55, 'asr-no-target', undefined, targetLine);
               }
             }
             adoptPendingMatch({ ...pending });
@@ -2083,7 +2104,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 lastEvidenceAt = now;
                 ensurePursuitActive();
                 logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
-                emitHybridTargetHint(limitedTarget, isFinal ? 0.8 : 0.6, 'asr-same-line-center');
+                emitHybridTargetHint(
+                  limitedTarget,
+                  isFinal ? 0.8 : 0.6,
+                  'asr-same-line-center',
+                  undefined,
+                  targetLine,
+                );
                 updateDebugState('same-line-recenter');
                 return;
               }
@@ -2121,7 +2148,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 creepBudgetUsed += Math.max(0, limitedTarget - base);
                 ensurePursuitActive();
                 logDev('same-line creep', { line: targetLine, px: creepStep, conf });
-                emitHybridTargetHint(limitedTarget, isFinal ? 0.8 : 0.6, 'asr-same-line-creep');
+                emitHybridTargetHint(
+                  limitedTarget,
+                  isFinal ? 0.8 : 0.6,
+                  'asr-same-line-creep',
+                  undefined,
+                  targetLine,
+                );
                 updateDebugState('same-line-creep');
               }
             }
@@ -2228,7 +2261,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const nextTargetTop = Math.max(base, limitedTarget);
       pursuitTargetTop = nextTargetTop;
       if (nextTargetTop > base) {
-        emitHybridTargetHint(nextTargetTop, isFinal ? 0.9 : 0.7, forced ? 'asr-forced-commit' : 'asr-commit');
+        emitHybridTargetHint(
+          nextTargetTop,
+          isFinal ? 0.9 : 0.7,
+          forced ? 'asr-forced-commit' : 'asr-commit',
+          undefined,
+          targetLine,
+        );
       }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
