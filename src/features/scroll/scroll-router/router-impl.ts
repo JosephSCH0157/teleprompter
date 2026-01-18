@@ -229,6 +229,8 @@ function logHybridCtrlState(
   normalizedError: number,
   targetMult: number,
   targetMultSource: string,
+  lineTargetMult: number | null,
+  lineMult: number,
   appliedTargetMult: number,
   silenceCap: number,
   offScriptSeverity: number,
@@ -268,6 +270,8 @@ function logHybridCtrlState(
       effectiveScaleApplied,
       modeHint,
       targetMultSource,
+      lineTargetMult,
+      lineMult,
       errorLines: errorInfo?.errorLines ?? null,
       markerIdx: errorInfo?.markerIdx ?? null,
       bestIdx: errorInfo?.bestIdx ?? null,
@@ -302,6 +306,9 @@ type HybridCtrlHudState = {
   bestIdx: number | null;
   writerSource: string | null;
   targetMultSource: string;
+  lineTargetMult: number | null;
+  lineMult: number;
+  lineSource: HybridCtrlLineSource;
 };
 
 function formatHudNumber(value: number | null | undefined, digits = 2) {
@@ -347,6 +354,9 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     `errLines=${formatHudNumber(state.errorLines, 1)}`,
     `markerIdx=${formatHudNumber(state.markerIdx, 0)}`,
     `bestIdx=${formatHudNumber(state.bestIdx, 0)}`,
+    `lineTarget=${formatHudNumber(state.lineTargetMult, 2)}`,
+    `lineMult=${formatHudNumber(state.lineMult, 2)}`,
+    `lineSrc=${state.lineSource}`,
     `base=${formatHudNumber(state.basePxps, 1)}`,
     `baseCorr=${formatHudNumber(state.baseWithCorrection, 1)}`,
     `mult=${formatHudNumber(state.mult, 2)}`,
@@ -414,15 +424,28 @@ function computeTargetMultiplier(e: number) {
   return clamp(raw, HYBRID_CTRL_BRAKE_MIN, HYBRID_CTRL_ASSIST_MAX);
 }
 
-function updateHybridMultiplier(targetMult: number, dtMs: number) {
+function computeLineTargetMultiplier(errorLines: number | null, eligible: boolean) {
+  if (!eligible || errorLines == null) return null;
+  if (Math.abs(errorLines) <= HYBRID_CTRL_MODE_DEADBAND_LINES) return 1;
+  const clamped = clamp(errorLines, -HYBRID_CTRL_LINE_ERROR_RANGE, HYBRID_CTRL_LINE_ERROR_RANGE);
+  const normalized = clamped / HYBRID_CTRL_LINE_ERROR_RANGE;
+  const raw = 1 + normalized * HYBRID_CTRL_LINE_MULT_DELTA;
+  return clamp(raw, HYBRID_CTRL_BRAKE_MIN, HYBRID_CTRL_ASSIST_MAX);
+}
+
+function updateHybridLineMult(targetMult: number | null, dtMs: number) {
+  const current = Number.isFinite(hybridCtrl.lineMult) ? hybridCtrl.lineMult : 1;
+  const target = Number.isFinite(targetMult ?? NaN) ? Number(targetMult) : 1;
   if (!Number.isFinite(dtMs) || dtMs <= 0) {
-    hybridCtrl.mult = targetMult;
-    return hybridCtrl.mult;
+    hybridCtrl.lineMult = target;
+    return hybridCtrl.lineMult;
   }
-  const alpha = Math.min(1, HYBRID_CTRL_SMOOTH_ALPHA + dtMs * 0.001);
-  const next = hybridCtrl.mult + (targetMult - hybridCtrl.mult) * alpha;
-  hybridCtrl.mult = Number.isFinite(next) ? next : 1;
-  return hybridCtrl.mult;
+  const alpha = 1 - Math.exp(-dtMs / HYBRID_CTRL_LINE_SMOOTH_TAU_MS);
+  const next = current + (target - current) * alpha;
+  const maxDelta = HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC * (dtMs / 1000);
+  const limited = clamp(next, current - maxDelta, current + maxDelta);
+  hybridCtrl.lineMult = Number.isFinite(limited) ? limited : current;
+  return hybridCtrl.lineMult;
 }
 
 function computeSilenceCapMultiplier(silenceMs: number) {
@@ -1367,7 +1390,10 @@ const HYBRID_CTRL_OFFSCRIPT_LINE_DELTA = 3;
 const HYBRID_CTRL_OFFSCRIPT_PENALTY = 0.35;
 const HYBRID_CTRL_LINE_ERROR_RANGE = 8;
 const HYBRID_CTRL_LINE_MULT_DELTA = 0.35;
+const HYBRID_CTRL_LINE_SMOOTH_TAU_MS = 350;
+const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.5;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
+type HybridCtrlLineSource = 'lines' | 'px' | 'none';
 const HYBRID_CTRL_PARAM_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
   try {
@@ -1439,6 +1465,9 @@ const hybridCtrl = {
   lastErrorPx: 0,
   lastAnchorTs: 0,
   engagedLogged: false,
+  lineMult: 1,
+  lineTargetMult: 1,
+  lineSource: 'none' as HybridCtrlLineSource,
 };
 let hybridSessionPhase = 'idle';
 function getHybridSessionPhase() {
@@ -2971,30 +3000,42 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       Number.isFinite(errorInfo?.errorLines ?? NaN) && errorInfo?.errorLines != null
         ? errorInfo.errorLines
         : null;
-    const normalizedLineError =
-      errorLines != null ? clamp(errorLines / HYBRID_CTRL_LINE_ERROR_RANGE, -1, 1) : null;
-    const targetMultFromLine =
-      eligible && normalizedLineError != null
-        ? 1 + normalizedLineError * HYBRID_CTRL_LINE_MULT_DELTA
-        : null;
-    const targetMult = targetMultFromLine ?? targetMultFromPx;
-    const targetMultSource = targetMultFromLine != null ? 'line' : 'px';
+    const lineTargetMultFromLines = computeLineTargetMultiplier(errorLines, eligible);
+    let candidateTargetMult: number | null = lineTargetMultFromLines;
+    let targetMultSource: HybridCtrlLineSource = 'none';
+    if (candidateTargetMult != null) {
+      targetMultSource = 'lines';
+    } else if (eligible) {
+      candidateTargetMult = targetMultFromPx;
+      targetMultSource = 'px';
+    } else {
+      candidateTargetMult = 1;
+      targetMultSource = 'none';
+    }
+    hybridCtrl.lineTargetMult = Number.isFinite(candidateTargetMult ?? NaN)
+      ? Number(candidateTargetMult)
+      : null;
+    hybridCtrl.lineSource = targetMultSource;
     const silenceCap = computeSilenceCapMultiplier(silenceMs);
-    let appliedTargetMult = Math.min(targetMult, silenceCap);
+    const dtMs = hybridCtrl.lastTs > 0 ? Math.max(0, now - hybridCtrl.lastTs) : 0;
+    const lineMult = updateHybridLineMult(candidateTargetMult, dtMs);
+    let appliedTargetMult = Number.isFinite(lineMult) ? lineMult : 1;
     const offScriptSeverity = computeOffScriptSeverity();
     const offScriptCap = Math.max(
       HYBRID_CTRL_MIN_MULT,
       1 - offScriptSeverity * HYBRID_CTRL_OFFSCRIPT_PENALTY,
     );
+    appliedTargetMult = Math.min(appliedTargetMult, silenceCap);
     appliedTargetMult = Math.min(appliedTargetMult, offScriptCap);
     appliedTargetMult = Math.max(appliedTargetMult, HYBRID_CTRL_MIN_MULT);
-    const dtMs = hybridCtrl.lastTs > 0 ? Math.max(0, now - hybridCtrl.lastTs) : 0;
-    updateHybridMultiplier(appliedTargetMult, dtMs);
     hybridCtrl.lastErrorPx = errorInfo?.errorPx ?? 0;
     hybridCtrl.lastAnchorTs = errorInfo?.anchorAgeMs ?? 0;
     hybridCtrl.lastTs = now;
+    const targetMult = candidateTargetMult ?? 1;
     const devOverrideMult = getHybridCtrlDevOverride(now);
-    const ctrlMultApplied = Number.isFinite(devOverrideMult) ? devOverrideMult : hybridCtrl.mult;
+    const ctrlMultFinal = Number.isFinite(devOverrideMult) ? devOverrideMult : appliedTargetMult;
+    hybridCtrl.mult = ctrlMultFinal;
+    const ctrlMultApplied = ctrlMultFinal;
     const modeHint = computeHybridModeHint(errorInfo?.errorLines ?? null);
     const {
       scale: effectiveScale,
@@ -3069,6 +3110,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       normalizedError,
       targetMult,
       targetMultSource,
+      hybridCtrl.lineTargetMult,
+      hybridCtrl.lineMult,
       appliedTargetMult,
       silenceCap,
       offScriptSeverity,
@@ -3103,6 +3146,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       markerIdx: errorInfo?.markerIdx ?? null,
       bestIdx: errorInfo?.bestIdx ?? null,
       targetMultSource,
+      lineTargetMult: hybridCtrl.lineTargetMult,
+      lineMult: hybridCtrl.lineMult,
+      lineSource: targetMultSource,
       writerSource: getLastWriterSource(),
     });
     logHybridVelocityEvent({
