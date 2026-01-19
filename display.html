@@ -724,17 +724,15 @@
               chan.addEventListener('message', (e) => {
                 try {
                   const msg = e?.data || {};
-                  // Script snapshots from main (raw text only)
-                if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
-                  const raw = msg.rawText ?? msg.text ?? msg.html ?? '';
-                  if (raw) {
-                    scheduleScriptSnapshot(raw);
+                  if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
+                    const raw = msg.rawText ?? msg.text ?? msg.html ?? '';
+                    if (raw) {
+                      scheduleScriptSnapshot(raw);
+                      applyScaled();
+                      applyBottomPad();
+                      return;
+                    }
                   }
-                    applyScaled();
-                    applyBottomPad();
-                    return;
-                  }
-                  // Typography updates
                   if (msg && msg.kind === 'tp:typography') {
                     if (msg.fontSize && msg.lineHeight) {
                       applyBase(msg.fontSize, msg.lineHeight);
@@ -752,7 +750,6 @@
                     applyRecordState(mapRecState(msg.state));
                     return;
                   }
-                  // Lightweight mirror/diagnostic channel only
                   if (msg && msg.t === 'display:ping') {
                     try { chan.postMessage({ t: 'display:pong' }); } catch {}
                   }
@@ -762,13 +759,13 @@
 
             function handleDisplayMessage(payload) {
               const d = payload || {};
-                if (d && (d.type === 'tp:script' || d.kind === 'tp:script')) {
-                  const raw = d.rawText ?? d.text ?? d.html ?? '';
-                  if (raw) {
-                    scheduleScriptSnapshot(raw);
-                  } else if (d && typeof d.rawText === 'string') {
-                    scheduleScriptSnapshot(d.rawText);
-                  }
+              if (d && (d.type === 'tp:script' || d.kind === 'tp:script')) {
+                const raw = d.rawText ?? d.text ?? d.html ?? '';
+                if (raw) {
+                  scheduleScriptSnapshot(raw);
+                } else if (d && typeof d.rawText === 'string') {
+                  scheduleScriptSnapshot(d.rawText);
+                }
                 applyScaled();
                 applyBottomPad();
                 return;
