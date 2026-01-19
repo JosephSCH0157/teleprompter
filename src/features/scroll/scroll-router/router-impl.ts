@@ -1878,6 +1878,8 @@ function stepOnce(dir) {
 }
 var creepRaf = 0;
 var creepLast = 0;
+let enabledNow = false;
+
 function holdCreepStart(pxPerSec = DEFAULTS.step.holdCreep, dir = 1) {
   if (!viewer) viewer = document.getElementById("viewer");
   if (!viewer) return;
@@ -2417,7 +2419,7 @@ function installScrollRouter(opts) {
       } catch {}
     });
   } catch {}
-  let enabledNow = (() => {
+  enabledNow = (() => {
     try {
       return !!opts.auto.getState?.().enabled;
     } catch {
