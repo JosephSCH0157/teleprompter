@@ -191,6 +191,8 @@
             const preRollNum = document.getElementById('preRollNum');
             let lastScriptHash = '';
             const RENDER_SCRIPT_RETRY_MS = 32;
+            let pendingScriptSnapshot = null;
+            let scriptApplyTimer = null;
             function hashScript(text) {
               let h = 0;
               const s = String(text || '');
@@ -608,29 +610,13 @@
             }
 
             // Render helper: accept raw script text only (SSOT)
-            function applyScriptSnapshot(payload) {
-              const rawText = typeof payload === 'string'
-                ? payload
-                : String(payload?.rawText ?? payload?.text ?? '');
-
-              if (!rawText && payload && typeof payload !== 'string') {
-                try { console.warn('[display] ignored payload without rawText'); } catch {}
-                return;
-              }
-
-              if (typeof window.renderScript !== 'function') {
-                window.setTimeout(() => applyScriptSnapshot(payload), RENDER_SCRIPT_RETRY_MS);
-                return;
-              }
-
-              // 1) Compute marker offset on viewer
+            function renderScriptSnapshot(rawText) {
               applyMarkerOffset();
 
               const nextHash = hashScript(rawText);
               const shouldResetScroll = !!nextHash && nextHash !== lastScriptHash;
               if (nextHash) lastScriptHash = nextHash;
 
-              // 2) Render script content via shared renderer
               try {
                 if (!scriptEl) return;
                 scriptEl.innerHTML = '';
@@ -644,6 +630,64 @@
               } catch (err) {
                 try { console.warn('[display] applyScriptSnapshot failed', err); } catch {}
               }
+              if (shouldResetScroll) {
+                try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+              }
+              try {
+                requestAnimationFrame(() => {
+                  applyMarkerOffset();
+                  applyBottomPad();
+                  if (shouldResetScroll) {
+                    try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
+                  }
+                });
+                setTimeout(() => {
+                  applyMarkerOffset();
+                  applyBottomPad();
+                }, 120);
+              } catch {}
+              try {
+                if (pendingLineIdx != null) {
+                  const idx = pendingLineIdx;
+                  pendingLineIdx = null;
+                  requestAnimationFrame(() => {
+                    if (!scrollToLine(idx)) pendingLineIdx = idx;
+                  });
+                }
+              } catch {}
+            }
+
+            function flushPendingScriptSnapshot() {
+              if (!pendingScriptSnapshot) return;
+              if (typeof window.renderScript !== 'function') {
+                if (!scriptApplyTimer) {
+                  scriptApplyTimer = window.setTimeout(() => {
+                    scriptApplyTimer = null;
+                    flushPendingScriptSnapshot();
+                  }, RENDER_SCRIPT_RETRY_MS);
+                }
+                return;
+              }
+              if (scriptApplyTimer) {
+                window.clearTimeout(scriptApplyTimer);
+                scriptApplyTimer = null;
+              }
+              const next = pendingScriptSnapshot;
+              pendingScriptSnapshot = null;
+              renderScriptSnapshot(next);
+            }
+
+            function scheduleScriptSnapshot(payload) {
+              const rawText = typeof payload === 'string'
+                ? payload
+                : String(payload?.rawText ?? payload?.text ?? '');
+              if (!rawText && payload && typeof payload !== 'string') {
+                try { console.warn('[display] ignored payload without rawText'); } catch {}
+                return;
+              }
+              pendingScriptSnapshot = rawText;
+              flushPendingScriptSnapshot();
+            }
 
               // 3) Ensure we start at the top (marker line) only on true script loads
               if (shouldResetScroll) {
@@ -681,11 +725,11 @@
                 try {
                   const msg = e?.data || {};
                   // Script snapshots from main (raw text only)
-              if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
-                const raw = msg.rawText ?? msg.text ?? msg.html ?? '';
-                if (raw) {
-                  applyScriptSnapshot(raw);
-                }
+                if (msg && (msg.type === 'tp:script' || msg.kind === 'tp:script')) {
+                  const raw = msg.rawText ?? msg.text ?? msg.html ?? '';
+                  if (raw) {
+                    scheduleScriptSnapshot(raw);
+                  }
                     applyScaled();
                     applyBottomPad();
                     return;
@@ -718,13 +762,13 @@
 
             function handleDisplayMessage(payload) {
               const d = payload || {};
-              if (d && (d.type === 'tp:script' || d.kind === 'tp:script')) {
-                const raw = d.rawText ?? d.text ?? d.html ?? '';
-                if (raw) {
-                  applyScriptSnapshot(raw);
-                } else if (d && typeof d.rawText === 'string') {
-                  applyScriptSnapshot(d.rawText);
-                }
+                if (d && (d.type === 'tp:script' || d.kind === 'tp:script')) {
+                  const raw = d.rawText ?? d.text ?? d.html ?? '';
+                  if (raw) {
+                    scheduleScriptSnapshot(raw);
+                  } else if (d && typeof d.rawText === 'string') {
+                    scheduleScriptSnapshot(d.rawText);
+                  }
                 applyScaled();
                 applyBottomPad();
                 return;
