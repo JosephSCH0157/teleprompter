@@ -689,34 +689,6 @@
               flushPendingScriptSnapshot();
             }
 
-              // 3) Ensure we start at the top (marker line) only on true script loads
-              if (shouldResetScroll) {
-                try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
-              }
-              try {
-                requestAnimationFrame(() => {
-                  applyMarkerOffset();
-                  applyBottomPad();
-                  if (shouldResetScroll) {
-                    try { wrap?.scrollTo({ top: 0, behavior: 'auto' }); } catch {}
-                  }
-                });
-                setTimeout(() => {
-                  applyMarkerOffset();
-                  applyBottomPad();
-                }, 120);
-              } catch {}
-              try {
-                if (pendingLineIdx != null) {
-                  const idx = pendingLineIdx;
-                  pendingLineIdx = null;
-                  requestAnimationFrame(() => {
-                    if (!scrollToLine(idx)) pendingLineIdx = idx;
-                  });
-                }
-              } catch {}
-            }
-
             // Display-sync BroadcastChannel (minimal payloads with hash + optional full markup)
             try {
               const chan = new BroadcastChannel('tp_display');
