@@ -32,6 +32,33 @@
       };
     } catch {}
   </script>
+  <script>
+    (function () {
+      const selectorFix = /(?:^|,)\\s*:x/g;
+      const wrap = (proto, original) => {
+        if (!original) return;
+        proto.querySelectorAll = function (selector) {
+          try {
+            return original.call(this, selector);
+          } catch (err) {
+            const shouldFix =
+              selector &&
+              typeof selector === 'string' &&
+              selectorFix.test(selector) &&
+              err &&
+              err instanceof DOMException;
+            if (shouldFix) {
+              const safeSelector = selector.replace(selectorFix, '');
+              return original.call(this, safeSelector);
+            }
+            throw err;
+          }
+        };
+      };
+      wrap(Document.prototype, Document.prototype.querySelectorAll);
+      wrap(Element.prototype, Element.prototype.querySelectorAll);
+    })();
+  </script>
   <script type="module" src="./dist/display-renderer.js"></script>
   <script type="module" src="./dist/net/display-ws-display-client.js"></script>
   <!-- TS bundle intentionally omitted in display window to keep it mirror-only and avoid double wiring -->
