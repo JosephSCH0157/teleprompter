@@ -190,6 +190,31 @@
             const preRoll = document.getElementById('preRoll');
             const preRollNum = document.getElementById('preRollNum');
             let lastScriptHash = '';
+            let renderScriptReady = typeof window.renderScript === 'function';
+            let pendingScriptSnapshot: string | null = null;
+
+            function flushPendingScriptSnapshot() {
+              if (!renderScriptReady || !pendingScriptSnapshot) return;
+              const payload = pendingScriptSnapshot;
+              pendingScriptSnapshot = null;
+              applyScriptSnapshot(payload);
+            }
+
+            function observeRenderScriptReady() {
+              if (renderScriptReady) return;
+              const onReady = () => {
+                renderScriptReady = true;
+                flushPendingScriptSnapshot();
+              };
+              try {
+                document.addEventListener('tp:renderScriptReady', onReady, { once: true });
+              } catch {}
+              if ((window as any).__TP_RENDER_SCRIPT_READY) {
+                onReady();
+              }
+            }
+
+            observeRenderScriptReady();
             function hashScript(text) {
               let h = 0;
               const s = String(text || '');
@@ -608,20 +633,26 @@
 
             // Render helper: accept raw script text only (SSOT)
             function applyScriptSnapshot(payload) {
-              // 1) Compute marker offset on viewer
-              applyMarkerOffset();
-
               const rawText = typeof payload === 'string'
                 ? payload
                 : String(payload?.rawText ?? payload?.text ?? '');
-              const nextHash = hashScript(rawText);
-              const shouldResetScroll = !!nextHash && nextHash !== lastScriptHash;
-              if (nextHash) lastScriptHash = nextHash;
 
               if (!rawText && payload && typeof payload !== 'string') {
                 try { console.warn('[display] ignored payload without rawText'); } catch {}
                 return;
               }
+
+              if (!renderScriptReady) {
+                pendingScriptSnapshot = rawText;
+                return;
+              }
+
+              // 1) Compute marker offset on viewer
+              applyMarkerOffset();
+
+              const nextHash = hashScript(rawText);
+              const shouldResetScroll = !!nextHash && nextHash !== lastScriptHash;
+              if (nextHash) lastScriptHash = nextHash;
 
               // 2) Render script content via shared renderer
               try {
