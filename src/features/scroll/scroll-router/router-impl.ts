@@ -8,6 +8,10 @@ import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
 import { persistStoredAutoEnabled } from '../auto-state';
 import { appStore } from '../../../state/app-store';
+import type { DeepPartial, TpProfileV1 } from '../../../profile/profile-schema';
+import { ProfileStore } from '../../../profile/profile-store';
+import { createProfilePersister } from '../../../profile/profile-persist';
+import { supabase, hasSupabaseConfig } from '../../../forge/supabaseClient';
 
 const isDevMode = (() => {
   let cache: boolean | null = null;
@@ -101,6 +105,17 @@ const hybridSilence = {
 let hybridSilence2 = 0;
 function setHybridSilence2(v: number) {
   hybridSilence2 = Number.isFinite(v) ? v : 0;
+}
+
+const profileStore = hasSupabaseConfig ? new ProfileStore(supabase) : null;
+const profilePersister = profileStore ? createProfilePersister(profileStore) : null;
+
+function persistProfilePatch(patch: DeepPartial<TpProfileV1>) {
+  profilePersister?.persist(patch);
+}
+
+function flushProfilePersister() {
+  profilePersister?.flush();
 }
 function warnScrollWrite(payload: Record<string, unknown>) {
   if (scrollWriteWarned) return;
@@ -3743,6 +3758,12 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     markSliderInteraction();
     emitWpmIntent(val, 'sidebar', pxs);
     applyWpmBaselinePx(pxs, label, val);
+    persistProfilePatch({
+      scroll: {
+        mode: 'wpm',
+        wpm: { value: val },
+      },
+    });
     if (state2.mode === 'wpm') {
       try {
         if (orchRunning) {
@@ -3819,6 +3840,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         try {
           handleSidebarWpmChange(Number(t.value), 'slider-change');
         } catch {}
+        flushProfilePersister();
       }
     }, { capture: true });
 
@@ -3851,6 +3873,13 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         handleWpmEvent(detail, "tp:wpm:intent");
       } catch {}
     });
+    document.addEventListener("pointerup", (ev) => {
+      try {
+        const target = ev.target as Element | null;
+        if (target?.id !== "wpmTarget") return;
+        flushProfilePersister();
+      } catch {}
+    }, { capture: true });
   } catch {
   }
   try {
