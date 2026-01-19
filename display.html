@@ -59,6 +59,24 @@
       wrap(Element.prototype, Element.prototype.querySelectorAll);
     })();
   </script>
+  <script>
+    (function () {
+      const locks = window?.navigator?.locks;
+      if (!locks || locks.__tpPatched) return;
+      const origRequest = locks.request.bind(locks);
+      locks.request = function (name, options) {
+        return origRequest(name, options)
+          .then((lock) => lock || { release() {} })
+          .catch((error) => {
+            console.warn('[display] NavigatorLock fallback', error?.message || error);
+            return { release() {} };
+          });
+      };
+      try {
+        locks.__tpPatched = true;
+      } catch {}
+    })();
+  </script>
   <script type="module" src="./dist/display-renderer.js"></script>
   <script type="module" src="./dist/net/display-ws-display-client.js"></script>
   <!-- TS bundle intentionally omitted in display window to keep it mirror-only and avoid double wiring -->
