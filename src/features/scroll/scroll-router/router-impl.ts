@@ -1801,6 +1801,22 @@ function persistMode() {
     });
   } catch {
   }
+  try {
+    window.addEventListener('pagehide', () => {
+      try {
+        flushProfilePersister();
+      } catch {}
+    });
+  } catch {}
+  try {
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (document.visibilityState === 'hidden') {
+          flushProfilePersister();
+        }
+      } catch {}
+    });
+  } catch {}
 }
 function restoreMode() {
   try {

@@ -48,6 +48,13 @@ export function createProfilePersister(
 
   const flush = async (): Promise<void> => {
     if (!pending) return;
+    if (saving) {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      return;
+    }
     const patch = pending;
     pending = null;
     if (timer) {
@@ -59,6 +66,9 @@ export function createProfilePersister(
       await saving;
     } finally {
       saving = null;
+      if (pending) {
+        await flush();
+      }
     }
   };
 
