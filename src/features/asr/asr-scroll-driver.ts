@@ -488,12 +488,14 @@ function emitHybridTargetHint(
 ) {
   if (!isHybridMode()) return;
   if (!Number.isFinite(top)) {
-    if (internals.debug && !warnedMissingTargetTop) {
+    if (isDevMode() && !warnedMissingTargetTop) {
       warnedMissingTargetTop = true;
-      console.warn(
-        '[HYBRID_CTRL] targetHint missing top – modulation disabled',
-        { reason, acquireTop: top },
-      );
+      try {
+        console.warn('[HYBRID_CTRL] targetHint missing top – modulation disabled', {
+          reason,
+          top,
+        });
+      } catch {}
     }
     return;
   }
