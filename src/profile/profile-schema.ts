@@ -106,6 +106,7 @@ export interface TpProfileV1 {
       fileKey: string | null;
       reopenOnBoot: boolean;
     };
+    hasSeenWelcome: boolean;
   };
 
   integrations: {
@@ -205,6 +206,7 @@ export function defaultProfileV1(): TpProfileV1 {
     workflow: {
       lastSpeakerProfileId: null,
       lastScript: { folderKey: null, fileKey: null, reopenOnBoot: true },
+      hasSeenWelcome: false,
     },
     integrations: {
       obs: {
@@ -287,6 +289,7 @@ export function coerceProfile(input: AnyProfile | null | undefined): TpProfileV1
   p.asr.tuning.winAheadLines = clamp(num(p.asr.tuning.winAheadLines, 6), 0, 120);
 
   p.dev.hybridLogThrottleMs = clamp(num(p.dev.hybridLogThrottleMs, 500), 0, 5000);
+  p.workflow.hasSeenWelcome = Boolean(p.workflow.hasSeenWelcome);
 
   return p;
 }

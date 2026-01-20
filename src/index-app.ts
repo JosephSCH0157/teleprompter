@@ -1446,6 +1446,7 @@ const startToasts      = initOnce('toasts',      initToasts);
 import './features/scroll/mode-chip';
 // Mapped Folder (scripts directory) binder
 import { installGlobalIngestListener, installScriptIngest } from './features/script-ingest';
+import { ensureWelcomeScript } from './features/welcome-intro';
 import { disableLegacyScriptsUI, neuterLegacyScriptsInit } from './ui/hide-legacy-scripts';
 import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from './ui/inject-settings-folder';
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
@@ -2140,6 +2141,7 @@ try {
 					// Script ingest
 					try { installScriptIngest({}); } catch {}
 					try { installGlobalIngestListener(); } catch {}
+					try { void ensureWelcomeScript(); } catch {}
           // Sidebar scripts refresh (mapped folder) + refresh button wiring
           try {
             (window as any).__tpRefreshScriptsSidebar = refreshScriptsSidebar;
