@@ -3718,7 +3718,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
-      hybridMotor.setVelocityPxPerSec(effectivePxPerSec);
+      try {
+        applyHybridVelocityCore(safeSilence);
+      } catch {}
       if (!hybridRunning) {
         try {
           console.info('[HYBRID] shouldRun true starting motor', {
