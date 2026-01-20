@@ -3119,6 +3119,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridCtrl.mult = ctrlMultFinal;
     const ctrlMultApplied = ctrlMultFinal;
     const modeHint = computeHybridModeHint(errorInfo?.errorLines ?? null);
+    const hybridScaleDetail = computeEffectiveHybridScale(now, silenceState);
+    const scale = hybridScaleDetail.scale;
     const {
       scale: effectiveScale,
       reason,
