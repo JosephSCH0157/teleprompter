@@ -117,6 +117,28 @@ function persistProfilePatch(patch: DeepPartial<TpProfileV1>) {
 function flushProfilePersister() {
   profilePersister?.flush();
 }
+try {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('tp:typographyChanged', (ev) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail || {};
+        if (detail.broadcast) return;
+        const display = detail.display === 'display' ? 'display' : 'main';
+        const settings = detail.settings;
+        if (!settings || typeof settings !== 'object') return;
+        persistProfilePatch({
+          ui: {
+            windows: {
+              [display]: {
+                typography: settings,
+              },
+            },
+          },
+        });
+      } catch {}
+    });
+  }
+} catch {}
 function warnScrollWrite(payload: Record<string, unknown>) {
   if (scrollWriteWarned) return;
   scrollWriteWarned = true;
