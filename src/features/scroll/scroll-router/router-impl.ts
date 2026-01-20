@@ -30,6 +30,10 @@ const isDevMode = (() => {
         cache = true;
         return cache;
       }
+      if (params.has('ci') || params.has('mockFolder') || params.has('uiMock')) {
+        cache = true;
+        return cache;
+      }
       const storage = window.localStorage;
       if (storage?.getItem('tp_dev_mode') === '1') {
         cache = true;
