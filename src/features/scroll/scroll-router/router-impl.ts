@@ -204,8 +204,26 @@ function computeHybridErrorPx(now = nowMs()) {
       ? hint.markerPct
       : getMarkerPercent();
   const markerY = currentScrollTop + height * markerPct;
-  const anchorY =
-    Number.isFinite(hint.anchorTop ?? NaN) && hint.anchorTop != null ? hint.anchorTop : hint.top;
+  const anchorTopRaw = Number(hint.anchorTop);
+  const hasAnchorTop = Number.isFinite(anchorTopRaw);
+  const hintTopRaw = Number(hint.top);
+  const hasHintTop = Number.isFinite(hintTopRaw);
+  let targetTop: number | null = null;
+  let targetTopSource: 'anchor' | 'hint' | 'sticky' | 'none' = 'none';
+  if (hasAnchorTop) {
+    targetTop = anchorTopRaw;
+    targetTopSource = 'anchor';
+  } else if (hasHintTop) {
+    targetTop = hintTopRaw;
+    targetTopSource = 'hint';
+  } else if (Number.isFinite(hybridLastGoodTargetTop ?? NaN)) {
+    targetTop = hybridLastGoodTargetTop;
+    targetTopSource = 'sticky';
+  } else {
+    targetTopSource = 'none';
+  }
+  if (targetTop == null) return null;
+  const anchorY = targetTop;
   const errorPx = anchorY - markerY;
   const anchorAgeMs = Math.max(0, now - hint.ts);
   const markerIdx = getMarkerLineIndex(scroller, markerY);
@@ -220,7 +238,7 @@ function computeHybridErrorPx(now = nowMs()) {
   const errorLines = bestIdx != null && markerIdx != null ? bestIdx - markerIdx : null;
   return {
     errorPx,
-    targetScrollTop: hint.top,
+    targetScrollTop: targetTop,
     currentScrollTop,
     confidence: hint.confidence,
     anchorAgeMs,
@@ -229,6 +247,7 @@ function computeHybridErrorPx(now = nowMs()) {
     markerIdx,
     bestIdx,
     errorLines,
+    targetTopSource,
   };
 }
 
@@ -354,6 +373,7 @@ function logHybridTruthLine(payload: {
   bestSim?: number | null;
   weakMatch?: boolean | null;
   driftWeak?: boolean | null;
+  targetTopSource?: string | null;
 }) {
   if (!isDevMode()) return;
   const now = typeof performance !== "undefined" && typeof performance.now === "function"
@@ -378,6 +398,7 @@ function logHybridTruthLine(payload: {
       offScriptActive: payload.offScriptActive ?? null,
       weakMatch: payload.weakMatch ?? null,
       driftWeak: payload.driftWeak ?? null,
+      targetTopSource: payload.targetTopSource ?? null,
       capReason: payload.capReason ?? "none",
     });
   } catch {}
@@ -1643,6 +1664,7 @@ let hybridTargetHintState:
       lineIndex?: number | null;
     }
   | null = null;
+let hybridLastGoodTargetTop: number | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
@@ -3120,8 +3142,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         reason: detail?.reason,
       });
     } catch {}
-    const top = Number(detail.targetTop);
-    if (!Number.isFinite(top)) return;
+    const topRaw = Number(detail.targetTop ?? detail.top);
+    if (!Number.isFinite(topRaw)) return;
+    const top = topRaw;
     const confidenceRaw = Number.isFinite(Number(detail.confidence)) ? Number(detail.confidence) : 0;
     const confidence = Math.max(0, Math.min(1, confidenceRaw));
     const anchorTopRaw = Number(detail.anchorTop);
@@ -3132,6 +3155,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const lineIndexRaw = Number(detail.lineIndex ?? detail.anchorLine ?? detail.targetLine);
     const lineIndex =
       Number.isFinite(lineIndexRaw) && lineIndexRaw >= 0 ? lineIndexRaw : null;
+    const resolvedTargetTop = Number.isFinite(anchorTopRaw) ? anchorTopRaw : top;
+    if (Number.isFinite(resolvedTargetTop)) {
+      hybridLastGoodTargetTop = resolvedTargetTop;
+    }
     hybridTargetHintState = {
       top,
       confidence,
@@ -3467,6 +3494,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       bestSim,
       weakMatch,
       driftWeak: driftWeakMatch,
+      targetTopSource: errorInfo?.targetTopSource ?? null,
     });
 
     hybridMotor.setVelocityPxPerSec(finalPxps);
