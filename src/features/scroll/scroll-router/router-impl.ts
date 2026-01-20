@@ -12,6 +12,9 @@ import type { DeepPartial, TpProfileV1 } from '../../../profile/profile-schema';
 import { ProfileStore } from '../../../profile/profile-store';
 import { createProfilePersister } from '../../../profile/profile-persist';
 import { supabase, hasSupabaseConfig } from '../../../forge/supabaseClient';
+import { hasActiveAsrProfile } from '../../../asr/store';
+import { focusSidebarCalibrationSelect } from '../../../media/calibration-sidebar';
+import { showToast } from '../../../ui/toasts';
 
 const isDevMode = (() => {
   let cache: boolean | null = null;
@@ -2377,6 +2380,11 @@ function installScrollRouter(opts) {
   }
 
   function setAutoIntentState(on: boolean, _reason?: string) {
+    if (on && state2.mode === "hybrid" && !hasActiveAsrProfile()) {
+      try { showToast('Select a saved mic calibration to use ASR/Hybrid.', { type: 'warning' }); } catch {}
+      try { focusSidebarCalibrationSelect(); } catch {}
+      return;
+    }
     userIntentOn = on;
     userEnabled = on;
     hybridWantedRunning = on;
@@ -3896,7 +3904,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     emitMotorState("hybridWpm", hybridMotor.isRunning());
   } catch (err) {
     try {
-      console.error('[HYBRID] gate error', err);
+      console.error('[HYBRID] gate error', err?.message ?? err, err);
     } catch {}
     return;
   }

@@ -82,6 +82,11 @@ export function onAsr(fn: (_s: AsrState) => void) {
   return () => subs.delete(fn);
 }
 
+export function hasActiveAsrProfile(): boolean {
+  const state = getAsrState();
+  return !!(state?.activeProfileId && state.profiles?.[state.activeProfileId]);
+}
+
 if (store) {
   try {
     store.subscribe('asrProfiles', (next) => {

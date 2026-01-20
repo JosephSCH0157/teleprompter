@@ -344,6 +344,7 @@
   <span id="appVersion" class="version-badge" aria-label="App version">v1.7.8</span>
   <span class="chip" id="saveChip">Draft: -</span>
   <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
+  <span class="chip" id="asrCalChip" data-tp-asr-cal-chip aria-live="polite" aria-atomic="true">ASR: No calibration</span>
   <span class="chip" id="displayChip">Display: closed</span>
   <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
   <span class="chip" id="scrollChip">Scroll: idle</span>
@@ -428,6 +429,15 @@
 <div class="row">
 <button id="micToggleBtn" class="chip mic-idle" type="button" data-tp-request-mic="sidebar">Request Mic</button>
 <button disabled="" id="recBtn" class="btn-primary btn-start" data-action="start-speech">Start speech sync</button>
+</div>
+<div class="row sidebar-calibration">
+  <label class="grow">Calibration (required)
+    <select id="sidebarCalSelect" class="select-md"></select>
+  </label>
+  <button id="sidebarCalManage" class="chip btn-chip" type="button">Manage calibrations...</button>
+</div>
+<div class="row sidebar-calibration-status">
+  <span id="sidebarCalStatus" class="microcopy">⚠️ No calibration selected</span>
 </div>
   <div class="row" id="autoRow" data-role="auto-row" aria-hidden="false">
     <div id="autoSpeedWrap">

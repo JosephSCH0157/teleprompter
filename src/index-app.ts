@@ -87,7 +87,7 @@ import { initAsrPersistence } from './features/asr/persistence';
 import { initScrollPrefsPersistence, loadScrollPrefs } from './features/scroll/scroll-prefs';
 import { showToast } from './ui/toasts';
 import { computeAsrReadiness, type AsrWarnReason, type AsrNotReadyReason } from './asr/readiness';
-import { getAsrState, onAsr } from './asr/store';
+import { hasActiveAsrProfile, onAsr } from './asr/store';
 import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
@@ -687,18 +687,9 @@ export type ApplyUiScrollModeOptions = {
   __permissionRetry?: boolean;
 };
 
-type GateReason = AsrNotReadyReason | 'MIC_ERROR';
+type GateReason = AsrNotReadyReason | 'MIC_ERROR' | 'NO_CALIBRATION';
 
 let asrGatePending = false;
-
-function hasActiveAsrProfile(): boolean {
-  try {
-    const s = getAsrState();
-    return !!(s.activeProfileId && (s.profiles as any)?.[s.activeProfileId]);
-  } catch {
-    return false;
-  }
-}
 
 function isMicCapturing(): boolean {
   try {
@@ -780,6 +771,10 @@ function applyUiScrollMode(
   const source: ScrollModeSource = opts.source || 'user';
   lastScrollModeSource = source;
   let normalized = normalizeUiScrollMode(mode);
+  if (normalized === 'hybrid' && !hasActiveAsrProfile()) {
+    handleAsrBlock('NO_CALIBRATION');
+    return;
+  }
   let readiness: { ready: true; warn?: AsrWarnReason } | { ready: false; reason: AsrNotReadyReason } | null = null;
   const auto = (window as any).__tpAuto as { setEnabled?(_v: boolean): void } | undefined;
   const asrBridge = (window as any).__asrBridge as { start?: () => Promise<void> | void; stop?: () => Promise<void> | void } | undefined;
@@ -795,13 +790,19 @@ function applyUiScrollMode(
   };
   let micPermissionCheckPending = false;
   const isPermissionRetry = opts.__permissionRetry === true;
-  const handleAsrBlock = (reason: GateReason) => {
-    const fallback = reason === 'NO_PERMISSION' ? 'hybrid' : getSafeFallbackMode();
+  function handleAsrBlock(reason: GateReason) {
+    let fallback = reason === 'NO_PERMISSION' ? 'hybrid' : getSafeFallbackMode();
+    if (reason === 'NO_CALIBRATION' && fallback === 'hybrid') {
+      fallback = 'step';
+    }
     normalized = fallback;
     setScrollModeSelectValue(fallback);
     if (allowToast && source === 'user') {
       if (reason === 'NO_PERMISSION') {
         try { showToast('ASR blocked: microphone permission denied', { type: 'warning' }); } catch {}
+      } else if (reason === 'NO_CALIBRATION') {
+        try { showToast('Select a saved mic calibration to use ASR/Hybrid.', { type: 'warning' }); } catch {}
+        try { focusSidebarCalibrationSelect(); } catch {}
       } else if (!asrRejectionToastShown) {
         const toastMsg = 'ASR needs mic + calibration. Stayed in Hybrid.';
         try { showToast(toastMsg, { type: 'info' }); } catch {}
@@ -813,7 +814,7 @@ function applyUiScrollMode(
     } catch {}
     try { appStore.set?.('scrollMode', fallback as any); } catch {}
     try { requestAsrStop(); } catch {}
-  };
+  }
   const ensureMicPermissionThenRetry = () => {
     if (micPermissionCheckPending) return;
     micPermissionCheckPending = true;
@@ -1337,6 +1338,7 @@ import { bindCameraUI } from './media/camera-bridge';
 import './media/display-bridge';
 import './media/mic'; // exposes window.__tpMic for mic controls + dB meter
 import { bindMicUI } from './media/mic-bridge';
+import { focusSidebarCalibrationSelect, wireSidebarCalibrationUI } from './media/calibration-sidebar';
 import { initMicPermissions } from './media/mic-permissions';
 import { onTypography } from './settings/typographyStore';
 import { getUiPrefs } from './settings/uiPrefs';
@@ -1898,6 +1900,7 @@ export async function boot() {
           try { bindLoadSample(); } catch {}
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
+          try { wireSidebarCalibrationUI(); } catch {}
           try { bindCameraUI(); } catch {}
           try { initRecPillsMain(appStore); } catch {}
           if (!isDisplayContext()) {
