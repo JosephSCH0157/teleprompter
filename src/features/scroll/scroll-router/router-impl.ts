@@ -345,6 +345,7 @@ function logHybridTruthLine(payload: {
   targetMult?: number;
   lineMult?: number;
   capReason?: string;
+  scaleReason?: string | null;
   noMatch?: boolean | null;
   offScriptActive?: boolean | null;
   bestSim?: number | null;
@@ -365,9 +366,10 @@ function logHybridTruthLine(payload: {
         errorPx: fmt(payload.errorPx, 1),
         errorLines: fmt(payload.errorLines, 2),
         effectiveErrorLines: fmt(payload.effectiveErrorLines, 2),
-        targetMult: fmt(payload.targetMult, 3),
-        lineMult: fmt(payload.lineMult, 3),
-        bestSim: fmt(payload.bestSim, 3),
+      targetMult: fmt(payload.targetMult, 3),
+      lineMult: fmt(payload.lineMult, 3),
+      bestSim: fmt(payload.bestSim, 3),
+      scaleReason: payload.scaleReason ?? null,
         noMatch: payload.noMatch ?? null,
         offScriptActive: payload.offScriptActive ?? null,
         weakMatch: payload.weakMatch ?? null,
@@ -3110,6 +3112,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     silence = hybridSilence,
     pauseLikelyOverride?: boolean,
     forceOffScript = false,
+    candidateErrorLines?: number | null,
+    weakMatch = false,
   ) {
     const pauseLikely =
       typeof pauseLikelyOverride === "boolean" ? pauseLikelyOverride : isPlannedPauseLikely();
@@ -3123,8 +3127,15 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const scaleFromOffscript = offScriptActive ? OFFSCRIPT_SCALE : 1;
     const graceActive = isHybridGraceActive(now);
     const scaleFromGrace = GRACE_MIN_SCALE;
+    const nearTarget =
+      Number.isFinite(candidateErrorLines ?? NaN) &&
+      Math.abs(candidateErrorLines ?? 0) <= HYBRID_CTRL_MODE_DEADBAND_LINES;
     const onScriptLocked =
-      onScriptStreak >= 2 && now - lastGoodMatchAtMs < ON_SCRIPT_LOCK_HOLD_MS;
+      onScriptStreak >= 2 &&
+      now - lastGoodMatchAtMs < ON_SCRIPT_LOCK_HOLD_MS &&
+      !weakMatch &&
+      !offScriptActive &&
+      nearTarget;
     if (onScriptLocked) {
       return {
         scale: 1,
@@ -3246,7 +3257,14 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridCtrl.mult = ctrlMultFinal;
     const ctrlMultApplied = ctrlMultFinal;
     const modeHint = computeHybridModeHint(errorInfo?.errorLines ?? null, weakMatch);
-    const hybridScaleDetail = computeEffectiveHybridScale(now, silence, undefined, weakMatch);
+    const hybridScaleDetail = computeEffectiveHybridScale(
+      now,
+      silence,
+      undefined,
+      weakMatch,
+      effectiveErrorLines,
+      weakMatch,
+    );
     const {
       scale: effectiveScale,
       reason,
@@ -3405,6 +3423,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       targetMult,
       lineMult,
       capReason,
+      scaleReason: hybridScaleDetail.reason,
       noMatch,
       offScriptActive: hybridScaleDetail.offScriptActive,
       bestSim,
@@ -3733,6 +3752,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       safeSilence,
       undefined,
       gateEffectiveOffScript,
+      null,
+      gateWeakMatch,
     );
     const scale = hybridScaleDetail.scale;
     const brake = getActiveBrakeFactor(now);
