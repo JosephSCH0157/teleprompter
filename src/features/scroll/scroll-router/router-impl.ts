@@ -103,6 +103,8 @@ const hybridSilence = {
   offScriptActive: false,
 };
 let hybridSilence2 = 0;
+const HYBRID_CTRL_DEBUG_THROTTLE_MS = 500;
+let lastHybridCtrlDebugTs = 0;
 function setHybridSilence2(v: number) {
   hybridSilence2 = Number.isFinite(v) ? v : 0;
 }
@@ -1024,6 +1026,7 @@ function logHybridMotorEvent(evt: string, data?: any) {
   if (state2.mode !== 'hybrid') return;
   if (evt === 'velocity') {
     const now = nowMs();
+    const errorInfo = computeHybridErrorPx(now);
     const signature = `${Number(data?.velocityPxPerSec ?? 0).toFixed(2)}`;
     if (signature === lastHybridMotorVelocitySignature && now - lastHybridMotorVelocityLogAt < HYBRID_MOTOR_LOG_THROTTLE_MS) return;
     lastHybridMotorVelocitySignature = signature;
@@ -3544,6 +3547,38 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     );
     const effectivePxPerSec =
       Number.isFinite(pxCandidate) && pxCandidate > 0 ? pxCandidate : fallback;
+    if (isDevMode() && now - lastHybridCtrlDebugTs >= HYBRID_CTRL_DEBUG_THROTTLE_MS) {
+      lastHybridCtrlDebugTs = now;
+      const targetTop =
+        Number.isFinite(errorInfo?.targetScrollTop ?? NaN) && errorInfo?.targetScrollTop != null
+          ? errorInfo.targetScrollTop
+          : null;
+      const markerTop =
+        Number.isFinite(errorInfo?.markerY ?? NaN) && errorInfo?.markerY != null ? errorInfo.markerY : null;
+      const deltaPx =
+        Number.isFinite(errorInfo?.errorPx ?? NaN) && errorInfo?.errorPx != null
+          ? errorInfo.errorPx
+          : null;
+      const deltaLines =
+        Number.isFinite(errorInfo?.errorLines ?? NaN) && errorInfo?.errorLines != null
+          ? errorInfo.errorLines
+          : null;
+      try {
+        console.info('[HYBRID_CTRL] px-debug', {
+          baselinePxps: baseHybridPxPerSec,
+          targetTop,
+          markerTop,
+          deltaPx,
+          deltaLines,
+          normalizedScale: hybridScale,
+          computedScale: scale,
+          brake,
+          offScript: hybridSilence.offScriptActive,
+          pausedBySilence: silencePaused,
+          effectivePxPerSec,
+        });
+      } catch {}
+    }
     const shouldRunHybrid = wantEnabled && effectivePxPerSec >= HYBRID_CTRL_MIN_PXPS;
     const viewerEl = viewer;
     const guardSlowActive = hybridSilence.offScriptActive;
