@@ -105,6 +105,8 @@ const hybridSilence = {
 let hybridSilence2 = 0;
 const HYBRID_CTRL_DEBUG_THROTTLE_MS = 500;
 let lastHybridCtrlDebugTs = 0;
+const HYBRID_TRUTH_THROTTLE_MS = 350;
+let lastHybridTruthAt = 0;
 function setHybridSilence2(v: number) {
   hybridSilence2 = Number.isFinite(v) ? v : 0;
 }
@@ -329,6 +331,42 @@ function logHybridMultDebug(payload: {
       targetMult: fmt(payload.targetMult, 3),
       lineMult: fmt(payload.lineMult, 3),
       finalPxps: fmt(payload.finalPxps),
+      capReason: payload.capReason ?? "none",
+    });
+  } catch {}
+}
+
+function logHybridTruthLine(payload: {
+  basePxps: number;
+  finalPxps: number;
+  errorPx?: number;
+  errorLines?: number | null;
+  targetMult?: number;
+  lineMult?: number;
+  capReason?: string;
+  noMatch?: boolean | null;
+  offScriptActive?: boolean | null;
+  bestSim?: number | null;
+}) {
+  if (!isDevMode()) return;
+  const now = typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+  if (now - lastHybridTruthAt < HYBRID_TRUTH_THROTTLE_MS) return;
+  lastHybridTruthAt = now;
+  const fmt = (value: number | undefined | null, digits: number) =>
+    value == null || !Number.isFinite(value) ? null : +value.toFixed(digits);
+  try {
+    console.warn("[HYBRID_TRUTH]", {
+      basePxps: fmt(payload.basePxps, 2),
+      finalPxps: fmt(payload.finalPxps, 2),
+      errorPx: fmt(payload.errorPx, 1),
+      errorLines: fmt(payload.errorLines, 2),
+      targetMult: fmt(payload.targetMult, 3),
+      lineMult: fmt(payload.lineMult, 3),
+      bestSim: fmt(payload.bestSim, 3),
+      noMatch: payload.noMatch ?? null,
+      offScriptActive: payload.offScriptActive ?? null,
       capReason: payload.capReason ?? "none",
     });
   } catch {}
@@ -1532,6 +1570,7 @@ function getHybridCtrlDevOverride(now: number) {
 }
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
+let hybridLastNoMatch: boolean | null = null;
 
 let hybridBasePxps = 0;
 let hybridScale = RECOVERY_SCALE;
@@ -2672,6 +2711,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   ) {
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(ts, perfNow);
+    if (typeof opts?.noMatch === "boolean") {
+      hybridLastNoMatch = opts.noMatch;
+    }
     const wasSpeechActive = speechActive;
     speechActive = true;
     hybridSilence.lastSpeechAtMs = now;
@@ -3313,6 +3355,22 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       assistTtl,
       graceActive,
       motorRunning,
+    });
+
+    const bestSimValue = Number.isFinite(lastAsrMatch?.bestSim ?? NaN)
+      ? lastAsrMatch.bestSim
+      : null;
+    logHybridTruthLine({
+      basePxps: base,
+      finalPxps,
+      errorPx: errorInfo?.errorPx,
+      errorLines: errorInfo?.errorLines ?? null,
+      targetMult,
+      lineMult,
+      capReason,
+      noMatch: hybridLastNoMatch,
+      offScriptActive: hybridSilence.offScriptActive,
+      bestSim: bestSimValue,
     });
 
     hybridMotor.setVelocityPxPerSec(finalPxps);
