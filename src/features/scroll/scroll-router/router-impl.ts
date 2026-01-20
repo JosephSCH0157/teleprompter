@@ -307,6 +307,33 @@ function logHybridCtrlState(
   } catch {}
 }
 
+function logHybridMultDebug(payload: {
+  basePxps: number;
+  errorLines: number | null;
+  targetMult: number;
+  lineMult: number;
+  finalPxps: number;
+  capReason?: string;
+}) {
+  if (!isDevMode()) return;
+  if (!HYBRID_CTRL_ENABLED) return;
+  const now = nowMs();
+  if (now - lastHybridMultDebugAt < HYBRID_MULT_DEBUG_THROTTLE_MS) return;
+  lastHybridMultDebugAt = now;
+  const fmt = (value: number | null | undefined, digits = 2) =>
+    value == null || !Number.isFinite(value) ? null : value.toFixed(digits);
+  try {
+    console.info("[HYBRID_CTRL] mult-debug", {
+      basePxps: fmt(payload.basePxps),
+      errorLines: fmt(payload.errorLines),
+      targetMult: fmt(payload.targetMult, 3),
+      lineMult: fmt(payload.lineMult, 3),
+      finalPxps: fmt(payload.finalPxps),
+      capReason: payload.capReason ?? "none",
+    });
+  } catch {}
+}
+
 type HybridCtrlHudState = {
   basePxps: number;
   errorPx: number | null;
@@ -452,20 +479,36 @@ function computeTargetMultiplier(e: number) {
   return clamp(raw, HYBRID_CTRL_BRAKE_MIN, HYBRID_CTRL_ASSIST_MAX);
 }
 
-function computeLineTargetMultiplier(errorLines: number | null, eligible: boolean) {
-  if (!eligible || errorLines == null) return null;
-  const clamped = clamp(errorLines, -HYBRID_CTRL_LINE_ERROR_RANGE, HYBRID_CTRL_LINE_ERROR_RANGE);
-  if (Math.abs(clamped) <= HYBRID_CTRL_MODE_DEADBAND_LINES) return 1;
-  const offset = Math.abs(clamped) - HYBRID_CTRL_MODE_DEADBAND_LINES;
-  const range = HYBRID_CTRL_LINE_ERROR_RANGE - HYBRID_CTRL_MODE_DEADBAND_LINES;
-  const normalized = Number.isFinite(range) && range > 0 ? offset / range : 0;
-  const curve = Math.pow(Math.min(Math.max(normalized, 0), 1), HYBRID_CTRL_LINE_CURVE_EXP);
-  if (clamped > 0) {
-    const scaled = 1 + curve * HYBRID_CTRL_LINE_POS_MULT_DELTA;
-    return clamp(scaled, HYBRID_CTRL_LINE_MIN_MULT, HYBRID_CTRL_LINE_MAX_MULT);
+function mapErrorLinesToTargetMult(
+  errorLines: number,
+  deadbandLines: number,
+  maxErrLines: number,
+  minMult: number,
+  maxMult: number,
+) {
+  if (!Number.isFinite(errorLines)) return 1;
+  if (maxErrLines <= deadbandLines) return 1;
+  const abs = Math.abs(errorLines);
+  if (abs <= deadbandLines) return 1;
+  const normalized = clamp((abs - deadbandLines) / (maxErrLines - deadbandLines), 0, 1);
+  const shaped = Math.pow(Math.min(Math.max(normalized, 0), 1), HYBRID_CTRL_LINE_CURVE_EXP);
+  if (errorLines > 0) {
+    const delta = Math.min(HYBRID_CTRL_LINE_POS_MULT_DELTA, 1 - minMult);
+    return clamp(1 - shaped * delta, minMult, 1);
   }
-  const scaled = 1 - curve * HYBRID_CTRL_LINE_NEG_MULT_DELTA;
-  return clamp(scaled, HYBRID_CTRL_LINE_MIN_MULT, HYBRID_CTRL_LINE_MAX_MULT);
+  const delta = Math.min(HYBRID_CTRL_LINE_NEG_MULT_DELTA, maxMult - 1);
+  return clamp(1 + shaped * delta, 1, maxMult);
+}
+
+function computeLineTargetMultiplier(errorLines: number | null, eligible: boolean) {
+  if (!eligible || errorLines == null || !Number.isFinite(errorLines)) return null;
+  return mapErrorLinesToTargetMult(
+    errorLines,
+    HYBRID_CTRL_MODE_DEADBAND_LINES,
+    HYBRID_CTRL_LINE_ERROR_RANGE,
+    HYBRID_CTRL_LINE_MIN_MULT,
+    HYBRID_CTRL_LINE_MAX_MULT,
+  );
 }
 
 function updateHybridLineMult(targetMult: number | null, dtMs: number) {
@@ -1445,6 +1488,7 @@ const HYBRID_CTRL_LINE_MIN_MULT = 0.5;
 const HYBRID_CTRL_LINE_SMOOTH_TAU_MS = 450;
 const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.8;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
+const HYBRID_MULT_DEBUG_THROTTLE_MS = 500;
 type HybridCtrlLineSource = 'lines' | 'px' | 'none';
 const HYBRID_CTRL_PARAM_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
@@ -1460,6 +1504,7 @@ const HYBRID_CTRL_DEV_OVERRIDE_MULTS = [1.4, 0.7, 1.0];
 const HYBRID_CTRL_DEV_OVERRIDE_DURATION_MS = 10000;
 let hybridCtrlDevOverrideStart: number | null = null;
 let hybridCtrlDevOverrideDone = false;
+let lastHybridMultDebugAt = 0;
 
 function getHybridCtrlDevOverride(now: number) {
   if (
@@ -3183,6 +3228,22 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
     const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, effective + assistBoost);
+    const capReason =
+      pausedBySilence || reason === 'silence'
+        ? 'silence'
+        : offScriptActive || reason === 'offscript'
+        ? 'offscript'
+        : undefined;
+    logHybridMultDebug({
+      basePxps: base,
+      errorLines: errorInfo?.errorLines ?? null,
+      targetMult: Number.isFinite(candidateTargetMult ?? NaN)
+        ? Number(candidateTargetMult)
+        : 1,
+      lineMult: appliedTargetMult,
+      finalPxps,
+      capReason,
+    });
     logHybridCtrlState(
       base,
       baseWithCorrection,
