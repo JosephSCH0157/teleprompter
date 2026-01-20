@@ -477,6 +477,8 @@ function emitHybridAssist(boostPxps: number, reason: string, targetTop?: number,
   });
 }
 
+let warnedMissingTargetTop = false;
+
 function emitHybridTargetHint(
   top: number,
   confidence: number,
@@ -484,7 +486,17 @@ function emitHybridTargetHint(
   ttlMs?: number,
   lineIndex?: number,
 ) {
-  if (!isHybridMode() || !Number.isFinite(top)) return;
+  if (!isHybridMode()) return;
+  if (!Number.isFinite(top)) {
+    if (internals.debug && !warnedMissingTargetTop) {
+      warnedMissingTargetTop = true;
+      console.warn(
+        '[HYBRID_CTRL] targetHint missing top – modulation disabled',
+        { reason, acquireTop: top },
+      );
+    }
+    return;
+  }
   const now = getNowMs();
   if (
     lastHybridTargetHintTop != null &&
@@ -512,8 +524,9 @@ function emitHybridTargetHint(
    }
    const markerPct =
      typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4;
-   dispatchHybridEvent('tp:hybrid:targetHint', {
-     targetTop: top,
+  dispatchHybridEvent('tp:hybrid:targetHint', {
+    targetTop: top,
+    top,
      confidence: safeConfidence,
      reason,
      ttlMs: safeTtl,
