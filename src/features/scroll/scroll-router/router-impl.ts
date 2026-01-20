@@ -1102,21 +1102,20 @@ function logHybridVelocityEvent(payload: any) {
   } catch {}
 }
 
-function logHybridMotorEvent(evt: string, data?: any) {
-  if (!isDevMode()) return;
-  if (state2.mode !== 'hybrid') return;
-  if (evt === 'velocity') {
-    const now = nowMs();
-    const errorInfo = computeHybridErrorPx(now);
-    const signature = `${Number(data?.velocityPxPerSec ?? 0).toFixed(2)}`;
-    if (signature === lastHybridMotorVelocitySignature && now - lastHybridMotorVelocityLogAt < HYBRID_MOTOR_LOG_THROTTLE_MS) return;
-    lastHybridMotorVelocitySignature = signature;
-    lastHybridMotorVelocityLogAt = now;
+  function logHybridMotorEvent(evt: string, data?: any) {
+    if (!isDevMode()) return;
+    if (state2.mode !== 'hybrid') return;
+    if (evt === 'velocity') {
+      const now = nowMs();
+      const signature = `${Number(data?.velocityPxPerSec ?? 0).toFixed(2)}`;
+      if (signature === lastHybridMotorVelocitySignature && now - lastHybridMotorVelocityLogAt < HYBRID_MOTOR_LOG_THROTTLE_MS) return;
+      lastHybridMotorVelocitySignature = signature;
+      lastHybridMotorVelocityLogAt = now;
+    }
+    try {
+      console.debug('[HybridMotor]', evt, data);
+    } catch {}
   }
-  try {
-    console.debug('[HybridMotor]', evt, data);
-  } catch {}
-}
 
 function convertWpmToPxPerSec(targetWpm: number) {
   try {
@@ -3207,7 +3206,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const ctrlMultApplied = ctrlMultFinal;
     const modeHint = computeHybridModeHint(errorInfo?.errorLines ?? null);
     const hybridScaleDetail = computeEffectiveHybridScale(now, silence);
-    const scale = hybridScaleDetail.scale;
     const {
       scale: effectiveScale,
       reason,
@@ -3561,6 +3559,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     });
   } catch {}
   function applyGate() {
+    try {
     if (state2.mode !== "hybrid") {
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
@@ -3809,6 +3808,12 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const chipState = userEnabled ? (hybridMotor.isRunning() ? "on" : "paused") : "manual";
     setAutoChip(chipState, detail, "Motor");
     emitMotorState("hybridWpm", hybridMotor.isRunning());
+  } catch (err) {
+    try {
+      console.error('[HYBRID] gate error', err);
+    } catch {}
+    return;
+  }
   }
   onUiPrefs((p) => {
     gatePref = p.hybridGate;
