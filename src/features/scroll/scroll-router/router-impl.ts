@@ -3130,7 +3130,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       onScriptLocked,
       offScriptActive,
       pausedBySilence,
-    } = computeEffectiveHybridScale(now, silenceState);
+    } = hybridScaleDetail;
     const pauseTailEligible = pauseLikely && silenceState.pausedBySilence;
     if (pauseTailEligible && hybridAssistState.boostPxps > 0) {
       pauseAssistTailBoost = hybridAssistState.boostPxps;
@@ -3538,7 +3538,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       hybridBlockedReason = "blocked:silence";
     }
     const hybridRunning = hybridMotor.isRunning();
-    const scale = computeEffectiveHybridScale(now);
+    const hybridScaleDetail = computeEffectiveHybridScale(now, silenceState);
+    const scale = hybridScaleDetail.scale;
     const brake = getActiveBrakeFactor(now);
     const pxCandidate = baseHybridPxPerSec * scale * brake;
     const fallback = Math.max(
@@ -3573,6 +3574,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           normalizedScale: hybridScale,
           computedScale: scale,
           brake,
+          reason: hybridScaleDetail.reason,
           offScript: hybridSilence.offScriptActive,
           pausedBySilence: silencePaused,
           effectivePxPerSec,
