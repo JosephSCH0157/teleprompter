@@ -1773,9 +1773,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "24ac29b915646eab0a39b74559827663c30e4ecf",
+      "gitSha": "8ad3841a8a02fee3dcf947c64ab99375ed54700b",
       "branch": "main",
-      "buildTime": "2026-01-20T19:15:05.944Z"
+      "buildTime": "2026-01-20T20:07:16.925Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
