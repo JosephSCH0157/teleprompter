@@ -487,56 +487,61 @@ function emitHybridTargetHint(
   lineIndex?: number,
 ) {
   if (!isHybridMode()) return;
-  if (!Number.isFinite(top)) {
-    if (isDevMode() && !warnedMissingTargetTop) {
-      warnedMissingTargetTop = true;
-      try {
-        console.warn('[HYBRID_CTRL] targetHint missing top – modulation disabled', {
-          reason,
-          top,
-        });
-      } catch {}
-    }
-    return;
-  }
-  const now = getNowMs();
-  if (
-    lastHybridTargetHintTop != null &&
-    Math.abs(top - lastHybridTargetHintTop) < HYBRID_TARGET_HINT_MIN_DELTA_PX &&
-    now - lastHybridTargetHintTs < HYBRID_TARGET_HINT_MIN_INTERVAL_MS
-  ) {
-    return;
-  }
-  lastHybridTargetHintTop = top;
-  lastHybridTargetHintTs = now;
-  const requestedTtl = typeof ttlMs === 'number' ? ttlMs : HYBRID_TARGET_HINT_TTL_MS;
-  const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
-   const safeConfidence = Math.max(0, Math.min(1, confidence));
-   const scroller = getScroller();
+  const scroller = getScroller();
   const anchorLineIndex =
     typeof lineIndex === 'number' && Number.isFinite(lineIndex)
       ? Math.max(0, Math.floor(lineIndex))
       : null;
-   let anchorTop: number | null = null;
-   if (scroller && anchorLineIndex !== null) {
-     const lineEl = getLineElementByIndex(scroller, anchorLineIndex);
-     if (lineEl) {
-       anchorTop = lineEl.offsetTop || 0;
-     }
-   }
-   const markerPct =
-     typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4;
+  let anchorTop: number | null = null;
+  if (scroller && anchorLineIndex !== null) {
+    const lineEl = getLineElementByIndex(scroller, anchorLineIndex);
+    if (lineEl) {
+      anchorTop = lineEl.offsetTop || 0;
+    }
+  }
+  const fallbackTop =
+    anchorTop != null
+      ? anchorTop
+      : scroller && typeof scroller.scrollTop === 'number'
+      ? scroller.scrollTop
+      : 0;
+  const normalizedTop = Number.isFinite(top) ? top : fallbackTop;
+  const missingTop = !Number.isFinite(top);
+  if (missingTop && isDevMode() && !warnedMissingTargetTop) {
+    warnedMissingTargetTop = true;
+    try {
+      console.warn('[HYBRID_CTRL] targetHint missing top – using fallback', {
+        reason,
+        fallbackTop,
+      });
+    } catch {}
+  }
+  const now = getNowMs();
+  if (
+    lastHybridTargetHintTop != null &&
+    Math.abs(normalizedTop - lastHybridTargetHintTop) < HYBRID_TARGET_HINT_MIN_DELTA_PX &&
+    now - lastHybridTargetHintTs < HYBRID_TARGET_HINT_MIN_INTERVAL_MS
+  ) {
+    return;
+  }
+  lastHybridTargetHintTop = normalizedTop;
+  lastHybridTargetHintTs = now;
+  const requestedTtl = typeof ttlMs === 'number' ? ttlMs : HYBRID_TARGET_HINT_TTL_MS;
+  const safeTtl = Math.max(20, Math.min(2000, requestedTtl));
+  const safeConfidence = Math.max(0, Math.min(1, confidence));
+  const markerPct =
+    typeof (window as any).__TP_MARKER_PCT === 'number' ? (window as any).__TP_MARKER_PCT : 0.4;
   dispatchHybridEvent('tp:hybrid:targetHint', {
-    targetTop: top,
-    top,
-     confidence: safeConfidence,
-     reason,
-     ttlMs: safeTtl,
-      anchorTop,
-      markerPct,
-      anchorLine: anchorLineIndex,
-      lineIndex: anchorLineIndex,
-   });
+    targetTop: normalizedTop,
+    top: normalizedTop,
+    confidence: safeConfidence,
+    reason,
+    ttlMs: safeTtl,
+    anchorTop,
+    markerPct,
+    anchorLine: anchorLineIndex,
+    lineIndex: anchorLineIndex,
+  });
 }
 
 function getScroller(): HTMLElement | null {
