@@ -3621,6 +3621,17 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     return HYBRID_BASELINE_FLOOR_PXPS;
   }
 
+  function resolveAutoPxPerSec(candidate?: number | null): number {
+    let px = Number(candidate ?? NaN);
+    if (!Number.isFinite(px) || px <= 0) {
+      px = resolveHybridSeedPx();
+    }
+    if (!Number.isFinite(px) || px <= 0) {
+      px = HYBRID_BASELINE_FLOOR_PXPS;
+    }
+    return px;
+  }
+
   function logHybridBaselineState(source: string) {
     if (!isDevMode()) return;
     try {
@@ -3714,7 +3725,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
-      const autoPxPerSec = getLastKnownAutoSpeed();
+      const requestedAutoPx = getLastKnownAutoSpeed();
+      const autoPxPerSec = resolveAutoPxPerSec(requestedAutoPx);
+      if (
+        isDevMode() &&
+        (!Number.isFinite(requestedAutoPx ?? NaN) || (requestedAutoPx ?? 0) <= 0)
+      ) {
+        try {
+          console.warn('[AUTO] fallback to default px/sec', {
+            requestedAutoPx,
+            autoPxPerSec,
+          });
+        } catch {}
+      }
       const viewerReady = hasScrollableTarget();
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
