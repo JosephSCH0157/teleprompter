@@ -3714,6 +3714,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
+      const autoPxPerSec = getLastKnownAutoSpeed();
       const viewerReady = hasScrollableTarget();
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
