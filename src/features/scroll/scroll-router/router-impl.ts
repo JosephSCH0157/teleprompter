@@ -882,6 +882,42 @@ function createAutoMotor() {
   let lastTs = 0;
   let lastTickMoved = false;
   let carry = 0;
+  const AUTO_TICK_DEBUG_MS = 3000;
+  const AUTO_TICK_LOG_THROTTLE_MS = 250;
+  let autoTickDebugStart = 0;
+  let lastAutoTickLogAt = 0;
+
+  function formatScroller(el: HTMLElement | null) {
+    if (!el) return 'none';
+    const tag = el.tagName?.toLowerCase() || 'el';
+    const id = el.id ? `#${el.id}` : '';
+    const classes = el.className ? `.${String(el.className).replace(/\s+/g, '.')}` : '';
+    return `${tag}${id}${classes}`;
+  }
+
+  function logAutoTick(event: string, el: HTMLElement | null, pxPerSec: number, dtSec: number, reason: string, extra: Record<string, unknown> = {}) {
+    if (!isDevMode()) return;
+    const now = nowMs();
+    if (autoTickDebugStart === 0) {
+      autoTickDebugStart = now;
+    }
+    if (now - autoTickDebugStart > AUTO_TICK_DEBUG_MS) return;
+    if (now - lastAutoTickLogAt < AUTO_TICK_LOG_THROTTLE_MS) return;
+    lastAutoTickLogAt = now;
+    try {
+      console.warn('[AUTO_DEBUG]', {
+        event,
+        scroller: formatScroller(el),
+        pxPerSec,
+        dtSec,
+        reason,
+        scrollTop: el?.scrollTop ?? null,
+        scrollHeight: el?.scrollHeight ?? null,
+        clientHeight: el?.clientHeight ?? null,
+        ...extra,
+      });
+    } catch {}
+  }
 
   function setEnabled(on) {
     try {
@@ -937,17 +973,25 @@ function createAutoMotor() {
     lastTs = now;
     const pxPerSec = currentSpeed;
     const el = scrollerEl;
-    if (!el || !Number.isFinite(dtSec) || dtSec <= 0 || pxPerSec <= 0) {
+    if (!el) {
+      logAutoTick('tick', el, pxPerSec, dtSec, 'no-element');
       scheduleTick();
       return;
     }
+    if (!Number.isFinite(dtSec) || dtSec <= 0 || pxPerSec <= 0) {
+      scheduleTick();
+      return;
+    }
+    logAutoTick('tick', el, pxPerSec, dtSec, 'pre-check');
     const style = getComputedStyle(el);
     if (!/(auto|scroll)/.test(style.overflowY || '')) {
+      logAutoTick('tick', el, pxPerSec, dtSec, 'overflow-blocked', { overflowY: style.overflowY });
       scheduleTick();
       return;
     }
     const room = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
     if (room <= 0) {
+      logAutoTick('tick', el, pxPerSec, dtSec, 'no-room', { room });
       scheduleTick();
       return;
     }
@@ -965,6 +1009,7 @@ function createAutoMotor() {
     const after = el.scrollTop || 0;
     if (after > before) {
       lastTickMoved = true;
+      logAutoTick('tick', el, pxPerSec, dtSec, 'moved', { delta: after - before });
     } else {
       warnScrollWrite({
         id: el.id,
@@ -989,6 +1034,9 @@ function createAutoMotor() {
     setEnabled(true);
     lastTickMoved = false;
     carry = 0;
+    autoTickDebugStart = 0;
+    lastAutoTickLogAt = 0;
+    logAutoTick('start', viewer ?? scrollerEl, currentSpeed, 0, 'enabled');
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (!enabled) return;
