@@ -3558,6 +3558,23 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       } catch {}
     });
   } catch {}
+  let applyGateRaf: number | null = null;
+  function scheduleApplyGate() {
+    if (applyGateRaf != null) return;
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      try {
+        applyGate();
+      } catch {}
+      return;
+    }
+    applyGateRaf = window.requestAnimationFrame(() => {
+      applyGateRaf = null;
+      try {
+        applyGate();
+      } catch {}
+    });
+  }
+
   function applyGate() {
     try {
     if (state2.mode !== "hybrid") {
@@ -4197,7 +4214,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       const db = e && e.detail && typeof e.detail.db === "number" ? e.detail.db : -60;
       hybridHandleDb(db, auto);
       dbGate = db >= DEFAULTS.hybrid.thresholdDb;
-      applyGate();
+      scheduleApplyGate();
     });
     window.addEventListener("tp:vad", (e) => {
       const speaking = !!(e && e.detail && e.detail.speaking);
@@ -4205,7 +4222,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       if (speaking) {
         noteHybridSpeechActivity(nowMs(), { source: "vad" });
       }
-      applyGate();
+      scheduleApplyGate();
     });
   } catch {
   }
