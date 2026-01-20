@@ -1108,7 +1108,6 @@ function logHybridMotorEvent(evt: string, data?: any) {
   if (evt === 'velocity') {
     const now = nowMs();
     const errorInfo = computeHybridErrorPx(now);
-    const errorInfo = computeHybridErrorPx(now);
     const signature = `${Number(data?.velocityPxPerSec ?? 0).toFixed(2)}`;
     if (signature === lastHybridMotorVelocitySignature && now - lastHybridMotorVelocityLogAt < HYBRID_MOTOR_LOG_THROTTLE_MS) return;
     lastHybridMotorVelocitySignature = signature;
