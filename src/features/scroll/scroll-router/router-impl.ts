@@ -3681,6 +3681,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       Number.isFinite(pxCandidate) && pxCandidate > 0 ? pxCandidate : fallback;
     if (isDevMode() && now - lastHybridCtrlDebugTs >= HYBRID_CTRL_DEBUG_THROTTLE_MS) {
       lastHybridCtrlDebugTs = now;
+      const errorInfo = computeHybridErrorPx(now);
       const targetTop =
         Number.isFinite(errorInfo?.targetScrollTop ?? NaN) && errorInfo?.targetScrollTop != null
           ? errorInfo.targetScrollTop
