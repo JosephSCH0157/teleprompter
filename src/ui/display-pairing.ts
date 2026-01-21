@@ -1,17 +1,12 @@
-import QRCode from 'qrcode';
 import { getNetworkDisplayStatus, onNetworkDisplayStatus } from '../net/display-ws-client';
+import { PairQrPayload, requestPairQr } from '../pairing/pairing-api';
 
-type PairingResponse = {
-  token: string;
-  expiresAt: number;
-  displayUrl: string;
-  wsUrl: string;
-};
+type PairingState = PairQrPayload & { expiresMs: number };
 
 type Elements = {
   mask: HTMLElement;
   input: HTMLInputElement;
-  qr: HTMLImageElement;
+  qr: HTMLElement;
   status: HTMLElement;
   wsLabel: HTMLElement;
   close: HTMLButtonElement;
@@ -21,35 +16,9 @@ type Elements = {
 };
 
 let modalElements: Elements | null = null;
-let currentPairing: PairingResponse | null = null;
+let currentPairing: PairingState | null = null;
 let isRefreshing = false;
 let expiryTimer: number | null = null;
-
-async function getLanHostFromServer(): Promise<string | null> {
-  try {
-    const response = await fetch('/display/host', { cache: 'no-store' });
-    if (!response.ok) return null;
-    const data = await response.json();
-    if (data && typeof data.host === 'string') {
-      const trimmed = data.host.trim();
-      return trimmed || null;
-    }
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function rewriteUrlHost(sourceUrl: string, hostOverride: string | null) {
-  if (!hostOverride) return sourceUrl;
-  try {
-    const parsed = new URL(sourceUrl);
-    parsed.hostname = hostOverride;
-    return parsed.toString();
-  } catch {
-    return sourceUrl;
-  }
-}
 
 function isDisplayContext(): boolean {
   try {
@@ -134,11 +103,19 @@ function ensureStyles() {
       gap: 12px;
       margin-bottom: 12px;
     }
-    .display-pairing-qr img {
+    .display-pairing-qr-image {
       width: 176px;
       height: 176px;
       border-radius: 12px;
       background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .display-pairing-qr-image svg {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
     .display-pairing-actions {
       display: flex;
@@ -187,11 +164,8 @@ function buildModal(): Elements | null {
         <span class="display-pairing-status-ws">ws://.../ws/display</span>
       </div>
       <div class="display-pairing-field">
-        <div class="display-pairing-qr">
-          <img
-            src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
-            alt="Display pairing QR code"
-          />
+    <div class="display-pairing-qr">
+          <div class="display-pairing-qr-image" aria-label="Display pairing QR code"></div>
           <div>
             <div class="display-pairing-actions">
               <button type="button" class="chip display-pairing-btn-refresh">Refresh token</button>
@@ -215,7 +189,7 @@ function buildModal(): Elements | null {
   document.body.appendChild(mask);
 
   const input = panel.querySelector<HTMLInputElement>('input');
-  const qr = panel.querySelector<HTMLImageElement>('img');
+  const qr = panel.querySelector<HTMLElement>('.display-pairing-qr-image');
   const status = panel.querySelector<HTMLElement>('.display-pairing-status-text');
   const expiry = panel.querySelector<HTMLElement>('.display-pairing-status-expiry');
   const wsLabel = panel.querySelector<HTMLElement>('.display-pairing-status-ws');
@@ -268,63 +242,70 @@ function updateWsLabel(url: string) {
   }
 }
 
+function resolveDefaultWsUrl(): string {
+  try {
+    const origin = window.location.origin;
+    const url = new URL('/ws/display', origin);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return url.toString();
+  } catch {
+    return 'ws://.../ws/display';
+  }
+}
+
 function updateInput(url: string) {
   if (modalElements?.input) {
     modalElements.input.value = url;
   }
 }
 
-function updateQr(url: string) {
+function renderQrSvg(svg: string) {
   if (!modalElements?.qr) return;
-  QRCode.toDataURL(url, { width: 200, margin: 1 })
-    .then((dataUrl) => {
-      modalElements?.qr.setAttribute('src', dataUrl);
-    })
-    .catch(() => {
-      modalElements?.qr.setAttribute('src', '');
-    });
+  modalElements.qr.innerHTML = svg || '<span>QR unavailable</span>';
 }
 
-function requestPairing(): Promise<PairingResponse | null> {
-  return fetch('/display/pair', { cache: 'no-store' })
-    .then((res) => {
-      if (!res.ok) throw new Error('Relay unavailable');
-      return res.json();
-    })
-    .catch(() => null);
+function startExpirySchedule(expiresMs: number) {
+  clearExpiryTimer();
+  const update = () => {
+    const remaining = Math.max(0, expiresMs - Date.now());
+    if (remaining <= 0) {
+      clearExpiryTimer();
+      updateStatusText('Token expired. Refresh to generate a new one.');
+      return;
+    }
+    updateStatusText(`Expires in ${Math.ceil(remaining / 1000)}s`);
+  };
+  update();
+  expiryTimer = window.setInterval(update, 1000);
 }
 
 async function ensurePairingToken() {
   if (isRefreshing) return;
+  if (!modalElements) return;
   isRefreshing = true;
   updateStatusText('Generating token...');
+  currentPairing = null;
+  clearExpiryTimer();
   try {
-    const pairing = await requestPairing();
-    if (!pairing) {
-      updateStatusText('Unable to generate pairing token. Is the relay running?');
-      currentPairing = null;
-      return;
-    }
-    const hostOverride = await getLanHostFromServer();
-    const displayUrl = rewriteUrlHost(pairing.displayUrl, hostOverride);
-    const wsUrl = rewriteUrlHost(pairing.wsUrl, hostOverride);
-    currentPairing = { ...pairing, displayUrl, wsUrl };
-    updateInput(displayUrl);
-    updateWsLabel(wsUrl);
-    updateStatusText(`Expires at ${new Date(pairing.expiresAt).toLocaleTimeString()}`);
-    updateQr(displayUrl);
-    clearExpiryTimer();
-    expiryTimer = window.setInterval(() => {
-      if (!currentPairing) return;
-      const remaining = Math.max(0, currentPairing.expiresAt - Date.now());
-      if (remaining <= 0) {
-        window.clearInterval(expiryTimer!);
-        expiryTimer = null;
-        updateStatusText('Token expired. Refresh to generate a new one.');
-        return;
-      }
-      updateStatusText(`Expires in ${Math.ceil(remaining / 1000)}s`);
-    }, 1000);
+    const pairing = await requestPairQr({
+      baseUrl: window.location.origin,
+      pairPath: '/display/pair',
+      ttlMinutes: 10,
+      metadata: { role: 'display', app: 'anvil' },
+    });
+
+    const expiresMs = Number.isFinite(Date.parse(pairing.expiresAt))
+      ? Date.parse(pairing.expiresAt)
+      : Date.now() + 10 * 60 * 1000;
+
+    currentPairing = { ...pairing, expiresMs };
+    updateInput(pairing.pairUrl);
+    renderQrSvg(pairing.qrSvg);
+    updateStatusText(`Expires at ${new Date(expiresMs).toLocaleTimeString()}`);
+    startExpirySchedule(expiresMs);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unable to generate pairing token.';
+    updateStatusText(message);
   } finally {
     isRefreshing = false;
   }
@@ -371,6 +352,7 @@ function initDisplayPairingPanel() {
   const elements = buildModal();
   if (!elements) return;
   bindModalEvents();
+  updateWsLabel(resolveDefaultWsUrl());
   onNetworkDisplayStatus(({ connectedDisplays }) => {
     elements.status.textContent = `Connected: ${connectedDisplays}`;
   });
