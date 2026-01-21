@@ -324,13 +324,20 @@ export function wireDisplayMirror() {
         try { window.dispatchEvent(new Event('tp:anchorChanged')); } catch {}
       }, { passive: true });
       // Heartbeat: ensure display keeps getting the latest top even if scroll events are swallowed
-      const pulse = () => {
+      let lastHeartbeatTop = viewer.scrollTop || 0;
+      const pollScrollHeartbeat = () => {
         try {
-          requestSendScroll();
+          const current = viewer.scrollTop || 0;
+          if (Math.abs(current - lastHeartbeatTop) >= 0.25) {
+            lastHeartbeatTop = current;
+            requestSendScroll();
+          }
         } catch {}
-        try { setTimeout(pulse, 150); } catch {}
+        try {
+          requestAnimationFrame(pollScrollHeartbeat);
+        } catch {}
       };
-      try { setTimeout(pulse, 150); } catch {}
+      try { requestAnimationFrame(pollScrollHeartbeat); } catch {}
     }
 
     // Typography mirroring (font size / line height)
