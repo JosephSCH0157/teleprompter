@@ -1,0 +1,130 @@
+--- router-impl.ts
++++ router-impl.ts
+@@ -51,6 +51,19 @@
+     return cache;
+   };
+ })();
++
++// --- Hybrid Aggro flag -------------------------------------------------------
++function isHybridAggroEnabled(): boolean {
++  try {
++    const url = new URL(window.location.href);
++    if (url.searchParams.get('hybridAggro') === '1') return true;
++    if (window.location.hash && window.location.hash.includes('hybridAggro')) return true;
++    if (localStorage.getItem('tp_hybrid_aggro') === '1') return true;
++  } catch {
++    // ignore
++  }
++  return false;
++}
+ 
+ type ViewerRole = 'main' | 'display';
+ const viewerRole: ViewerRole = (() => {
+@@ -1716,6 +1729,20 @@
+       lineIndex?: number | null;
+     }
+   | null = null;
++
++// --- Hybrid commit boost window ---------------------------------------------
++let hybridCommitBoostUntilMs = 0;
++
++function armHybridCommitBoostWindow(reason?: string): void {
++  if (reason !== 'asr-commit') return;
++  const durMs = isHybridAggroEnabled() ? 1750 : 750;
++  const until = nowMs() + durMs;
++  if (until > hybridCommitBoostUntilMs) hybridCommitBoostUntilMs = until;
++}
++
++function isHybridCommitBoostActive(): boolean {
++  return nowMs() < hybridCommitBoostUntilMs;
++}
+ let hybridLastGoodTargetTop: number | null = null;
+ let hybridWantedRunning = false;
+ let liveGraceWindowEndsAt: number | null = null;
+@@ -3199,6 +3226,7 @@
+     const top = topRaw;
+     const confidenceRaw = Number.isFinite(Number(detail.confidence)) ? Number(detail.confidence) : 0;
+     const confidence = Math.max(0, Math.min(1, confidenceRaw));
++    armHybridCommitBoostWindow(detail?.reason);
+     const anchorTopRaw = Number(detail.anchorTop);
+     const anchorTop = Number.isFinite(anchorTopRaw) ? anchorTopRaw : null;
+     const markerPctRaw = Number(detail.markerPct);
+@@ -3383,7 +3411,7 @@
+       weakMatch,
+     );
+     const {
+-      scale: effectiveScale,
++      scale: effectiveScaleRaw,
+       reason,
+       scaleFromSilence,
+       scaleFromOffscript,
+@@ -3394,6 +3422,69 @@
+       offScriptActive,
+       pausedBySilence,
+     } = hybridScaleDetail;
++
++    // --- Hybrid Aggro policy -------------------------------------------------
++    const aggro = isHybridAggroEnabled();
++    const commitBoost = isHybridCommitBoostActive();
++    let effectiveScale = effectiveScaleRaw;
++
++    // Aggro tuning knobs (prove capability first; dial back later)
++    const maxScale = aggro ? 3.0 : 1.35;
++    const confMin = (aggro && commitBoost) ? 0.35 : 0.65;
++    const simMin = (aggro && commitBoost) ? 0.45 : 0.55;
++
++    const errorLinesRaw =
++      (errorInfo?.errorLines ?? effectiveErrorLines ?? 0) as number;
++    const needCatchUp = Number.isFinite(errorLinesRaw) ? errorLinesRaw > 0 : false;
++
++    const conf = Number.isFinite(errorInfo?.confidence ?? NaN)
++      ? (errorInfo!.confidence as number)
++      : Number.isFinite(hybridTargetHintState?.confidence ?? NaN)
++      ? (hybridTargetHintState!.confidence as number)
++      : 0;
++
++    const sim = Number.isFinite(bestSim ?? NaN) ? (bestSim as number) : 0;
++
++    // Only apply aggro scaling when we're on-script-ish and actually behind.
++    const eligibleForAggro =
++      needCatchUp &&
++      !pausedBySilence &&
++      !offScriptActive &&
++      reason !== 'silence' &&
++      reason !== 'offscript' &&
++      reason !== 'grace';
++
++    if ((aggro || commitBoost) && eligibleForAggro) {
++      // Respect gating unless we’re in the post-commit permission window.
++      const gatingOk = (aggro && commitBoost) || (conf >= confMin && sim >= simMin);
++
++      if (gatingOk) {
++        // Map distance behind (in lines) directly into a scale boost.
++        const errBoost = clamp(Math.abs(errorLinesRaw) / 6.0, 0, 1); // ~6 lines => full boost
++        const distanceScale = 1 + errBoost * (maxScale - 1);
++
++        // Open the throttle: take the higher of existing scale vs distance-driven scale.
++        effectiveScale = Math.min(maxScale, Math.max(effectiveScale, distanceScale));
++
++        if (isDevMode()) {
++          try {
++            console.warn('[HYBRID_TRUTH]', {
++              aggro,
++              commitBoost,
++              needCatchUp,
++              errorLines: Math.round(errorLinesRaw * 10) / 10,
++              conf: Math.round(conf * 100) / 100,
++              sim: Math.round(sim * 100) / 100,
++              distanceScale: Math.round(distanceScale * 100) / 100,
++              effectiveScale: Math.round(effectiveScale * 100) / 100,
++              basePxps: Math.round(base * 10) / 10,
++              writerSource: getLastWriterSource(),
++            });
++          } catch {}
++        }
++      }
++    }
++
+     const pauseTailEligible = pauseLikely && silence.pausedBySilence;
+     if (pauseTailEligible && hybridAssistState.boostPxps > 0) {
+       pauseAssistTailBoost = hybridAssistState.boostPxps;
