@@ -630,6 +630,66 @@ const cp = require('child_process');
           await page.waitForTimeout(120);
         } catch {}
       }
+
+      async function ensureLongScript(page) {
+        try {
+          await page.waitForFunction(() => !!document.querySelector('#script'), { timeout: 5000 });
+        } catch {}
+        try {
+          await page.waitForFunction(() => typeof window.renderScript === 'function', { timeout: 5000 });
+        } catch {}
+        try {
+          await page.evaluate(async () => {
+            const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+            try {
+              const scriptEl = document.querySelector('#script');
+              const lines = scriptEl ? scriptEl.querySelectorAll('.line').length : 0;
+              if (lines < 60) {
+                const parts = [];
+                for (let i = 0; i < 30; i++) parts.push(`[s1]Line ${i} from S1[/s1]`, `[s2]Line ${i} from S2[/s2]`);
+                const long = parts.join('\\n');
+                const ed = document.getElementById('editor');
+                if (ed) {
+                  ed.value = long;
+                  ed.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+                if (typeof window.renderScript === 'function') window.renderScript(long);
+                await sleep(200);
+              }
+              try {
+                const viewer = document.getElementById('viewer');
+                if (viewer) viewer.scrollTop = 0;
+              } catch {}
+            } catch {}
+          });
+        } catch {}
+        try {
+          await page.waitForFunction(() => {
+            const script = document.querySelector('#script');
+            return !!(script && script.querySelectorAll('.line').length >= 60);
+          }, { timeout: 5000 });
+        } catch {}
+        try {
+          await page.waitForFunction(() => {
+            const viewer = document.getElementById('viewer');
+            if (!viewer) return false;
+            return (viewer.scrollHeight - viewer.clientHeight) > 100;
+          }, { timeout: 5000 });
+        } catch {}
+        try {
+          await page.evaluate(() => {
+            if (document.getElementById('auto-debug-filler')) return;
+            const viewer = document.getElementById('viewer');
+            if (!viewer) return;
+            const filler = document.createElement('div');
+            filler.id = 'auto-debug-filler';
+            filler.style.height = '4000px';
+            filler.style.visibility = 'hidden';
+            filler.style.pointerEvents = 'none';
+            viewer.appendChild(filler);
+          });
+        } catch {}
+      }
       async function probeAutoStateAndMove(page) {
         const res = { sawEvent: false, intentOn: false, gate: '', speed: 0, label: '', chip: '', delta: 0, mode: '' };
         await page.evaluate(() => {
@@ -642,7 +702,8 @@ const cp = require('child_process');
           try { (document.activeElement instanceof HTMLElement) && document.activeElement.blur(); } catch {}
         });
   // Ensure auto On (and retrigger emission) via UI clicks so the router processes intent
-  await clickAutoToggle(page, true);
+        await ensureLongScript(page);
+        await clickAutoToggle(page, true);
         // Bump speed deterministically via UI (+ button) to ensure movement
         await page.evaluate(() => {
           try {
@@ -653,8 +714,24 @@ const cp = require('child_process');
         await page.waitForTimeout(120);
         const before = await getScrollTop(page);
         await page.waitForTimeout(600);
+        try {
+          await page.waitForFunction(() => {
+            const viewer = document.getElementById('viewer');
+            return !!viewer && (viewer.scrollTop || 0) > 0;
+          }, { timeout: 1000 });
+        } catch {}
         const after = await getScrollTop(page);
         res.delta = Math.max(0, after - before);
+        if (res.delta <= 0) {
+          try {
+            const dump = await page.evaluate(() =>
+              (window.__AUTO_DEBUG__ ?? []).slice(-20),
+            );
+            console.log('[AUTO_DEBUG_DUMP]', JSON.stringify(dump));
+          } catch (err) {
+            console.log('[AUTO_DEBUG_DUMP]', 'error reading __AUTO_DEBUG__', String(err && err.message || err));
+          }
+        }
         // CI-only: if router did not emit yet, synthesize a single explicit signal from current DOM state
         await page.evaluate(() => {
           try {
@@ -696,31 +773,6 @@ const cp = require('child_process');
         return res;
       }
       try { out.autoState = await probeAutoStateAndMove(page); } catch { out.autoState = { sawEvent:false, delta:0 }; }
-
-      // Before asserting auto-scroll UI, re-ensure long content so the toggle doesn't immediately flip Off at end-of-scroll
-      try {
-        await page.evaluate(async () => {
-          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-          try {
-            const scriptEl = document.querySelector('#script');
-            const lines = scriptEl ? scriptEl.querySelectorAll('.line').length : 0;
-            if (lines < 60) {
-              const parts = [];
-              for (let i=0;i<30;i++) parts.push(`[s1]Line ${i} from S1[/s1]`, `[s2]Line ${i} from S2[/s2]`);
-              const long = parts.join('\n');
-              const ed = document.getElementById('editor');
-              if (ed) {
-                ed.value = long;
-                ed.dispatchEvent(new Event('input', { bubbles: true }));
-              }
-              if (typeof window.renderScript === 'function') window.renderScript(long);
-              await sleep(200);
-            }
-            // Reset scroll position to top to avoid immediate end-stop flipping the toggle back to Off
-            try { const viewer = document.getElementById('viewer'); if (viewer) viewer.scrollTop = 0; } catch {}
-          } catch {}
-        });
-      } catch {}
 
       // Removed flaky auto-scroll UI heuristic in favor of autoState
     } catch (e) {

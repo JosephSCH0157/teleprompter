@@ -1636,6 +1636,15 @@
       }
     },
     {
+      "type": "warning",
+      "text": "[AUTO_DEBUG] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 16879,
+        "columnNumber": 14
+      }
+    },
+    {
       "type": "info",
       "text": "[scroll-router] MOTOR_STOP mode=step sessionPhase=idle sessionIntent=false pxPerSec=21 blocked=blocked:sessionOff",
       "location": {
@@ -1898,6 +1907,33 @@
     },
     {
       "type": "info",
+      "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 16372,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
+      "text": "[HYBRID_CTRL] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 16329,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[HYBRID_TRUTH] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 16390,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "info",
       "text": "[scroll-router] MOTOR_START mode=step sessionPhase=idle sessionIntent=true pxPerSec=3 blocked=none",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
@@ -1988,65 +2024,11 @@
     },
     {
       "type": "info",
-      "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16372,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16329,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_TRUTH] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16390,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
       "text": "[HYBRID_BRAKE] set JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 17643,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16372,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16329,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_TRUTH] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16390,
-        "columnNumber": 12
       }
     }
   ],
@@ -2061,9 +2043,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "199c8da7aea08c89e90bb8e014508de63dba5c04",
+      "gitSha": "9f54e204e3570ea797aaebdf478c36161bf86e7d",
       "branch": "main",
-      "buildTime": "2026-01-21T02:21:29.062Z"
+      "buildTime": "2026-01-21T02:44:35.221Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
