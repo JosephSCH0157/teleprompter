@@ -604,7 +604,7 @@ function computeLineTargetMultiplier(errorLines: number | null, eligible: boolea
   );
 }
 
-function updateHybridLineMult(targetMult: number | null, dtMs: number) {
+function updateHybridLineMult(targetMult: number | null, dtMs: number, allowFastUp = false) {
   const current = Number.isFinite(hybridCtrl.lineMult) ? hybridCtrl.lineMult : 1;
   const target = Number.isFinite(targetMult ?? NaN) ? Number(targetMult) : 1;
   if (!Number.isFinite(dtMs) || dtMs <= 0) {
@@ -613,8 +613,12 @@ function updateHybridLineMult(targetMult: number | null, dtMs: number) {
   }
   const alpha = 1 - Math.exp(-dtMs / HYBRID_CTRL_LINE_SMOOTH_TAU_MS);
   const next = current + (target - current) * alpha;
-  const maxDelta = HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC * (dtMs / 1000);
-  const limited = clamp(next, current - maxDelta, current + maxDelta);
+  const maxDeltaDown = HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC * (dtMs / 1000);
+  const maxDeltaUp =
+    HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC *
+    (dtMs / 1000) *
+    (allowFastUp ? HYBRID_CTRL_LINE_RATE_LIMIT_BEHIND_MULT : 1);
+  const limited = clamp(next, current - maxDeltaDown, current + maxDeltaUp);
   hybridCtrl.lineMult = Number.isFinite(limited) ? limited : current;
   return hybridCtrl.lineMult;
 }
@@ -1678,9 +1682,19 @@ const HYBRID_CTRL_LINE_MAX_MULT = 1.9;
 const HYBRID_CTRL_LINE_MIN_MULT = 0.5;
 const HYBRID_CTRL_LINE_SMOOTH_TAU_MS = 450;
 const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.8;
+const HYBRID_CTRL_LINE_RATE_LIMIT_BEHIND_MULT = 4;
 const HYBRID_CTRL_ON_TARGET_PX = 32;
+const HYBRID_CTRL_ON_TARGET_STABLE_PX = 12;
+const HYBRID_CTRL_ON_TARGET_MULT_MIN = 0.98;
+const HYBRID_CTRL_ON_TARGET_MULT_MAX = 1.05;
 const HYBRID_CTRL_ON_TARGET_VELOCITY_EPS = 12;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
+const HYBRID_CTRL_BASE_MAX_MULT = 2.8;
+const HYBRID_CTRL_AGGRO_MAX_MULT = 3.2;
+const HYBRID_REACTIVE_BEHIND_BASE = 0.55;
+const HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD = 2;
+const HYBRID_REACTIVE_BEHIND_ACC_BONUS = 0.25;
+const HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC = 0.15;
 const HYBRID_REACTIVE_BEHIND_BASE = 0.45;
 const HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD = 3;
 const HYBRID_REACTIVE_BEHIND_ACC_BONUS = 0.25;
@@ -3486,7 +3500,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridCtrl.lineSource = targetMultSource;
     const silenceCap = computeSilenceCapMultiplier(silenceMs);
     const dtMs = hybridCtrl.lastTs > 0 ? Math.max(0, now - hybridCtrl.lastTs) : 0;
-    const lineMult = updateHybridLineMult(candidateTargetMult, dtMs);
+    const lineMult = updateHybridLineMult(candidateTargetMult, dtMs, deltaLines > 0);
     let appliedTargetMult = Number.isFinite(lineMult) ? lineMult : 1;
     const offScriptSeverity = computeOffScriptSeverity();
     const offScriptCap = Math.max(
@@ -3531,7 +3545,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     let effectiveScale = effectiveScaleRaw;
 
     // Aggro tuning knobs (prove capability first; dial back later)
-    const maxScale = aggro ? 3.0 : 1.35;
+    const maxScale = aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT;
     const confMin = (aggro && commitBoost) ? 0.35 : 0.65;
     const simMin = (aggro && commitBoost) ? 0.45 : 0.55;
 
@@ -3700,15 +3714,24 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       reasons.push(clampReason);
     }
 
-    const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
     const errorPx =
       Number.isFinite(errorInfo?.errorPx ?? NaN) && errorInfo?.errorPx != null
         ? errorInfo.errorPx
         : null;
     const distancePx = errorPx != null ? Math.abs(errorPx) : null;
+    const stableOnTarget =
+      distancePx != null &&
+      distancePx <= HYBRID_CTRL_ON_TARGET_STABLE_PX &&
+      Math.abs(deltaLines) <= HYBRID_CTRL_MODE_DEADBAND_LINES;
+    if (stableOnTarget) {
+      finalScale = clamp(finalScale, HYBRID_CTRL_ON_TARGET_MULT_MIN, HYBRID_CTRL_ON_TARGET_MULT_MAX);
+    }
+
+    const finalPxpsBase = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
+    const assistFloorBoostPx = assistEligible && isBehind ? base * HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC : 0;
+    const finalPxps = finalPxpsBase + assistFloorBoostPx;
     const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
     const provisionalAnchor = errorInfo?.targetTopSource !== 'anchor';
-    // treat a provisional anchor as on-target when we're essentially stopped inside the brake window
     const forceOnTarget =
       provisionalAnchor &&
       distancePx != null &&
