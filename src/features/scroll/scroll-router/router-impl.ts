@@ -386,6 +386,8 @@ function logHybridTruthLine(payload: {
   capReason?: string;
   scaleReason?: string | null;
   noMatch?: boolean | null;
+  sawNoMatch?: boolean | null;
+  hardNoMatch?: boolean | null;
   offScriptActive?: boolean | null;
   bestSim?: number | null;
   weakMatch?: boolean | null;
@@ -412,6 +414,8 @@ function logHybridTruthLine(payload: {
       bestSim: fmt(payload.bestSim, 3),
       scaleReason: payload.scaleReason ?? null,
       noMatch: payload.noMatch ?? null,
+      sawNoMatch: payload.sawNoMatch ?? null,
+      hardNoMatch: payload.hardNoMatch ?? null,
       offScriptActive: payload.offScriptActive ?? null,
       weakMatch: payload.weakMatch ?? null,
       driftWeak: payload.driftWeak ?? null,
@@ -1720,19 +1724,22 @@ function getHybridCtrlDevOverride(now: number) {
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 let hybridLastNoMatch: boolean | null = null;
-
-function isWeakHybridMatch(bestSim: number | null, noMatch: boolean) {
-  if (noMatch) return true;
-  return !Number.isFinite(bestSim ?? NaN) || bestSim < HYBRID_ONSCRIPT_SIM_MIN;
-}
+const HYBRID_HARD_NOMATCH_SIM_MIN = 0.25;
 
 function getHybridMatchState() {
   const bestSim = Number.isFinite(lastAsrMatch?.bestSim ?? NaN) ? lastAsrMatch.bestSim : null;
-  const noMatch = hybridLastNoMatch === true;
+  const simFinite = Number.isFinite(bestSim ?? NaN);
+  const simValue = simFinite ? (bestSim as number) : null;
+  const sawNoMatch = hybridLastNoMatch === true;
+  const hardNoMatch =
+    sawNoMatch && (!simFinite || (simValue != null && simValue < HYBRID_HARD_NOMATCH_SIM_MIN));
+  const weakMatch =
+    !hardNoMatch && (!simFinite || (simValue != null && simValue < HYBRID_ONSCRIPT_SIM_MIN));
   return {
     bestSim,
-    noMatch,
-    weakMatch: isWeakHybridMatch(bestSim, noMatch),
+    sawNoMatch,
+    weakMatch,
+    hardNoMatch,
   };
 }
 
@@ -2971,7 +2978,13 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
   function updateHybridScaleFromDetail(detail: { bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
-    const nextScale = determineHybridScaleFromDetail(detail);
+    const bestSimRaw = detail.bestSim ?? detail.sim ?? detail.score;
+    const bestSim = Number.isFinite(bestSimRaw) ? Number(bestSimRaw) : null;
+    if (bestSim !== null && bestSim >= HYBRID_HARD_NOMATCH_SIM_MIN) {
+      hybridLastNoMatch = false;
+    }
+    const scaleDetail = { ...detail, bestSim, sim: bestSim ?? detail.sim };
+    const nextScale = determineHybridScaleFromDetail(scaleDetail);
     if (nextScale == null) return;
     const now = nowMs();
     const isNoMatch = detail.noMatch === true;
@@ -3377,7 +3390,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
     const now = nowMs();
     const matchState = getHybridMatchState();
-    const { bestSim, noMatch, weakMatch: baseWeakMatch } = matchState;
+    const { bestSim, sawNoMatch, weakMatch: baseWeakMatch, hardNoMatch } = matchState;
     if (isDevMode() && !hybridCtrl.engagedLogged) {
       hybridCtrl.engagedLogged = true;
       try {
@@ -3683,7 +3696,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       lineMult,
       capReason,
       scaleReason: hybridScaleDetail.reason,
-      noMatch,
+      sawNoMatch,
+      hardNoMatch,
       offScriptActive: hybridScaleDetail.offScriptActive,
       bestSim,
       weakMatch,
