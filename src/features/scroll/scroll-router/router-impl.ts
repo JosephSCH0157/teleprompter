@@ -1707,6 +1707,7 @@ const HYBRID_REACTIVE_BEHIND_BASE = 0.55;
 const HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD = 2;
 const HYBRID_REACTIVE_BEHIND_ACC_BONUS = 0.25;
 const HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC = 0.15;
+const HYBRID_ON_TARGET_LINES = 0.92;
 const HYBRID_MULT_DEBUG_THROTTLE_MS = 500;
 const HYBRID_ONSCRIPT_SIM_MIN = 0.74;
 type HybridCtrlLineSource = 'lines' | 'px' | 'none';
@@ -3423,12 +3424,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     };
   }
 
-  function applyHybridVelocityCore(silence = hybridSilence) {
-    const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
-    const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
-    const now = nowMs();
-    const matchState = getHybridMatchState();
-    const { bestSim, sawNoMatch, weakMatch: baseWeakMatch, hardNoMatch } = matchState;
+function applyHybridVelocityCore(silence = hybridSilence) {
+  const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
+  const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
+  const now = nowMs();
+  const matchState = getHybridMatchState();
+  const { bestSim, sawNoMatch, weakMatch: baseWeakMatch, hardNoMatch } = matchState;
+  const matchSimValue =
+    Number.isFinite(bestSim ?? NaN) && bestSim != null ? (bestSim as number) : null;
+  const matchKnown =
+    hybridMatchSeen && matchSimValue != null && matchSimValue > 0 && !sawNoMatch;
+  const matchReason = matchKnown
+    ? hybridLastMatch?.isFinal
+      ? 'asr-final'
+      : 'asr'
+    : 'unknown';
     if (isDevMode() && !hybridCtrl.engagedLogged) {
       hybridCtrl.engagedLogged = true;
       try {
@@ -3720,18 +3730,26 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const assistFloorBoostPx = assistEligible && isBehind ? base * HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC : 0;
     const finalPxps = finalPxpsBase + assistFloorBoostPx;
     const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
-    const provisionalAnchor = errorInfo?.targetTopSource !== 'anchor';
+    const targetTopSourceRaw = errorInfo?.targetTopSource ?? null;
+    const targetTopAnchor = targetTopSourceRaw === 'anchor';
+    const provisionalAnchor = matchKnown && targetTopAnchor;
+    const nearError = distancePx != null && distancePx <= HYBRID_ON_TARGET_PX;
+    const nearLines = Math.abs(deltaLines) <= HYBRID_ON_TARGET_LINES;
     const forceOnTarget =
       provisionalAnchor &&
-      distancePx != null &&
-      distancePx <= HYBRID_CTRL_ON_TARGET_PX &&
+      nearError &&
+      nearLines &&
+      matchKnown &&
       velocityPxps <= HYBRID_CTRL_ON_TARGET_VELOCITY_EPS &&
       brakeTtl > 0;
     const hintedErrorLines =
       Number.isFinite(errorInfo?.errorLines ?? NaN) && errorInfo?.errorLines != null
         ? errorInfo.errorLines
         : null;
-    const modeHint = computeHybridModeHint(forceOnTarget ? 0 : hintedErrorLines, weakMatch);
+    let modeHint = computeHybridModeHint(forceOnTarget ? 0 : hintedErrorLines, weakMatch);
+    if (!matchKnown && (brakeActive || hybridSilence.pausedBySilence)) {
+      modeHint = 'LETTING YOU CATCH UP';
+    }
     const finalReasons = reasons.length > 0 ? reasons : ['base'];
     const capReason =
       finalReasons.includes('silence')
@@ -3871,16 +3889,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         ];
         console.info("[HYBRID_FINAL_MILE]", logParts.join(" "));
 
-        const matchSimLog = Number.isFinite(hybridLastMatch?.bestSim ?? NaN)
-          ? hybridLastMatch!.bestSim
-          : null;
-        const matchReason = hybridMatchSeen
-          ? hybridLastMatch?.isFinal
-            ? "asr-final"
-            : "asr"
-          : "unknown";
+        const matchSimLog = matchKnown ? matchSimValue : null;
         const stateParts = [
-          `noMatch=${sawNoMatch}`,
+          `noMatch=${sawNoMatch || !matchKnown}`,
           `weakMatch=${weakMatch}`,
           `hardNoMatch=${hardNoMatch}`,
           `offScriptActive=${offScriptActive}`,
@@ -3889,7 +3900,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           `sim=${sim.toFixed(2)}`,
           `matchSim=${matchSimLog != null ? matchSimLog.toFixed(2) : "null"}`,
           `matchReason=${matchReason}`,
-          `targetTopSrc=${errorInfo?.targetTopSource ?? "unknown"}`,
+          `targetTopSrc=${matchKnown ? errorInfo?.targetTopSource ?? "unknown" : "unknown"}`,
         ];
         console.info("[HYBRID_FINAL_MILE_STATE]", stateParts.join(" "));
       } catch {}
