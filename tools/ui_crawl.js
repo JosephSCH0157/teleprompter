@@ -690,6 +690,31 @@ const cp = require('child_process');
           });
         } catch {}
       }
+      async function waitForViewerScrollRoom(page, { timeout = 5000, minRoom = 20 } = {}) {
+        const deadline = Date.now() + timeout;
+        while (Date.now() < deadline) {
+          const ready = await page.evaluate((room) => {
+            const viewer = document.getElementById('viewer');
+            if (!viewer) return false;
+            viewer.style.minHeight = '2200px';
+            const available = Math.max(0, (viewer.scrollHeight || 0) - (viewer.clientHeight || 0));
+            if (available > room) return true;
+            let filler = document.getElementById('auto-debug-filler');
+            if (!filler) {
+              filler = document.createElement('div');
+              filler.id = 'auto-debug-filler';
+              filler.style.height = '4000px';
+              filler.style.visibility = 'hidden';
+              filler.style.pointerEvents = 'none';
+              viewer.appendChild(filler);
+            }
+            return false;
+          }, minRoom);
+          if (ready) break;
+          await page.waitForTimeout(40);
+        }
+        await page.waitForTimeout(60);
+      }
       async function probeAutoStateAndMove(page) {
         const res = { sawEvent: false, intentOn: false, gate: '', speed: 0, label: '', chip: '', delta: 0, mode: '' };
         await page.evaluate(() => {
@@ -703,7 +728,10 @@ const cp = require('child_process');
         });
   // Ensure auto On (and retrigger emission) via UI clicks so the router processes intent
         await ensureLongScript(page);
+        await waitForViewerScrollRoom(page);
+        const before = await getScrollTop(page);
         await clickAutoToggle(page, true);
+        await waitForViewerScrollRoom(page);
         // Bump speed deterministically via UI (+ button) to ensure movement
         await page.evaluate(() => {
           try {
@@ -712,17 +740,19 @@ const cp = require('child_process');
           } catch {}
         });
         await page.waitForTimeout(120);
-        const before = await getScrollTop(page);
-        await page.waitForTimeout(600);
+        await page.waitForTimeout(900);
         try {
           await page.waitForFunction(() => {
             const viewer = document.getElementById('viewer');
             return !!viewer && (viewer.scrollTop || 0) > 0;
-          }, { timeout: 1000 });
+          }, { timeout: 2000 });
         } catch {}
         const after = await getScrollTop(page);
         res.delta = Math.max(0, after - before);
         if (res.delta <= 0) {
+          await page.waitForTimeout(400);
+          const afterRetry = await getScrollTop(page);
+          res.delta = Math.max(res.delta, Math.max(0, afterRetry - before));
           try {
             const dump = await page.evaluate(() =>
               (window.__AUTO_DEBUG__ ?? []).slice(-20),
