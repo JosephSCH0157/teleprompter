@@ -3589,27 +3589,40 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       motorRunning,
     });
     const rawAssist = getActiveAssistBoost(now, pauseTailEligible);
+    const suppressAssist = reason === 'silence' || effectiveScale <= OFFSCRIPT_SCALE || reason === 'grace';
+    const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
+    const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
     const baseWithCorrection = base * ctrlMultApplied;
 
     const deltaLines = Number.isFinite(errorLinesRaw) ? errorLinesRaw : 0;
-    const deadband = aggro ? 0.5 : 0.9;
+    const absDL = Math.abs(deltaLines);
+    const deadbandLines = aggro ? 0.6 : 0.9;
     const kUp = aggro ? 0.22 : 0.12;
     const kDown = aggro ? 0.18 : 0.10;
-    let reactiveScale = 1;
-    if (Math.abs(deltaLines) > deadband) {
+    let reactiveScale = 1.0;
+    const reasons: string[] = [];
+    if (absDL > deadbandLines) {
       const raw =
-        deltaLines > 0 ? 1 + kUp * deltaLines : 1 + kDown * deltaLines;
-      reactiveScale = clamp(raw, 0.6, 1.6);
+        deltaLines > 0
+          ? 1 + kUp * (absDL - deadbandLines)
+          : 1 - kDown * (absDL - deadbandLines);
+      const minReactive = aggro ? 0.60 : 0.70;
+      const maxReactive = aggro ? 1.60 : 1.35;
+      reactiveScale = clamp(raw, minReactive, maxReactive);
+      reasons.push(deltaLines > 0 ? 'behind' : 'ahead');
+    } else {
+      reasons.push('deadband');
     }
 
-    let policyMult = 1;
-    const reasons: string[] = [];
+    let policyMult = 1.0;
     if (pausedBySilence || reason === 'silence') {
-      policyMult *= 0.7;
+      const silenceMult = aggro ? 0.75 : 0.85;
+      policyMult *= silenceMult;
       reasons.push('silence');
     }
     if (offScriptActive || reason === 'offscript') {
-      policyMult *= 0.8;
+      const offscriptMult = aggro ? 0.80 : 0.90;
+      policyMult *= offscriptMult;
       reasons.push('offscript');
     }
 
@@ -3621,17 +3634,23 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       reasons.push('brakeCap');
     }
 
-    let scaleAfterAssist = scaleAfterBrake;
-    const assistFloorScale = suppressAssistScale(rawAssist ? rawAssist : 0, baseWithCorrection);
+    let scaleAfterCaps = scaleAfterBrake;
+    const assistFloorScale = suppressAssistScale(rawAssist, baseWithCorrection);
     if (assistActive && assistFloorScale > 0) {
-      scaleAfterAssist = Math.max(scaleAfterAssist, assistFloorScale);
+      scaleAfterCaps = Math.max(scaleAfterCaps, assistFloorScale);
       reasons.push('assistFloor');
     }
 
-    const finalScale = clamp(scaleAfterAssist, HYBRID_CTRL_MIN_MULT, Math.max(maxScale, HYBRID_CTRL_MIN_MULT));
-    const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
+    const minScale = HYBRID_CTRL_MIN_MULT;
+    const maxClampScale = Math.max(maxScale, minScale);
+    const finalScale = clamp(scaleAfterCaps, minScale, maxClampScale);
+    if (finalScale !== scaleAfterCaps) {
+      reasons.push(finalScale === minScale ? 'minClamp' : 'maxClamp');
+    }
 
+    const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
     const finalReasons = reasons.length > 0 ? reasons : ['base'];
+
     logHybridMultDebug({
       basePxps: base,
       errorLines: errorInfo?.errorLines ?? null,
@@ -3694,6 +3713,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       lineSource: targetMultSource,
       writerSource: getLastWriterSource(),
     });
+    const effectiveScaleApplied = finalScale;
+    const effective = baseWithCorrection * effectiveScaleApplied;
     logHybridVelocityEvent({
       basePxps: base,
       chosenScale: effectiveScale,
@@ -3731,6 +3752,26 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       driftWeak: driftWeakMatch,
       targetTopSource: errorInfo?.targetTopSource ?? null,
     });
+    const errorPx =
+      Number.isFinite(errorInfo?.errorPx ?? NaN) && errorInfo?.errorPx != null
+        ? errorInfo.errorPx
+        : null;
+    if (isDevMode()) {
+      try {
+        console.info("[HYBRID_FINAL_MILE]", {
+          basePxps: base,
+          deltaLines,
+          errorPx,
+          reactiveScale,
+          policyMult,
+          preClampScale,
+          scaleAfterCaps,
+          finalScale,
+          finalPxps,
+          reasons: finalReasons,
+        });
+      } catch {}
+    }
 
     hybridMotor.setVelocityPxPerSec(finalPxps);
     emitHybridSafety();
@@ -3747,6 +3788,12 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (!changed) emitHybridSafety();
   }
   markHybridOffScriptFn = _markHybridOffScript;
+  function suppressAssistScale(boost: number, base: number) {
+    if (!Number.isFinite(boost) || boost <= 0) return 0;
+    if (!Number.isFinite(base) || base <= 0) return 0;
+    const scale = 1 + boost / Math.max(base, HYBRID_CTRL_MIN_PXPS);
+    return clamp(scale, 1, 2);
+  }
   function emitHybridSafety() {
     try {
     const payload = {
