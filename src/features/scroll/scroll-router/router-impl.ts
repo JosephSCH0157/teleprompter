@@ -3590,21 +3590,48 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     });
     const rawAssist = getActiveAssistBoost(now, pauseTailEligible);
     const baseWithCorrection = base * ctrlMultApplied;
-    const effectiveScaleApplied = effectiveScale * brakeFactor;
-    const effective = baseWithCorrection * effectiveScaleApplied;
-    const suppressAssist =
-      reason === 'silence' ||
-      effectiveScale <= OFFSCRIPT_SCALE ||
-      reason === 'grace';
-    const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
-    const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
-    const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, effective + assistBoost);
-    const capReason =
-      pausedBySilence || reason === 'silence'
-        ? 'silence'
-        : offScriptActive || reason === 'offscript'
-        ? 'offscript'
-        : undefined;
+
+    const deltaLines = Number.isFinite(errorLinesRaw) ? errorLinesRaw : 0;
+    const deadband = aggro ? 0.5 : 0.9;
+    const kUp = aggro ? 0.22 : 0.12;
+    const kDown = aggro ? 0.18 : 0.10;
+    let reactiveScale = 1;
+    if (Math.abs(deltaLines) > deadband) {
+      const raw =
+        deltaLines > 0 ? 1 + kUp * deltaLines : 1 + kDown * deltaLines;
+      reactiveScale = clamp(raw, 0.6, 1.6);
+    }
+
+    let policyMult = 1;
+    const reasons: string[] = [];
+    if (pausedBySilence || reason === 'silence') {
+      policyMult *= 0.7;
+      reasons.push('silence');
+    }
+    if (offScriptActive || reason === 'offscript') {
+      policyMult *= 0.8;
+      reasons.push('offscript');
+    }
+
+    const preClampScale = reactiveScale * policyMult;
+
+    let scaleAfterBrake = preClampScale;
+    if (brakeActive) {
+      scaleAfterBrake = Math.min(scaleAfterBrake, brakeFactor);
+      reasons.push('brakeCap');
+    }
+
+    let scaleAfterAssist = scaleAfterBrake;
+    const assistFloorScale = suppressAssistScale(rawAssist ? rawAssist : 0, baseWithCorrection);
+    if (assistActive && assistFloorScale > 0) {
+      scaleAfterAssist = Math.max(scaleAfterAssist, assistFloorScale);
+      reasons.push('assistFloor');
+    }
+
+    const finalScale = clamp(scaleAfterAssist, HYBRID_CTRL_MIN_MULT, Math.max(maxScale, HYBRID_CTRL_MIN_MULT));
+    const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
+
+    const finalReasons = reasons.length > 0 ? reasons : ['base'];
     logHybridMultDebug({
       basePxps: base,
       errorLines: errorInfo?.errorLines ?? null,
@@ -3613,7 +3640,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         : 1,
       lineMult: appliedTargetMult,
       finalPxps,
-      capReason,
+      capReason: finalReasons.join(','),
     });
     logHybridCtrlState(
       base,
@@ -3634,7 +3661,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptCap,
       finalPxps,
       ctrlMultApplied,
-      effectiveScaleApplied,
+      finalScale,
       modeHint,
     );
     renderHybridCtrlHud({
@@ -3655,7 +3682,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       currentTop: errorInfo?.currentScrollTop ?? null,
       modeHint,
       ctrlMultApplied,
-      effectiveScaleApplied,
+      effectiveScaleApplied: finalScale,
       finalPxps,
       eligibleReason,
       errorLines: errorInfo?.errorLines ?? null,
