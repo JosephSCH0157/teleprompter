@@ -1439,15 +1439,6 @@
       }
     },
     {
-      "type": "info",
-      "text": "[SCROLL_WRITE] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16605,
-        "columnNumber": 12
-      }
-    },
-    {
       "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
       "location": {
@@ -1456,12 +1447,12 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
+      "type": "info",
+      "text": "[SCROLL_WRITE] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16879,
-        "columnNumber": 14
+        "lineNumber": 16605,
+        "columnNumber": 12
       }
     },
     {
@@ -1600,6 +1591,15 @@
       }
     },
     {
+      "type": "warning",
+      "text": "[AUTO_DEBUG] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 16879,
+        "columnNumber": 14
+      }
+    },
+    {
       "type": "info",
       "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
       "location": {
@@ -1633,15 +1633,6 @@
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 17643,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16879,
-        "columnNumber": 14
       }
     },
     {
@@ -2043,9 +2034,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "9f54e204e3570ea797aaebdf478c36161bf86e7d",
+      "gitSha": "d8ec3ada0212086f50f4fa4b6a7e9700801c1ebf",
       "branch": "main",
-      "buildTime": "2026-01-21T02:44:35.221Z"
+      "buildTime": "2026-01-21T02:49:34.528Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
