@@ -922,7 +922,7 @@ function createAutoMotor() {
     if (now - lastAutoTickLogAt < AUTO_TICK_LOG_THROTTLE_MS) return;
     lastAutoTickLogAt = now;
     try {
-      console.warn('[AUTO_DEBUG]', {
+      const payload = {
         event,
         scroller: formatScroller(el),
         pxPerSec,
@@ -932,7 +932,12 @@ function createAutoMotor() {
         scrollHeight: el?.scrollHeight ?? null,
         clientHeight: el?.clientHeight ?? null,
         ...extra,
-      });
+      };
+      try {
+        (window as any).__AUTO_DEBUG__ ??= [];
+        (window as any).__AUTO_DEBUG__.push(payload);
+      } catch {}
+      console.error('[AUTO_DEBUG]', payload);
     } catch {}
   }
 
