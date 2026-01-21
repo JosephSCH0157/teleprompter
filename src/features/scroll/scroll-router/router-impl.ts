@@ -3797,6 +3797,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       Number.isFinite(errorInfo?.errorPx ?? NaN) && errorInfo?.errorPx != null
         ? errorInfo.errorPx
         : null;
+    const wantedPxps = Number.isFinite(base) ? base * finalScale : finalScale;
+    const sentPxps = finalPxps;
+    const clampSource = finalReasons.join('|');
     if (isDevMode()) {
       try {
         const logParts = [
@@ -3836,6 +3839,16 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           `targetTopSrc=${errorInfo?.targetTopSource ?? "unknown"}`,
         ];
         console.info("[HYBRID_FINAL_MILE_STATE]", stateParts.join(" "));
+      } catch {}
+    }
+    if (wantedPxps !== sentPxps) {
+      try {
+        console.warn(
+          "[HYBRID_POST_CLAMP]",
+          `wanted=${wantedPxps.toFixed(2)}`,
+          `sent=${sentPxps.toFixed(2)}`,
+          `clampSource=${clampSource}`,
+        );
       } catch {}
     }
 
