@@ -398,6 +398,18 @@ function matchBatch2(text, isFinal) {
     const { scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState } = _getRuntimeScriptState();
     const res = matchBatch(spokenTokens, scriptWords, paraIndex, vParaIndex, cfg, currentIndex, viterbiState);
     try {
+      window.dispatchEvent(
+        new CustomEvent("tp:hybrid:matchState", {
+          detail: {
+            bestIdx: res.bestIdx,
+            bestSim: res.bestSim,
+            isFinal,
+            ts: Date.now(),
+          },
+        }),
+      );
+    } catch {}
+    try {
       const deltaLines = Number(res.bestIdx) - Number(currentIndex || 0);
       if (deltaLines) {
         const conf = Math.max(0, Math.min(1, res.bestSim || 0)) * (isFinal ? 1 : 0.6);

@@ -1724,20 +1724,29 @@ function getHybridCtrlDevOverride(now: number) {
 }
 let lastHybridGateFingerprint: string | null = null;
 let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
+let hybridLastMatch: { bestIdx: number; bestSim: number; isFinal: boolean; ts: number } | null = null;
+let hybridMatchSeen = false;
 let hybridLastNoMatch: boolean | null = null;
 const HYBRID_HARD_NOMATCH_SIM_MIN = 0.25;
 
 function getHybridMatchState() {
-  const bestSim = Number.isFinite(lastAsrMatch?.bestSim ?? NaN) ? lastAsrMatch.bestSim : null;
-  const simFinite = Number.isFinite(bestSim ?? NaN);
-  const simValue = simFinite ? (bestSim as number) : null;
+  const matchSim =
+    hybridMatchSeen && Number.isFinite(hybridLastMatch?.bestSim ?? NaN)
+      ? hybridLastMatch!.bestSim
+      : Number.isFinite(lastAsrMatch?.bestSim ?? NaN)
+      ? lastAsrMatch.bestSim
+      : null;
+  const simFinite = Number.isFinite(matchSim ?? NaN);
+  const simValue = simFinite ? (matchSim as number) : null;
   const sawNoMatch = hybridLastNoMatch === true;
   const hardNoMatch =
     sawNoMatch && (!simFinite || (simValue != null && simValue < HYBRID_HARD_NOMATCH_SIM_MIN));
   const weakMatch =
-    !hardNoMatch && (!simFinite || (simValue != null && simValue < HYBRID_ONSCRIPT_SIM_MIN));
+    hybridMatchSeen &&
+    !hardNoMatch &&
+    (!simFinite || (simValue != null && simValue < HYBRID_ONSCRIPT_SIM_MIN));
   return {
-    bestSim,
+    bestSim: simValue,
     sawNoMatch,
     weakMatch,
     hardNoMatch,
@@ -3115,6 +3124,30 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     });
   } catch {}
   try {
+    window.addEventListener("tp:hybrid:matchState", (ev) => {
+      const detail = (ev as CustomEvent).detail || {};
+      const bestIdxRaw = detail.bestIdx;
+      const bestSimRaw = detail.bestSim;
+      const bestIdx = Number.isFinite(bestIdxRaw) ? bestIdxRaw : -1;
+      const bestSimValue = Number.isFinite(bestSimRaw) ? bestSimRaw : Number.NaN;
+      const ts = Number.isFinite(detail.ts) ? detail.ts : nowMs();
+      hybridMatchSeen = true;
+      hybridLastMatch = {
+        bestIdx,
+        bestSim: Number.isFinite(bestSimValue) ? bestSimValue : Number.NaN,
+        isFinal: Boolean(detail.isFinal),
+        ts,
+      };
+      const currentIdxRaw = Number((window as any)?.currentIndex ?? NaN);
+      const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : lastAsrMatch.currentIndex;
+      lastAsrMatch = {
+        currentIndex: currentIdx,
+        bestIndex: Number.isFinite(bestIdx) ? bestIdx : lastAsrMatch.bestIndex,
+        bestSim: Number.isFinite(bestSimValue) ? bestSimValue : lastAsrMatch.bestSim,
+      };
+    });
+  } catch {}
+  try {
     window.addEventListener("tp:hybrid:brake", handleHybridBrakeEvent);
     window.addEventListener("tp:hybrid:assist", handleHybridAssistEvent);
     window.addEventListener("tp:hybrid:targetHint", handleHybridTargetHintEvent);
@@ -3637,7 +3670,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
 
     let scaleAfterCaps = scaleAfterBrake;
     const assistFloorScale = suppressAssistScale(rawAssist, baseWithCorrection);
-    if (assistActive && assistFloorScale > 0) {
+    const assistEligible = assistActive && assistFloorScale > 0 && needCatchUp && conf >= confMin;
+    if (assistEligible) {
       scaleAfterCaps = Math.max(scaleAfterCaps, assistFloorScale);
       reasons.push('assistFloor');
     }
@@ -3781,6 +3815,14 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         ];
         console.info("[HYBRID_FINAL_MILE]", logParts.join(" "));
 
+        const matchSimLog = Number.isFinite(hybridLastMatch?.bestSim ?? NaN)
+          ? hybridLastMatch!.bestSim
+          : null;
+        const matchReason = hybridMatchSeen
+          ? hybridLastMatch?.isFinal
+            ? 'asr-final'
+            : 'asr'
+          : 'unknown';
         const stateParts = [
           `noMatch=${sawNoMatch}`,
           `weakMatch=${weakMatch}`,
@@ -3789,6 +3831,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           `reason=${reason}`,
           `conf=${conf.toFixed(2)}`,
           `sim=${sim.toFixed(2)}`,
+          `matchSim=${matchSimLog != null ? matchSimLog.toFixed(2) : "null"}`,
+          `matchReason=${matchReason}`,
           `targetTopSrc=${errorInfo?.targetTopSource ?? "unknown"}`,
         ];
         console.info("[HYBRID_FINAL_MILE_STATE]", stateParts.join(" "));
