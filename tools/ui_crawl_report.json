@@ -1501,15 +1501,6 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16879,
-        "columnNumber": 14
-      }
-    },
-    {
       "type": "info",
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
@@ -1596,6 +1587,15 @@
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 33323,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[AUTO_DEBUG] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 16879,
         "columnNumber": 14
       }
     },
@@ -2034,9 +2034,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "928ee4538d286779573ab3ac23fe48c5cabf5a0e",
+      "gitSha": "7f5116d02bfd72ac149639121e9ae2dc254cf4fc",
       "branch": "main",
-      "buildTime": "2026-01-21T03:05:36.286Z"
+      "buildTime": "2026-01-21T03:14:14.027Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
