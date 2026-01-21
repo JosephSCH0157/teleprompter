@@ -99,7 +99,7 @@ export async function ensureWelcomeScript(): Promise<void> {
     const state = await resolveWelcomeState();
     if (state.seen) return;
     const script = buildWelcomeScript(state.displayName);
-    applyScript(script, 'welcome', { updateEditor: true });
+    applyScript(script, 'load', { updateEditor: true });
     await state.markSeen();
   } catch {
     // swallow errors to avoid blocking boot
