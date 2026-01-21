@@ -1011,7 +1011,9 @@ function createAutoMotor() {
       scheduleTick();
       return;
     }
-    const room = Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0));
+    const totalScrollHeight = el.scrollHeight || 0;
+    const viewportHeight = el.clientHeight || 0;
+    const room = Math.max(0, totalScrollHeight - viewportHeight);
     if (room <= 0) {
       logAutoTick('tick', el, pxPerSec, dtSec, 'no-room', { room });
       scheduleTick();
