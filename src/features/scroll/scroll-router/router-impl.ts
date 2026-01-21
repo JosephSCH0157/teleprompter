@@ -3650,6 +3650,12 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
 
     const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
     const finalReasons = reasons.length > 0 ? reasons : ['base'];
+    const capReason =
+      finalReasons.includes('silence')
+        ? 'silence'
+        : finalReasons.includes('offscript')
+        ? 'offscript'
+        : undefined;
 
     logHybridMultDebug({
       basePxps: base,
