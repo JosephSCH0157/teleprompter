@@ -29,6 +29,7 @@ try {
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 import './features/speech/speech-store';
+import './features/logout';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
 import { speechStore, type SpeechState } from './state/speech-store';
