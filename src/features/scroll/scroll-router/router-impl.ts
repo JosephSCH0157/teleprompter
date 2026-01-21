@@ -1678,6 +1678,8 @@ const HYBRID_CTRL_LINE_MAX_MULT = 1.9;
 const HYBRID_CTRL_LINE_MIN_MULT = 0.5;
 const HYBRID_CTRL_LINE_SMOOTH_TAU_MS = 450;
 const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.8;
+const HYBRID_CTRL_ON_TARGET_PX = 32;
+const HYBRID_CTRL_ON_TARGET_VELOCITY_EPS = 12;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
 const HYBRID_MULT_DEBUG_THROTTLE_MS = 500;
 const HYBRID_ONSCRIPT_SIM_MIN = 0.74;
@@ -3499,7 +3501,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const ctrlMultFinal = Number.isFinite(devOverrideMult) ? devOverrideMult : appliedTargetMult;
     hybridCtrl.mult = ctrlMultFinal;
     const ctrlMultApplied = ctrlMultFinal;
-    const modeHint = computeHybridModeHint(errorInfo?.errorLines ?? null, weakMatch);
     const hybridScaleDetail = computeEffectiveHybridScale(
       now,
       silence,
@@ -3684,6 +3685,25 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
 
     const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
+    const errorPx =
+      Number.isFinite(errorInfo?.errorPx ?? NaN) && errorInfo?.errorPx != null
+        ? errorInfo.errorPx
+        : null;
+    const distancePx = errorPx != null ? Math.abs(errorPx) : null;
+    const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
+    const provisionalAnchor = errorInfo?.targetTopSource !== 'anchor';
+    // treat a provisional anchor as on-target when we're essentially stopped inside the brake window
+    const forceOnTarget =
+      provisionalAnchor &&
+      distancePx != null &&
+      distancePx <= HYBRID_CTRL_ON_TARGET_PX &&
+      velocityPxps <= HYBRID_CTRL_ON_TARGET_VELOCITY_EPS &&
+      brakeTtl > 0;
+    const hintedErrorLines =
+      Number.isFinite(errorInfo?.errorLines ?? NaN) && errorInfo?.errorLines != null
+        ? errorInfo.errorLines
+        : null;
+    const modeHint = computeHybridModeHint(forceOnTarget ? 0 : hintedErrorLines, weakMatch);
     const finalReasons = reasons.length > 0 ? reasons : ['base'];
     const capReason =
       finalReasons.includes('silence')
@@ -3793,10 +3813,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       driftWeak: driftWeakMatch,
       targetTopSource: errorInfo?.targetTopSource ?? null,
     });
-    const errorPx =
-      Number.isFinite(errorInfo?.errorPx ?? NaN) && errorInfo?.errorPx != null
-        ? errorInfo.errorPx
-        : null;
     const wantedPxps = Number.isFinite(base) ? base * finalScale : finalScale;
     const sentPxps = finalPxps;
     const clampStage =

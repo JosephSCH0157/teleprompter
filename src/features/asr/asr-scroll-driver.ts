@@ -1856,9 +1856,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastMoveAt = Date.now();
       markProgrammaticScroll();
       if (isHybridMode()) {
-        const normalizedErr = Math.min(1, err / 200);
-        const brakeFactor = Math.max(0.15, 1 - normalizedErr);
-        emitHybridBrake(brakeFactor, 'asr-pursuit', HYBRID_BRAKE_TTL_MS);
+        if (commitCount > 0) {
+          const normalizedErr = Math.min(1, err / 200);
+          const brakeFactor = Math.max(0.15, 1 - normalizedErr);
+          emitHybridBrake(brakeFactor, 'asr-pursuit', HYBRID_BRAKE_TTL_MS);
+        }
         const assistBoost = Math.min(Math.max(0, pursuitVel), HYBRID_ASSIST_MAX_BOOST_PXPS);
         emitHybridAssist(assistBoost, 'asr-pursuit', pursuitTargetTop ?? undefined, HYBRID_ASSIST_TTL_MS);
       }
