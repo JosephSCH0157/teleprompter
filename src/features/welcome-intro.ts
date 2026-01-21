@@ -5,6 +5,13 @@ import { ProfileStore } from '../profile/profile-store';
 import type { TpProfileV1 } from '../profile/profile-schema';
 
 const LOCAL_STORAGE_KEY = 'tp_welcome_seen_v1';
+const LAST_USER_KEY = 'tp_last_user_id_v1';
+const SCRIPT_STORAGE_KEYS = [
+  'tp_local_scripts_v1',
+  'tp_last_script_title',
+  'tp_last_script_name',
+  'tp_scripts_v1',
+];
 let welcomeCheckRun = false;
 
 type WelcomeState = {
@@ -12,6 +19,70 @@ type WelcomeState = {
   displayName: string;
   markSeen: () => Promise<void>;
 };
+
+async function ensureUserStorageFresh(): Promise<void> {
+  if (!hasSupabaseConfig) return;
+  if (typeof window === 'undefined') return;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    const userId = data?.user?.id;
+    if (!userId || error) return;
+    const storage = window.localStorage;
+    const lastId = storage.getItem(LAST_USER_KEY);
+    if (lastId && lastId !== userId) {
+      const keysToClear = [...SCRIPT_STORAGE_KEYS, LOCAL_STORAGE_KEY];
+      keysToClear.forEach((key) => {
+        try {
+          storage.removeItem(key);
+        } catch {
+          // ignore
+        }
+      });
+    }
+    if (storage.getItem(LAST_USER_KEY) !== userId) {
+      try {
+        storage.setItem(LAST_USER_KEY, userId);
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore auth failures (let other guards run)
+  }
+}
+
+function waitForScriptStabilization(timeoutMs = 220): Promise<void> {
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      try {
+        window.removeEventListener('tp:script:rendered', handler);
+      } catch {}
+      try {
+        window.removeEventListener('tp:script-rendered', handler);
+      } catch {}
+      resolve();
+    };
+    const handler = () => finish();
+    try {
+      window.addEventListener('tp:script:rendered', handler);
+    } catch {}
+    try {
+      window.addEventListener('tp:script-rendered', handler);
+    } catch {}
+    timer = setTimeout(finish, Math.max(0, timeoutMs));
+  });
+}
 
 function normalizeScriptText(value: string | null | undefined): string {
   if (typeof value !== 'string') return '';
@@ -111,8 +182,14 @@ export async function ensureWelcomeScript(): Promise<void> {
   if ((window as any).__TP_FORCE_DISPLAY) return;
   welcomeCheckRun = true;
 
+  if (hasSupabaseConfig) {
+    await ensureUserStorageFresh();
+  }
+
   const initialSnapshot = captureEditorSnapshot();
   if (!initialSnapshot.isEmpty) return;
+
+  await waitForScriptStabilization();
 
   try {
     const state = await resolveWelcomeState();
