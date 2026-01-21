@@ -375,8 +375,47 @@
   </div>
 
   <nav class="page-tabs" id="pageTabs">
-    <button class="page-tab is-active" data-tp-page="scripts" aria-pressed="true" aria-selected="true">Scripts</button>
+    <button
+      id="ironMineTab"
+      class="page-tab is-active"
+      type="button"
+      aria-label="Open Iron Mine community"
+      title="Open Iron Mine (Discord)"
+    >
+      Iron Mine
+    </button>
   </nav>
+  <script>
+    (function () {
+      try {
+        var btn = document.getElementById('ironMineTab');
+        if (!btn || btn.dataset.wired) return;
+        btn.dataset.wired = '1';
+
+        var url = 'https://discord.com/channels/1457026850407841834/1457026850407841837';
+
+        // Capture so we beat any page-tab delegation that might exist elsewhere
+        btn.addEventListener(
+          'click',
+          function (e) {
+            try {
+              e.preventDefault();
+              e.stopPropagation();
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            } catch (_) {}
+
+            try {
+              window.open(url, '_blank', 'noopener,noreferrer');
+            } catch (_) {
+              // Fallback: same tab
+              window.location.href = url;
+            }
+          },
+          true,
+        );
+      } catch (_) {}
+    })();
+  </script>
 
   <div class="legend" id="legend"></div>
   <div id="scrollModeChip" data-role="scroll-mode-chip"></div>
