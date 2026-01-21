@@ -133,10 +133,37 @@
         pointer-events: none;
         user-select: none;
       }
+      .tp-login-video {
+        position: absolute;
+        left: 2.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        width: min(38vw, 560px);
+        aspect-ratio: 16 / 9;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 18px 55px rgba(0, 0, 0, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(0, 0, 0, 0.35);
+        z-index: 2;
+      }
+      .tp-login-video:hover {
+        transform: translateY(-50%) scale(1.01);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      .tp-login-video iframe {
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+      }
       .tp-brand-forge .tp-brand-accent {
         color: #f4cfa0;
       }
       @media (max-width: 768px) {
+        .tp-login-video {
+          display: none;
+        }
         .tp-login-page {
           justify-content: center;
           padding: 1.5rem;
@@ -156,6 +183,15 @@
     <main id="forge-login-root" class="tp-login-page">
       <div class="tp-brand-forge">
         Podcaster's <span class="tp-brand-accent">Forge</span>
+      </div>
+      <div class="tp-login-video" aria-label="Anvil intro video">
+        <iframe
+          src="https://www.youtube-nocookie.com/embed/lH1E6ojjSsg?rel=0&modestbranding=1"
+          title="Anvil — Intro & Demo"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
       </div>
       <div class="tp-login-content">
         <div class="tp-login-card">
