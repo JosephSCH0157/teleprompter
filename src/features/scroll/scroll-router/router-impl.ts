@@ -937,7 +937,7 @@ function createAutoMotor() {
         (window as any).__AUTO_DEBUG__ ??= [];
         (window as any).__AUTO_DEBUG__.push(payload);
       } catch {}
-      console.error('[AUTO_DEBUG]', payload);
+      console.warn('[AUTO_DEBUG]', payload);
     } catch {}
   }
 
