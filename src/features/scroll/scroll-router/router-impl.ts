@@ -1620,19 +1620,21 @@ const HYBRID_CTRL_CONF_MIN = 0.25;
 const HYBRID_CTRL_ANCHOR_RECENCY_MS = 2500;
 const HYBRID_CTRL_ENABLED = (() => {
   if (typeof window === 'undefined') return false;
+  let manualOverride = false;
   try {
     const current = window.location.href || window.location.hash || window.location.search || '';
     const url = new URL(current, window.location.origin || undefined);
     const fromSearch = url.searchParams.get('hybridCtrl');
     const fromHash = new URLSearchParams((url.hash || '').replace(/^#/, '')).get('hybridCtrl');
-    if (fromSearch === '1' || fromHash === '1') return true;
-    if ((window as any).__TP_HYBRID_CTRL === true) return true;
+    if (fromSearch === '1' || fromHash === '1') manualOverride = true;
+    if ((window as any).__TP_HYBRID_CTRL === true) manualOverride = true;
   } catch {
     try {
-      if ((window as any).__TP_HYBRID_CTRL === true) return true;
+      if ((window as any).__TP_HYBRID_CTRL === true) manualOverride = true;
     } catch {}
   }
-  return false;
+  if (manualOverride) return true;
+  return state2.mode === 'hybrid';
 })();
 try {
   if (typeof window !== 'undefined') {
