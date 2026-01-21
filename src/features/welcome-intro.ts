@@ -13,6 +13,32 @@ type WelcomeState = {
   markSeen: () => Promise<void>;
 };
 
+function normalizeScriptText(value: string | null | undefined): string {
+  if (typeof value !== 'string') return '';
+  return value.replace(/^\uFEFF+/, '').trim();
+}
+
+function isTextPlaceholder(value: string, placeholder: string | null): boolean {
+  if (!placeholder) return false;
+  const normalizedPlaceholder = normalizeScriptText(placeholder);
+  return normalizedPlaceholder.length > 0 && value === normalizedPlaceholder;
+}
+
+function captureEditorSnapshot() {
+  const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
+  const placeholder = editor?.getAttribute('placeholder') ?? null;
+  const normalizedPlaceholder = normalizeScriptText(placeholder);
+  const rawScript = normalizeScriptText((window as any).__tpRawScript);
+  const editorValue = normalizeScriptText(editor?.value);
+  const hasRawContent = rawScript.length > 0;
+  const hasEditorContent = editorValue.length > 0 && !isTextPlaceholder(editorValue, normalizedPlaceholder);
+  return {
+    isEmpty: !hasRawContent && !hasEditorContent,
+    text: hasRawContent ? rawScript : hasEditorContent ? editorValue : '',
+    placeholder: normalizedPlaceholder,
+  };
+}
+
 function readLocalStorageFlag(): boolean {
   try {
     const raw = window.localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -43,33 +69,35 @@ function resolveFallbackDisplayName(profile: TpProfileV1 | null): string {
 }
 
 async function resolveWelcomeState(): Promise<WelcomeState> {
+  const fallbackDisplay = resolveFallbackDisplayName(null);
+  const localSeen = readLocalStorageFlag();
   if (hasSupabaseConfig) {
     try {
       const store = new ProfileStore(supabase);
       const profile = await store.getProfile();
-      const name = resolveFallbackDisplayName(profile);
-      const seen = Boolean(profile.workflow?.hasSeenWelcome);
+      const name = resolveFallbackDisplayName(profile) || fallbackDisplay;
+      const hasSupabaseValue = profile.workflow && typeof profile.workflow.hasSeenWelcome === 'boolean';
+      const supabaseFlag = profile.workflow?.hasSeenWelcome;
       return {
-        seen,
+        seen: hasSupabaseValue ? supabaseFlag : localSeen,
         displayName: name,
         markSeen: async () => {
+          writeLocalStorageFlag();
           if (profile.workflow?.hasSeenWelcome) return;
           try {
             await store.saveProfilePatch({ workflow: { hasSeenWelcome: true } });
-            profile.workflow.hasSeenWelcome = true;
-          } catch {
-            // ignore patch failures
+            profile.workflow = { ...(profile.workflow ?? {}), hasSeenWelcome: true };
+          } catch (err) {
+            console.warn('[welcome-intro] failed to persist hasSeenWelcome', err);
           }
         },
       };
-    } catch {
-      // fall through to local storage fallback
+    } catch (err) {
+      console.warn('[welcome-intro] unable to fetch profile for welcome script', err);
     }
   }
-  const fallbackDisplay = resolveFallbackDisplayName(null);
-  const seen = readLocalStorageFlag();
   return {
-    seen,
+    seen: localSeen,
     displayName: fallbackDisplay,
     markSeen: async () => {
       writeLocalStorageFlag();
@@ -77,27 +105,22 @@ async function resolveWelcomeState(): Promise<WelcomeState> {
   };
 }
 
-function isScriptEmpty(): boolean {
-  try {
-    const existing = (window as any).__tpRawScript;
-    if (typeof existing === 'string' && existing.trim()) return false;
-    const editor = document.getElementById('editor') as HTMLTextAreaElement | null;
-    if (editor && typeof editor.value === 'string' && editor.value.trim()) return false;
-  } catch {
-    // ignore
-  }
-  return true;
-}
-
 export async function ensureWelcomeScript(): Promise<void> {
   if (welcomeCheckRun) return;
-  welcomeCheckRun = true;
   if (typeof document === 'undefined') return;
-  if (!isScriptEmpty()) return;
+  if ((window as any).__TP_FORCE_DISPLAY) return;
+  welcomeCheckRun = true;
+
+  const initialSnapshot = captureEditorSnapshot();
+  if (!initialSnapshot.isEmpty) return;
 
   try {
     const state = await resolveWelcomeState();
     if (state.seen) return;
+
+    const beforeApplySnapshot = captureEditorSnapshot();
+    if (!beforeApplySnapshot.isEmpty) return;
+
     const script = buildWelcomeScript(state.displayName);
     applyScript(script, 'load', { updateEditor: true });
     await state.markSeen();
