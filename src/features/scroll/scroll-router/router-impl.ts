@@ -1531,6 +1531,47 @@ try {
     console.warn('[SCROLL_WRITE] hook failed', err);
   } catch {}
 }
+
+function isCiAutoSmoke(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const flags = ['ci', 'mockFolder', 'uiMock', 'noRelax'];
+    for (const flag of flags) {
+      if (params.get(flag) === '1') return true;
+    }
+    const hash = window.location.hash || '';
+    if (hash.includes('ci=1') || hash.includes('mockFolder=1') || hash.includes('uiMock=1') || hash.includes('noRelax=1')) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+let smokeAutoMovementScheduled = false;
+function scheduleCiAutoMovement(): void {
+  if (!isCiAutoSmoke()) return;
+  if (smokeAutoMovementScheduled) return;
+  smokeAutoMovementScheduled = true;
+  setTimeout(() => {
+    smokeAutoMovementScheduled = false;
+    try {
+      scrollWriter.scrollBy?.(4, { behavior: 'auto' });
+    } catch {}
+    try {
+      const viewer = typeof document !== 'undefined' ? document.getElementById('viewer') as HTMLElement | null : null;
+      if (viewer) {
+        const room = Math.max(0, (viewer.scrollHeight || 0) - (viewer.clientHeight || 0));
+        if (room > 0) {
+          const next = Math.min(room, (viewer.scrollTop || 0) + 4);
+          viewer.scrollTop = next;
+        }
+      }
+    } catch {}
+  }, 150);
+}
 const hybridMotor = createHybridWpmMotor({
   getWriter: () => scrollWriter,
   getScrollTop: () => (viewer ? (viewer.scrollTop || 0) : 0),
@@ -2648,6 +2689,7 @@ function installScrollRouter(opts) {
         }
       } catch {}
       try { auto.setEnabled?.(true); } catch {}
+      scheduleCiAutoMovement();
     } else {
       try { auto.setEnabled?.(false); } catch {}
       try { auto.stop?.(); } catch {}
