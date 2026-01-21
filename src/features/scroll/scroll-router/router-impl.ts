@@ -3765,21 +3765,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         : null;
     if (isDevMode()) {
       try {
-        const finalMilePayload = {
-          basePxps: base,
-          deltaLines,
-          errorPx,
-          reactiveScale,
-          policyMult,
-          preClampScale,
-          capMax: maxClampScale,
-          floorMin: minScale,
-          scaleAfterCaps,
-          finalScale,
-          finalPxps,
-          reasons: finalReasons,
-        };
-        console.info("[HYBRID_FINAL_MILE]", JSON.stringify(finalMilePayload));
+        const logParts = [
+          `basePxps=${base.toFixed(2)}`,
+          `deltaLines=${deltaLines.toFixed(2)}`,
+          `errorPx=${errorPx?.toFixed(1) ?? "null"}`,
+          `reactiveScale=${reactiveScale.toFixed(3)}`,
+          `policyMult=${policyMult.toFixed(3)}`,
+          `preClampScale=${preClampScale.toFixed(3)}`,
+          `scaleAfterCaps=${scaleAfterCaps.toFixed(3)}`,
+          `capMax=${maxClampScale.toFixed(3)}`,
+          `floorMin=${minScale.toFixed(3)}`,
+          `finalScale=${finalScale.toFixed(3)}`,
+          `finalPxps=${finalPxps.toFixed(2)}`,
+          `reasons=${finalReasons.join("|")}`,
+        ];
+        console.info("[HYBRID_FINAL_MILE]", logParts.join(" "));
       } catch {}
     }
 
