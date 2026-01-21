@@ -188,7 +188,10 @@ function buildModal(): Elements | null {
       </div>
       <div class="display-pairing-field">
         <div class="display-pairing-qr">
-          <img alt="Display pairing QR code" />
+          <img
+            src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+            alt="Display pairing QR code"
+          />
           <div>
             <div class="display-pairing-actions">
               <button type="button" class="chip display-pairing-btn-refresh">Refresh token</button>
