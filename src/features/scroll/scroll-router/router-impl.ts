@@ -3799,7 +3799,16 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         : null;
     const wantedPxps = Number.isFinite(base) ? base * finalScale : finalScale;
     const sentPxps = finalPxps;
-    const clampSource = finalReasons.join('|');
+    const clampStage =
+      finalReasons.includes("maxClamp")
+        ? "postScaleMaxClamp"
+        : finalReasons.includes("minClamp")
+        ? "postScaleMinClamp"
+        : finalReasons.includes("brakeCap")
+        ? "motorBrakeClamp"
+        : finalReasons.includes("assistFloor")
+        ? "assistFloorClamp"
+        : "unknown_post_final_mile";
     if (isDevMode()) {
       try {
         const logParts = [
@@ -3823,9 +3832,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           : null;
         const matchReason = hybridMatchSeen
           ? hybridLastMatch?.isFinal
-            ? 'asr-final'
-            : 'asr'
-          : 'unknown';
+            ? "asr-final"
+            : "asr"
+          : "unknown";
         const stateParts = [
           `noMatch=${sawNoMatch}`,
           `weakMatch=${weakMatch}`,
@@ -3842,13 +3851,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       } catch {}
     }
     if (wantedPxps !== sentPxps) {
+      const clampPayload = {
+        stage: clampStage,
+        basePxps: base,
+        finalScale,
+        wantedPxps,
+        finalPxps: sentPxps,
+        deltaLines,
+        reasons: finalReasons,
+        capMax: maxClampScale,
+        capMin: minScale,
+      };
       try {
-        console.warn(
-          "[HYBRID_POST_CLAMP]",
-          `wanted=${wantedPxps.toFixed(2)}`,
-          `sent=${sentPxps.toFixed(2)}`,
-          `clampSource=${clampSource}`,
-        );
+        console.warn("[HYBRID_POST_CLAMP]", JSON.stringify(clampPayload));
       } catch {}
     }
 
