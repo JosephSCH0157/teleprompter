@@ -1659,7 +1659,7 @@ try {
 const HYBRID_CTRL_KP = 0.22;
 const HYBRID_CTRL_ASSIST_MAX = 1.25;
 const HYBRID_CTRL_BRAKE_MIN = 0.65;
-const HYBRID_CTRL_MIN_MULT = 0.65;
+const HYBRID_CTRL_MIN_MULT = 0.9;
 const HYBRID_CTRL_SILENCE_SHORT_MS = 700;
 const HYBRID_CTRL_SILENCE_LONG_MS = 2000;
 const HYBRID_CTRL_SILENCE_SHORT_CAP = 0.75;
@@ -1681,6 +1681,9 @@ const HYBRID_CTRL_LINE_RATE_LIMIT_PER_SEC = 0.8;
 const HYBRID_CTRL_ON_TARGET_PX = 32;
 const HYBRID_CTRL_ON_TARGET_VELOCITY_EPS = 12;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
+const HYBRID_REACTIVE_BEHIND_BASE = 0.45;
+const HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD = 3;
+const HYBRID_REACTIVE_BEHIND_ACC_BONUS = 0.25;
 const HYBRID_MULT_DEBUG_THROTTLE_MS = 500;
 const HYBRID_ONSCRIPT_SIM_MIN = 0.74;
 type HybridCtrlLineSource = 'lines' | 'px' | 'none';
@@ -3632,18 +3635,20 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const deltaLines = Number.isFinite(errorLinesRaw) ? errorLinesRaw : 0;
     const absDL = Math.abs(deltaLines);
     const deadbandLines = aggro ? 0.45 : 0.75;
-    const kUp = aggro ? 0.32 : 0.18;
     const kDown = aggro ? 0.26 : 0.14;
     let reactiveScale = 1.0;
     const reasons: string[] = [];
     if (absDL > deadbandLines) {
-      const raw =
-        deltaLines > 0
-          ? 1 + kUp * (absDL - deadbandLines)
-          : 1 - kDown * (absDL - deadbandLines);
-      const minReactive = aggro ? 0.50 : 0.65;
-      const maxReactive = aggro ? 1.90 : 1.45;
-      reactiveScale = clamp(raw, minReactive, maxReactive);
+      if (deltaLines > 0) {
+        const baseGain = deltaLines * HYBRID_REACTIVE_BEHIND_BASE;
+        const bonusGain = Math.max(0, deltaLines - HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD) * HYBRID_REACTIVE_BEHIND_ACC_BONUS;
+        reactiveScale = 1 + baseGain + bonusGain;
+      } else {
+        const raw = 1 - kDown * (absDL - deadbandLines);
+        const minReactive = aggro ? 0.50 : 0.65;
+        const maxReactive = aggro ? 1.90 : 1.45;
+        reactiveScale = clamp(raw, minReactive, maxReactive);
+      }
       reasons.push(deltaLines > 0 ? 'behind' : 'ahead');
     } else {
       reasons.push('deadband');
@@ -3679,9 +3684,20 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
 
     const minScale = HYBRID_CTRL_MIN_MULT;
     const maxClampScale = Math.max(maxScale, minScale);
-    const finalScale = clamp(scaleAfterCaps, minScale, maxClampScale);
-    if (finalScale !== scaleAfterCaps) {
-      reasons.push(finalScale === minScale ? 'minClamp' : 'maxClamp');
+    const isBehind = deltaLines > 0;
+    const clampOverride = isBehind || assistEligible;
+    const scaleLimitedToMax = Math.min(scaleAfterCaps, maxClampScale);
+    let finalScale = scaleLimitedToMax;
+    let clampReason: 'minClamp' | 'maxClamp' | null = null;
+    if (scaleAfterCaps > maxClampScale) {
+      finalScale = maxClampScale;
+      clampReason = 'maxClamp';
+    } else if (!clampOverride && scaleLimitedToMax < minScale) {
+      finalScale = minScale;
+      clampReason = 'minClamp';
+    }
+    if (clampReason) {
+      reasons.push(clampReason);
     }
 
     const finalPxps = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
