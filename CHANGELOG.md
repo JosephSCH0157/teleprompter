@@ -1,4 +1,21 @@
 # Teleprompter Pro — Changelog
+## [1.8.0] - 2026-01-21
+
+Release: v1.8
+
+### Added
+
+- Servo-driven display scroll smoothing plus a heartbeat poll so the mirror stays buttery even when the main window jumps lines; the display now animates toward the latest 	argetTop like a continuous motor.
+
+### Changed
+
+- 	p:scriptChanged publishes scroll/rAF heartbeats more frequently so the display mirror samples every motor tick instead of waiting for native scroll events.
+- The welcome script seeding now prefers Supabase flags, enforces placeholder detection, and avoids overwriting real scripts or rerunning in display windows.
+
+### Fixed
+
+- Iron Mine tab wiring (Discord link) no longer depends on the legacy page-tab handlers.
+
 ## [1.7.8] - 2025-12-20
 
 Release: v1.7.8

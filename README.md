@@ -1,4 +1,4 @@
-# Teleprompter Pro (v1.7.8)
+# Teleprompter Pro (v1.8)
 
 Browser-based teleprompter with mirrored display, speech/scroll helpers, recording pills, and a TS-only runtime (`dist/index.js`).
 
@@ -7,6 +7,7 @@ Browser-based teleprompter with mirrored display, speech/scroll helpers, recordi
 - Display mirror via `tp_display` snapshots; display window runs mirror-only JS (no main bundle).
 - HUD and easter eggs are TypeScript (`src/hud/*`, `src/ui/eggs.ts`); legacy HUD/debug live in `legacy/`.
 - Forge auth shell: `/login` and `/account` use `forge-config.js` for Supabase URL/key injection.
+- Servo + heartbeat smoothing on the display keeps mirror motion buttery while main sends frequent updates.
 
 ## Repo layout
 - App shells: `teleprompter_pro.html`, `display.html`

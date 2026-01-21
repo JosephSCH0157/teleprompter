@@ -1,7 +1,7 @@
 ---
-build: anvil-1.7.8
+build: anvil-1.8
 commit: main
-date: 2025-12-20
+date: 2026-01-21
 ---
 
 # ANVIL Manifest
