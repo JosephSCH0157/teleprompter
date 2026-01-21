@@ -186,6 +186,18 @@ function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
   return candidate;
 }
 
+function runHybridVelocity(silence = hybridSilence) {
+  const target = typeof window !== 'undefined' ? window : globalThis;
+  const fn = (target as any).__tpApplyHybridVelocity;
+  if (typeof fn === 'function') {
+    fn(silence);
+    return;
+  }
+  if (typeof applyHybridVelocityCore === 'function') {
+    applyHybridVelocityCore(silence);
+  }
+}
+
 function getMarkerPercent() {
   try {
     if (typeof window === "undefined") return 0.4;
@@ -1948,13 +1960,9 @@ function scheduleHybridVelocityRefresh() {
       stopHybridVelocityRefresh();
       return;
     }
-    try {
-      (() => {
-        const target = typeof window !== 'undefined' ? window : globalThis;
-        const fn = (target as any).__tpApplyHybridVelocity;
-        (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-      })();
-    } catch (err) {
+      try {
+        runHybridVelocity(hybridSilence);
+      } catch (err) {
       if (isDevMode()) {
         try {
           console.warn('[HYBRID] velocity refresh failed', err);
@@ -2025,11 +2033,7 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     reason,
   };
   scheduleHybridVelocityRefresh();
-  (() => {
-    const target = typeof window !== 'undefined' ? window : globalThis;
-    const fn = (target as any).__tpApplyHybridVelocity;
-    (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-  })();
+  runHybridVelocity(hybridSilence);
   if (isDevMode()) {
     let shouldLogBrake = true;
     if (reason === 'manual-scroll') {
@@ -2898,11 +2902,7 @@ function handleHybridSilenceTimeout() {
   if (!motorRunning) return;
   hybridSilence.pausedBySilence = true;
   speechActive = false;
-  (() => {
-    const target = typeof window !== 'undefined' ? window : globalThis;
-    const fn = (target as any).__tpApplyHybridVelocity;
-    (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-  })();
+  runHybridVelocity(hybridSilence);
   emitHybridSafety();
   armHybridSilenceTimer(softDelayMs);
   try { applyGate(); } catch {}
@@ -2923,11 +2923,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (state2.mode !== "hybrid") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    (() => {
-      const target = typeof window !== 'undefined' ? window : globalThis;
-      const fn = (target as any).__tpApplyHybridVelocity;
-      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-    })();
+    runHybridVelocity(hybridSilence);
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
@@ -3183,11 +3179,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    (() => {
-      const target = typeof window !== 'undefined' ? window : globalThis;
-      const fn = (target as any).__tpApplyHybridVelocity;
-      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-    })();
+    runHybridVelocity(hybridSilence);
     return true;
   }
   function getActiveBrakeFactor(now = nowMs()) {
@@ -3319,11 +3311,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   pauseAssistTailBoost = 0;
   pauseAssistTailUntil = 0;
   scheduleHybridVelocityRefresh();
-    (() => {
-      const target = typeof window !== 'undefined' ? window : globalThis;
-      const fn = (target as any).__tpApplyHybridVelocity;
-      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-    })();
+    runHybridVelocity(hybridSilence);
   }
 
   function handleHybridTargetHintEvent(ev: Event) {
@@ -4081,11 +4069,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         console.info(`[HYBRID] baseline updated from WPM: ${fmt(prev)} → ${fmt(candidate)}`);
       } catch {}
     }
-    (() => {
-      const target = typeof window !== 'undefined' ? window : globalThis;
-      const fn = (target as any).__tpApplyHybridVelocity;
-      (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-    })();
+      runHybridVelocity(hybridSilence);
     return candidate;
   }
 
@@ -4725,11 +4709,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       hybridSilence.pausedBySilence = true;
       speechActive = false;
       clearHybridSilenceTimer();
-      (() => {
-        const target = typeof window !== 'undefined' ? window : globalThis;
-        const fn = (target as any).__tpApplyHybridVelocity;
-        (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-      })();
+      runHybridVelocity(hybridSilence);
       armHybridSilenceTimer();
     } else {
       noteHybridSpeechActivity(normalizedTs, { source: "silence" });
@@ -4750,11 +4730,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        (() => {
-          const target = typeof window !== 'undefined' ? window : globalThis;
-          const fn = (target as any).__tpApplyHybridVelocity;
-          (typeof fn === 'function' ? fn : applyHybridVelocityCore)(hybridSilence);
-        })();
+        runHybridVelocity(hybridSilence);
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
