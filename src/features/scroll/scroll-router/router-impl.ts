@@ -403,7 +403,7 @@ function logHybridTruthLine(payload: {
   const fmt = (value: number | undefined | null, digits: number) =>
     value == null || !Number.isFinite(value) ? null : +value.toFixed(digits);
   try {
-    console.warn("[HYBRID_TRUTH]", {
+    const truthPayload = {
       basePxps: fmt(payload.basePxps, 2),
       finalPxps: fmt(payload.finalPxps, 2),
       errorPx: fmt(payload.errorPx, 1),
@@ -411,17 +411,18 @@ function logHybridTruthLine(payload: {
       effectiveErrorLines: fmt(payload.effectiveErrorLines, 2),
       targetMult: fmt(payload.targetMult, 3),
       lineMult: fmt(payload.lineMult, 3),
-      bestSim: fmt(payload.bestSim, 3),
+      capReason: payload.capReason ?? "none",
       scaleReason: payload.scaleReason ?? null,
+      weakMatch: payload.weakMatch ?? null,
+      driftWeak: payload.driftWeak ?? null,
+      bestSim: fmt(payload.bestSim, 3),
+      offScriptActive: payload.offScriptActive ?? null,
       noMatch: payload.noMatch ?? null,
       sawNoMatch: payload.sawNoMatch ?? null,
       hardNoMatch: payload.hardNoMatch ?? null,
-      offScriptActive: payload.offScriptActive ?? null,
-      weakMatch: payload.weakMatch ?? null,
-      driftWeak: payload.driftWeak ?? null,
       targetTopSource: payload.targetTopSource ?? null,
-      capReason: payload.capReason ?? "none",
-    });
+    };
+    console.warn("[HYBRID_TRUTH]", JSON.stringify(truthPayload));
   } catch {}
 }
 
@@ -3764,18 +3765,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         : null;
     if (isDevMode()) {
       try {
-        console.info("[HYBRID_FINAL_MILE]", {
+        const finalMilePayload = {
           basePxps: base,
           deltaLines,
           errorPx,
           reactiveScale,
           policyMult,
           preClampScale,
+          capMax: maxClampScale,
+          floorMin: minScale,
           scaleAfterCaps,
           finalScale,
           finalPxps,
           reasons: finalReasons,
-        });
+        };
+        console.info("[HYBRID_FINAL_MILE]", JSON.stringify(finalMilePayload));
       } catch {}
     }
 
