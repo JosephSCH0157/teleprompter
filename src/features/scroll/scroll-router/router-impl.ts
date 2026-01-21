@@ -3597,9 +3597,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
 
     const deltaLines = Number.isFinite(errorLinesRaw) ? errorLinesRaw : 0;
     const absDL = Math.abs(deltaLines);
-    const deadbandLines = aggro ? 0.6 : 0.9;
-    const kUp = aggro ? 0.22 : 0.12;
-    const kDown = aggro ? 0.18 : 0.10;
+    const deadbandLines = aggro ? 0.45 : 0.75;
+    const kUp = aggro ? 0.32 : 0.18;
+    const kDown = aggro ? 0.26 : 0.14;
     let reactiveScale = 1.0;
     const reasons: string[] = [];
     if (absDL > deadbandLines) {
@@ -3607,8 +3607,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         deltaLines > 0
           ? 1 + kUp * (absDL - deadbandLines)
           : 1 - kDown * (absDL - deadbandLines);
-      const minReactive = aggro ? 0.60 : 0.70;
-      const maxReactive = aggro ? 1.60 : 1.35;
+      const minReactive = aggro ? 0.50 : 0.65;
+      const maxReactive = aggro ? 1.90 : 1.45;
       reactiveScale = clamp(raw, minReactive, maxReactive);
       reasons.push(deltaLines > 0 ? 'behind' : 'ahead');
     } else {
@@ -3724,7 +3724,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const effective = baseWithCorrection * effectiveScaleApplied;
     logHybridVelocityEvent({
       basePxps: base,
-      chosenScale: effectiveScale,
+      chosenScale: finalScale,
       brakeFactor,
       effective,
       rawAssist,
@@ -3780,6 +3780,18 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           `reasons=${finalReasons.join("|")}`,
         ];
         console.info("[HYBRID_FINAL_MILE]", logParts.join(" "));
+
+        const stateParts = [
+          `noMatch=${sawNoMatch}`,
+          `weakMatch=${weakMatch}`,
+          `hardNoMatch=${hardNoMatch}`,
+          `offScriptActive=${offScriptActive}`,
+          `reason=${reason}`,
+          `conf=${conf.toFixed(2)}`,
+          `sim=${sim.toFixed(2)}`,
+          `targetTopSrc=${errorInfo?.targetTopSource ?? "unknown"}`,
+        ];
+        console.info("[HYBRID_FINAL_MILE_STATE]", stateParts.join(" "));
       } catch {}
     }
 
@@ -4180,6 +4192,13 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
           offScript: hybridSilence.offScriptActive,
           pausedBySilence: silencePaused,
           effectivePxPerSec,
+          anchorTop: Number.isFinite(errorInfo?.anchorTop ?? NaN)
+            ? errorInfo?.anchorTop
+            : null,
+          currentTop: Number.isFinite(errorInfo?.currentScrollTop ?? NaN)
+            ? errorInfo?.currentScrollTop
+            : null,
+          targetTopSource: errorInfo?.targetTopSource ?? null,
         });
       } catch {}
     }
