@@ -210,35 +210,53 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
       </section>
 
       <section class="settings-panel" data-settings-panel="pricing" data-tab-content="pricing" hidden>
-        <div class="settings-card anim-in">
-          <h4>Pricing</h4>
-          <p>
-            Anvil is currently in private beta.
-          </p>
-          <p>
-            During this phase, full functionality is available to invited testers so the core
-            experience can be refined before public release.
-          </p>
-          <p><strong>What's Included in Beta</strong></p>
-          <ul>
-            <li>No watermarking.</li>
-            <li>All recording and scroll modes unlocked.</li>
-            <li>Local-first files - your scripts and recordings stay on your machine.</li>
-            <li>Full OBS integration.</li>
-            <li>Ongoing stability and usability improvements based on real-world use.</li>
-          </ul>
-          <p>
-            Feedback from this phase directly shapes Anvil's final pricing and feature tiers.
-          </p>
-          <p><strong>What Comes Next</strong></p>
-          <p>
-            Public pricing will be announced closer to launch, with simple, transparent tiers
-            designed for independent creators - not enterprise bloat.
-          </p>
-          <p>
-            Early supporters and beta testers will receive priority access when paid plans go live.
-          </p>
+      <div class="settings-card anim-in">
+        <h4>Anvil Teleprompter</h4>
+        <p>Professional teleprompting for podcasters and creators who read out loud.</p>
+        <p>
+          Anvil is built for real-world recording — not influencer scripts, not AI voices, not gimmicks.
+          It stays with you as you speak, adapts when you pause or speed up, and keeps your delivery natural.
+        </p>
+        <h5>Pricing</h5>
+        <div class="row gap">
+          <div class="settings-value">
+            <strong>$15</strong>
+            <span>/ month</span>
+          </div>
+          <div class="settings-meta">Cancel anytime</div>
         </div>
+        <div class="row gap">
+          <div class="settings-value">
+            <strong>$40</strong>
+            <span>/ quarter</span>
+          </div>
+          <div class="settings-meta">3 months · Save $5</div>
+        </div>
+        <p><strong>What’s included</strong></p>
+        <ul>
+          <li>Speech-synced & Hybrid scrolling keeps you in rhythm without rigid pacing.</li>
+          <li>Manual, WPM, and Hybrid modes so you can pick the workflow that fits now.</li>
+          <li>Mirrored display support for tablets, monitors, or teleprompter glass.</li>
+          <li>Recording controls & OBS integration — stay in flow while managing takes.</li>
+          <li>Script formatting & validation with pacing cues/safety checks.</li>
+          <li>Ongoing updates included — improvements ship with your subscription.</li>
+        </ul>
+        <p><strong>What this subscription covers</strong></p>
+        <p>
+          This plan includes Anvil only. Other tools in the Podcaster’s Forge ecosystem (script writing,
+          editing, publishing) are not included at this time and may become separate offers in the future.
+        </p>
+        <p><strong>Built for real voices</strong></p>
+        <p>
+          Anvil doesn’t try to sound like you. It doesn’t replace you. It helps you deliver — smoothly,
+          confidently, and naturally. If you record podcasts, videos, or long-form spoken content,
+          Anvil is built for the way you actually work.
+        </p>
+        <p><strong>Ready to get started?</strong></p>
+        <p>
+          Start with Anvil.
+        </p>
+      </div>
       </section>
 
       <section class="settings-panel" data-settings-panel="about" data-tab-content="about" hidden>
