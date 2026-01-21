@@ -3485,7 +3485,13 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridCtrl.lineSource = targetMultSource;
     const silenceCap = computeSilenceCapMultiplier(silenceMs);
     const dtMs = hybridCtrl.lastTs > 0 ? Math.max(0, now - hybridCtrl.lastTs) : 0;
-    const lineMult = updateHybridLineMult(candidateTargetMult, dtMs, deltaLines > 0);
+    const errorLinesRaw =
+      Number.isFinite(errorInfo?.errorLines ?? NaN) && errorInfo?.errorLines != null
+        ? errorInfo.errorLines
+        : Number.isFinite(effectiveErrorLines ?? NaN)
+        ? effectiveErrorLines
+        : 0;
+    const lineMult = updateHybridLineMult(candidateTargetMult, dtMs, errorLinesRaw > 0);
     let appliedTargetMult = Number.isFinite(lineMult) ? lineMult : 1;
     const offScriptSeverity = computeOffScriptSeverity();
     const offScriptCap = Math.max(
@@ -3534,8 +3540,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const confMin = (aggro && commitBoost) ? 0.35 : 0.65;
     const simMin = (aggro && commitBoost) ? 0.45 : 0.55;
 
-    const errorLinesRaw =
-      (errorInfo?.errorLines ?? effectiveErrorLines ?? 0) as number;
     const needCatchUp = Number.isFinite(errorLinesRaw) ? errorLinesRaw > 0 : false;
 
     const conf = Number.isFinite(errorInfo?.confidence ?? NaN)
