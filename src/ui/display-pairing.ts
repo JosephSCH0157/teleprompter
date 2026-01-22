@@ -1,5 +1,6 @@
 import { getNetworkDisplayStatus, onNetworkDisplayStatus } from '../net/display-ws-client';
-import { PairQrPayload, requestPairQr } from '../pairing/pairing-api';
+import type { PairQrPayload } from '../pairing/pairing-api';
+import { requestPairQr } from '../pairing/pairing-api';
 
 type PairingState = PairQrPayload & { expiresMs: number };
 
@@ -16,7 +17,7 @@ type Elements = {
 };
 
 let modalElements: Elements | null = null;
-let currentPairing: PairingState | null = null;
+let _currentPairing: PairingState | null = null;
 let isRefreshing = false;
 let expiryTimer: number | null = null;
 
@@ -284,7 +285,7 @@ async function ensurePairingToken() {
   if (!modalElements) return;
   isRefreshing = true;
   updateStatusText('Generating token...');
-  currentPairing = null;
+  _currentPairing = null;
   clearExpiryTimer();
   try {
     const pairing = await requestPairQr({
@@ -298,7 +299,7 @@ async function ensurePairingToken() {
       ? Date.parse(pairing.expiresAt)
       : Date.now() + 10 * 60 * 1000;
 
-    currentPairing = { ...pairing, expiresMs };
+    _currentPairing = { ...pairing, expiresMs };
     updateInput(pairing.pairUrl);
     renderQrSvg(pairing.qrSvg);
     updateStatusText(`Expires at ${new Date(expiresMs).toLocaleTimeString()}`);
