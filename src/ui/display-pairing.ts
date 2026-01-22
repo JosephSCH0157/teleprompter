@@ -262,19 +262,37 @@ function updateInput(url: string) {
 
 function renderQrSvg(svg: string) {
   if (!modalElements?.qr) return;
-  modalElements.qr.innerHTML = svg || '<span>QR unavailable</span>';
+  const trimmed = (svg || '').trim();
+  if (trimmed.toLowerCase().startsWith('<svg')) {
+    modalElements.qr.innerHTML = trimmed;
+  } else {
+    modalElements.qr.innerHTML = '<span>QR unavailable</span>';
+  }
+}
+
+function formatRemaining(remainingMs: number): string {
+  const totalSec = Math.max(0, Math.ceil(remainingMs / 1000));
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 function startExpirySchedule(expiresMs: number) {
   clearExpiryTimer();
+  const scheduleRefresh = () => {
+    updateStatusText('Token expired. Refreshing…');
+    setTimeout(() => {
+      ensurePairingToken();
+    }, 1200);
+  };
   const update = () => {
     const remaining = Math.max(0, expiresMs - Date.now());
     if (remaining <= 0) {
       clearExpiryTimer();
-      updateStatusText('Token expired. Refresh to generate a new one.');
+      scheduleRefresh();
       return;
     }
-    updateStatusText(`Expires in ${Math.ceil(remaining / 1000)}s`);
+    updateStatusText(`Expires in ${formatRemaining(remaining)}`);
   };
   update();
   expiryTimer = window.setInterval(update, 1000);
@@ -287,10 +305,12 @@ async function ensurePairingToken() {
   updateStatusText('Generating token...');
   _currentPairing = null;
   clearExpiryTimer();
+  const baseUrl = window.location.origin;
+  const pairPath = '/display/pair';
   try {
     const pairing = await requestPairQr({
-      baseUrl: window.location.origin,
-      pairPath: '/display/pair',
+      baseUrl,
+      pairPath,
       ttlMinutes: 10,
       metadata: { role: 'display', app: 'anvil' },
     });
@@ -303,6 +323,19 @@ async function ensurePairingToken() {
     updateInput(pairing.pairUrl);
     renderQrSvg(pairing.qrSvg);
     updateStatusText(`Expires at ${new Date(expiresMs).toLocaleTimeString()}`);
+    if (typeof window !== 'undefined') {
+      const devFlag = Boolean((window as any).__TP_DEV || (window as any).__TP_DEV1);
+      if (devFlag) {
+        const expiresInSec = Math.max(0, Math.round((expiresMs - Date.now()) / 1000));
+        const tokenPrefix = pairing.token?.slice?.(0, 6) ?? '';
+        console.info('[pairing] qr', {
+          tokenPrefix,
+          expiresInSec,
+          pairPath,
+          baseUrl,
+        });
+      }
+    }
     startExpirySchedule(expiresMs);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unable to generate pairing token.';
