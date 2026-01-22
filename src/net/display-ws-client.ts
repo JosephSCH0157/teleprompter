@@ -78,10 +78,23 @@ const updateStatus = (patch: Partial<RelayStatus>) => {
   notifyListeners();
 };
 
+const isLocalhostHost = (host: string): boolean => {
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1' ||
+    host.endsWith('.local')
+  );
+};
+
 const getWsUrl = () => {
   if (typeof window === 'undefined') return null;
   try {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const hostname = window.location.hostname || '';
+    if (!isLocalhostHost(hostname)) {
+      return null;
+    }
     const host = window.location.host;
     return `${protocol}//${host}/ws/display`;
   } catch {
