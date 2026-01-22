@@ -1,6 +1,6 @@
 import { getNetworkDisplayStatus, onNetworkDisplayStatus } from '../net/display-ws-client';
 import type { PairQrPayload } from '../pairing/pairing-api';
-import { requestPairQr } from '../pairing/pairing-api';
+import { pairingApiUrl, requestPairQr } from '../pairing/pairing-api';
 
 type PairingState = PairQrPayload & { expiresMs: number };
 
@@ -260,9 +260,14 @@ function updateInput(url: string) {
   }
 }
 
+const MAX_QR_SVG_LENGTH = 200_000;
+
 function renderQrSvg(svg: string) {
   if (!modalElements?.qr) return;
-  const trimmed = (svg || '').trim();
+  let trimmed = (svg || '').trim();
+  if (trimmed.length > MAX_QR_SVG_LENGTH) {
+    trimmed = trimmed.slice(0, MAX_QR_SVG_LENGTH);
+  }
   if (trimmed.toLowerCase().startsWith('<svg')) {
     modalElements.qr.innerHTML = trimmed;
   } else {
@@ -328,12 +333,17 @@ async function ensurePairingToken() {
       if (devFlag) {
         const expiresInSec = Math.max(0, Math.round((expiresMs - Date.now()) / 1000));
         const tokenPrefix = pairing.token?.slice?.(0, 6) ?? '';
-        console.info('[pairing] qr', {
-          tokenPrefix,
-          expiresInSec,
-          pairPath,
-          baseUrl,
-        });
+        const fnUrl = pairingApiUrl();
+        console.info(
+          '[pairing] TP_PAIR_QR',
+          {
+            tokenPrefix,
+            expiresInSec,
+            pairPath,
+            baseUrl,
+            fnUrl,
+          },
+        );
       }
     }
     startExpirySchedule(expiresMs);

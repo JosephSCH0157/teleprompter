@@ -77,4 +77,8 @@ export async function requestPairQr(opts: PairQrOpts): Promise<PairQrPayload> {
   };
 }
 
+export function pairingApiUrl(): string {
+  return PAIR_QR_URL;
+}
+
 export type { PairQrPayload };
