@@ -8,6 +8,15 @@
   "errors": [],
   "console": [
     {
+      "type": "log",
+      "text": "[CI-ANCHORS] after-static-html OK",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 1159,
+        "columnNumber": 16
+      }
+    },
+    {
       "type": "info",
       "text": "[VIEWER_ROLE] JSHandle@object",
       "location": {
@@ -422,6 +431,15 @@
       }
     },
     {
+      "type": "log",
+      "text": "[CI-ANCHORS] window-load OK",
+      "location": {
+        "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
+        "lineNumber": 1159,
+        "columnNumber": 16
+      }
+    },
+    {
       "type": "info",
       "text": "[ASR_ORCH] LIVE envelope v2025-12-30b",
       "location": {
@@ -782,21 +800,21 @@
       }
     },
     {
-      "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 51739,
-        "columnNumber": 16
-      }
-    },
-    {
       "type": "warning",
       "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 50560,
         "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 51739,
+        "columnNumber": 16
       }
     },
     {
@@ -874,7 +892,7 @@
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 52 candidate controls"
+    "Found 51 candidate controls"
   ],
   "meta": {
     "target": {
@@ -883,9 +901,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "7f7412a75ab4ae3fd99decc318e19fd5fe99c090",
+      "gitSha": "c179208108e5c66c5ded3f752eb83e7c42479f68",
       "branch": "main",
-      "buildTime": "2026-01-23T02:38:59.189Z"
+      "buildTime": "2026-01-23T07:13:05.877Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
