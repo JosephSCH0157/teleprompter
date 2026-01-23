@@ -759,234 +759,233 @@
   <button id="shortcutsClose" class="btn-chip btn-close" data-action="help-close">Close</button>
     </header>
 
-    <div class="shortcuts-grid">
-      <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
-      <div><strong>ArrowUp / ArrowDown or + / -</strong></div><div>Adjust Auto-scroll speed (+/-1)</div>
-      <div><strong>Shift + ArrowUp / ArrowDown</strong></div><div>Adjust by +/-5</div>
-      <div><strong>Mouse-wheel on speed field</strong></div><div>+/-1 (Shift: +/-5)</div>
-      <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
-      <div><strong>Shift + /</strong></div><div>Open Help</div>
-      <div><strong>Ctrl/Cmd + O</strong></div><div>Load selected script from mapped folder</div>
-      <div><strong>Ctrl/Cmd + S</strong></div><div>Save</div>
-      <div><strong>F2</strong></div><div>Rename selected script</div>
-      <div><strong>Delete</strong></div><div>Delete selected script</div>
+    <div class="help-content">
+      <section>
+        <h3>Anvil - Help &amp; Troubleshooting Guide</h3>
+        <p>This page is written to do two things well:</p>
+        <ol>
+          <li>Get you productive in Anvil <em>fast</em>.</li>
+          <li>Help you <strong>diagnose and fix scripts that refuse to render</strong> without guessing.</li>
+        </ol>
+        <p>If something breaks, this page assumes it's <em>your script first, settings second, environment last</em> and walks you through that order.</p>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Mental Model (Read This First)</h4>
+        <p>Anvil is intentionally strict. If your script violates the rules, Anvil <strong>will not partially render it</strong>. It will render <strong>nothing</strong>.</p>
+        <p>That's not a bug. It's a safety feature.</p>
+        <p>Why?</p>
+        <ul>
+          <li>Partial renders hide errors</li>
+          <li>Hidden errors break cadence mid-recording</li>
+          <li>Silent failures are worse than loud ones</li>
+        </ul>
+        <p>So when a script fails, Anvil stops and tells you exactly why - <em>if you know where to look</em>.</p>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Fast Start (60 seconds)</h4>
+        <ol>
+          <li>Paste or load your script into the editor</li>
+          <li>Make sure every speaker block is valid</li>
+          <li>Click <strong>Render</strong> (or Start)</li>
+          <li>If the script goes blank -> open <strong>Validate Script</strong></li>
+        </ol>
+        <p>If you only remember one thing from this page, remember this:</p>
+        <blockquote><strong>Blank script = validation error</strong></blockquote>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Script Structure Rules (Non-Negotiable)</h4>
+        <h5>Speaker Tags (Most Common Failure)</h5>
+        <p>Anvil only accepts these speaker tags:</p>
+        <pre><code>[s1] ... [/s1]
+[s2] ... [/s2]
+[g1] ... [/g1]
+[g2] ... [/g2]</code></pre>
+        <p><strong>Rules:</strong></p>
+        <ul>
+          <li>Opening tag must be on its own line</li>
+          <li>Closing tag must be on its own line</li>
+          <li>Tags may not overlap</li>
+          <li>Every opening tag must close</li>
+        </ul>
+        <p>Valid</p>
+        <pre><code>[s1]
+This is a full paragraph.
+It can span multiple lines.
+[/s1]</code></pre>
+        <p>Invalid (will blank the script)</p>
+        <pre><code>[s1] This line breaks the rule [/s1]</code></pre>
+        <p>Invalid (overlap)</p>
+        <pre><code>[s1]
+Joe starts talking
+[s2]
+Brad jumps in
+[/s1]
+[/s2]</code></pre>
+
+        <h5>Notes vs Spoken Text</h5>
+        <p>Notes are <em>not</em> spoken and are hidden in the teleprompter view.</p>
+        <pre><code>[note]
+Production direction goes here
+[/note]</code></pre>
+        <ul>
+          <li>Notes must be fully enclosed</li>
+          <li>Notes cannot contain speaker tags</li>
+        </ul>
+
+        <h5>Pacing Cues (Visible)</h5>
+        <p>These <em>are</em> visible to the reader:</p>
+        <pre><code>[pause]
+[beat]
+[reflective pause]</code></pre>
+        <p>They can appear inline inside a speaker block.</p>
+
+        <h5>Inline Styling (Must Close)</h5>
+        <p>Allowed inline tags:</p>
+        <pre><code>[b]bold[/b]
+[i]italic[/i]
+[u]underline[/u]
+[color=#hex]text[/color]
+[bg=#hex]text[/bg]</code></pre>
+        <p><strong>Every inline tag must close.</strong></p>
+        <p>This will break rendering:</p>
+        <pre><code>[b]Bold text without a close</code></pre>
+        <hr>
+      </section>
+
+      <section>
+        <h4>When a Script Refuses to Render</h4>
+        <h5>Step 1: Open Validate Script</h5>
+        <p>Click <strong>Validate Script</strong>. Anvil will show:</p>
+        <ul>
+          <li>The exact error</li>
+          <li>The rule you violated</li>
+          <li>Why rendering stopped</li>
+        </ul>
+        <p>If you skip this step, you're guessing.</p>
+
+        <h5>Step 2: Read the <em>First</em> Error Only</h5>
+        <p>Fix errors <strong>top-down</strong>. One broken tag can cause 10 fake downstream errors. Always fix the <strong>first reported error</strong>, then re-validate.</p>
+
+        <h5>Step 3: Common Failure Patterns</h5>
+        <p><strong>1. Blank Script Immediately</strong></p>
+        <ul>
+          <li>Missing closing speaker tag</li>
+          <li>Crossed speaker tags</li>
+          <li>Inline tag not closed</li>
+        </ul>
+        <p><strong>2. Script Renders Then Vanishes</strong></p>
+        <ul>
+          <li>A later section violates rules</li>
+          <li>Inline style broken halfway down</li>
+        </ul>
+        <p><strong>3. Only One Speaker Shows</strong></p>
+        <ul>
+          <li>Check correct tag names (<code>s1</code> vs <code>S1</code> is invalid)</li>
+          <li>Closing tags present</li>
+        </ul>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Debugging Like a Pro</h4>
+        <h5>Enable Dev Mode</h5>
+        <p>Add one of these:</p>
+        <ul>
+          <li><code>?dev=1</code> to the URL</li>
+          <li><code>#dev</code> to the URL</li>
+          <li><code>localStorage.setItem('tp_dev_mode','1')</code></li>
+        </ul>
+        <p>Reload the page. You'll now see:</p>
+        <ul>
+          <li>HUD logs</li>
+          <li>Validation details</li>
+          <li>Render lifecycle messages</li>
+        </ul>
+
+        <h5>HUD Signals That Matter</h5>
+        <p>Look for:</p>
+        <ul>
+          <li><code>VALIDATION_FAILED</code></li>
+          <li><code>SCRIPT_PARSE_ERROR</code></li>
+          <li><code>TAG_MISMATCH</code></li>
+        </ul>
+        <p>If the HUD says render aborted, the script <em>did not pass validation</em>.</p>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Importing Scripts (DOCX / TXT)</h4>
+        <h5>DOCX Gotchas</h5>
+        <p>DOCX imports often fail due to:</p>
+        <ul>
+          <li>Smart quotes</li>
+          <li>Hidden formatting</li>
+          <li>Copy-pasted bullet glyphs</li>
+        </ul>
+        <p><strong>Best practice:</strong></p>
+        <ol>
+          <li>Import</li>
+          <li>Immediately Validate</li>
+          <li>Fix structural tags manually</li>
+        </ol>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Display Mirror Issues</h4>
+        <p>If the <strong>main window renders but the display is blank</strong>:</p>
+        <ol>
+          <li>Make sure the main script is rendered first</li>
+          <li>Reload the display window</li>
+          <li>Confirm both windows are on the same origin</li>
+        </ol>
+        <p>The display window cannot fix a broken script - it only mirrors.</p>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Absolute Last Resort Checklist</h4>
+        <ol>
+          <li>Copy the script</li>
+          <li>Paste into a plain-text editor</li>
+          <li>Re-add speaker tags manually</li>
+          <li>Validate again</li>
+        </ol>
+        <p>This eliminates invisible characters and formatting junk.</p>
+        <hr>
+      </section>
+
+      <section>
+        <h4>Design Philosophy (Why It's This Strict)</h4>
+        <p>Anvil is built for <em>live recording</em>. A teleprompter that silently ignores errors is dangerous.</p>
+        <p>Anvil would rather:</p>
+        <ul>
+          <li>Refuse to render</li>
+          <li>Tell you exactly why</li>
+          <li>Force a fix <em>before</em> recording</li>
+        </ul>
+        <p>Than let you discover the problem mid-take.</p>
+        <hr>
+      </section>
+
+      <section>
+        <h4>TL;DR</h4>
+        <ul>
+          <li>Blank script = validation error</li>
+          <li>Always open <strong>Validate Script</strong></li>
+          <li>Fix the <strong>first</strong> error only</li>
+          <li>Speaker tags must be perfect</li>
+          <li>Inline styles must close</li>
+        </ul>
+        <p>Once you internalize the rules, Anvil becomes boringly reliable - exactly what you want when the camera is rolling.</p>
+      </section>
     </div>
-    <section id="help-asr">
-      <h3>Speech-to-Text (ASR) Settings</h3>
-      <p>Anvil can listen to your voice and auto-scroll to follow you. Pick an engine and tune how it behaves.</p>
-
-      <h4>ASR Engines</h4>
-      <h5>Web Speech (Browser)</h5>
-      <p>Built-in browser recognition (e.g., Chrome Web Speech).</p>
-      <ul>
-        <li><strong>Pros:</strong> Very fast, no setup.</li>
-        <li><strong>Cons:</strong> Accuracy varies by browser/device; sensitive to noise.</li>
-      </ul>
-      <p>Use for quick tests or casual recordings.</p>
-
-      <h5>Offline Engine</h5>
-      <p>Local recognizer (no internet needed).</p>
-      <ul>
-        <li><strong>Pros:</strong> Private, consistent, works offline.</li>
-        <li><strong>Cons:</strong> Slightly slower; accuracy depends on model/hardware.</li>
-      </ul>
-      <p>Use when you want privacy or unreliable internet.</p>
-
-      <h5>Whisper Bridge</h5>
-      <p>High-accuracy Whisper (local or cloud-backed).</p>
-      <ul>
-        <li><strong>Pros:</strong> Excellent accuracy; handles accents and noisy rooms.</li>
-        <li><strong>Cons:</strong> Cloud use may spend tokens; a bit more latency.</li>
-      </ul>
-      <p>Use for serious podcast/video work.</p>
-
-      <h4>Common Options</h4>
-      <h5>Language</h5>
-      <p>Language you are speaking. Passed to the engine for correct interpretation.</p>
-
-      <h5>Use interim results</h5>
-      <p>Allows partial guesses before a sentence is done for faster scroll response.</p>
-      <ul>
-        <li><strong>On:</strong> Faster, more "live" scroll; can be jumpy in noise.</li>
-        <li><strong>Off:</strong> Waits for finalized phrases; smoother but slower.</li>
-      </ul>
-
-      <h5>Filter filler words</h5>
-      <p>Drop "um/uh/like..." so scroll matches script better and jitters less.</p>
-
-      <h4>Advanced Controls</h4>
-      <h5>Confidence threshold</h5>
-      <p>Minimum confidence (0.0-1.0) before accepting words.</p>
-      <ul>
-        <li><strong>Higher (0.8-0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
-        <li><strong>Lower (0.4-0.6):</strong> More responsive; occasional wrong words.</li>
-      </ul>
-
-      <h5>End-pointing ("s)</h5>
-      <p>Silence duration before a phrase finalizes (1,000,000 "s = 1s).</p>
-      <ul>
-        <li><strong>Lower (200k-400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
-        <li><strong>Higher (800k-1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
-      </ul>
-
-      <h4>Suggested Starting Points</h4>
-      <ul>
-        <li><strong>Podcast:</strong> Whisper Bridge; interim on; fillers on; threshold 0.55; end-pointing 900,000 "s.</li>
-        <li><strong>Fast live:</strong> Web Speech; interim on; fillers off; threshold 0.40; end-pointing 400,000 "s.</li>
-        <li><strong>Noisy room:</strong> Whisper Bridge; interim off; fillers on; threshold 0.70; end-pointing 1,000,000 "s.</li>
-      </ul>
-      <p>Tweak to taste: raise threshold/end-pointing to calm jitter; lower them to speed up.</p>
-    </section>
-    <section id="help-speaker-tags">
-      <h3>Speaker Tags (Strict - scripts won't render if invalid)</h3>
-      <p>Speaker tags must be on their own lines.</p>
-      <p><strong>? Correct:</strong></p>
-      <pre>[s1]
-(lines of text...)
-[/s1]</pre>
-      <p><strong>? Wrong:</strong> Intro [s1] or [s1] Hello</p>
-      <p>Every opening tag MUST have a matching closing tag.</p>
-      <p>[s1] must close with [/s1], [s2] with [/s2], [g1] with [/g1], [g2] with [/g2].</p>
-      <p>No overlaps / no crossing tags.</p>
-      <p><strong>? Wrong:</strong></p>
-      <pre>[s1]
-text...
-[s2]
-text...
-[/s1]
-[/s2]</pre>
-      <p>(This will fail validation and can render as a blank script.)</p>
-      <p>Notes are hidden in the teleprompter view:</p>
-      <p>Put production-only direction inside <code>[note] ... [/note]</code> on their own lines.</p>
-      <p>Visible pacing cues must be bracketed:</p>
-      <p>Use <code>[pause]</code>, <code>[beat]</code>, <code>[reflective pause]</code> inline where you want the pause to happen.</p>
-      <p>Allowed inline styling (must be closed):</p>
-      <p><code>[color=red]...[/color]</code>, <code>[bg=#112233]...[/bg]</code>, <code>[b]...[/b]</code>, <code>[i]...[/i]</code>, <code>[u]...[/u]</code></p>
-      <p>Quick wrap shortcuts: 1 / 2 / 3 / 4 wraps selection with <code>[s1]/[s2]/[g1]/[g2]</code></p>
-      <pre>[s1]
-Hey folks. This is BS with Joe. [beat]
-Tonight we're covering one idea.
-[/s1]
-
-[s2]
-Alright. [pause]
-Let's do it.
-[/s2]
-
-[note]
-Cold open: keep it tight, smile, 2 seconds of silence before first line.
-[/note]</pre>
-    </section>
-    <section id="help-tag-errors">
-      <h3>Tag Validator Errors (What Went Wrong &amp; How to Fix It)</h3>
-      <p>If your script fails validation, nothing will display. Every error below stops rendering by design.</p>
-      <ol>
-        <li>
-          <strong>Missing Closing Tag</strong>
-          <p><span role="img" aria-label="error">?</span> Missing closing tag: [s1] was opened but never closed.</p>
-          <p>You started a speaker block but forgot to end it. Add the matching closing tag on its own line.</p>
-          <pre>[s1]
-This line has a speaker.
-
-? Fix:
-
-[s1]
-This line has a speaker.
-[/s1]</pre>
-        </li>
-        <li>
-          <strong>Closing Tag Without Opening Tag</strong>
-          <p><span role="img" aria-label="error">?</span> Orphan closing tag: [/s2] found with no matching opening tag.</p>
-          <p>You closed a speaker that was never opened. Either remove the closing tag or add the correct opening tag above it.</p>
-        </li>
-        <li>
-          <strong>Overlapping / Crossed Speaker Tags</strong>
-          <p><span role="img" aria-label="error">?</span> Invalid tag nesting: speaker tags cannot overlap or cross.</p>
-          <p>Start one speaker, close it, then start another - no nested/parallel blocks.</p>
-          <pre>[s1]
-Joe starts talking.
-[s2]
-Brad jumps in.
-[/s1]
-[/s2]</pre>
-          <p>Correct:</p>
-          <pre>[s1]
-Joe starts talking.
-[/s1]
-
-[s2]
-Brad jumps in.
-[/s2]</pre>
-        </li>
-        <li>
-          <strong>Speaker Tag Not on Its Own Line</strong>
-          <p><span role="img" aria-label="error">?</span> Invalid speaker tag placement: [s1] must be on its own line.</p>
-          <p>Speaker tags cannot share a row with text.</p>
-          <pre>[s1] Hey folks, this is BS with Joe.</pre>
-          <p>Correct:</p>
-          <pre>[s1]
-Hey folks, this is BS with Joe.
-[/s1]</pre>
-        </li>
-        <li>
-          <strong>Unknown or Unsupported Tag</strong>
-          <p><span role="img" aria-label="error">?</span> Unknown tag detected: [speaker1]</p>
-          <p>Only these tags are valid:</p>
-          <p>Speakers: [s1]/[s2]/[g1]/[g2]</p>
-          <p>Notes/cues/inline: [note]/[pause]/[beat]/[reflective pause]/[color=...]/[bg=#hex]/[b]/[i]/[u]</p>
-        </li>
-        <li>
-          <strong>Unclosed Inline Style Tag</strong>
-          <p><span role="img" aria-label="error">?</span> Unclosed inline tag: [color=red] was never closed.</p>
-          <p>Inline tags must be closed just like HTML.</p>
-          <pre>[color=red]This is emphasized text.</pre>
-          <p>Correct:</p>
-          <pre>[color=red]This is emphasized text.[/color]</pre>
-        </li>
-        <li>
-          <strong>Notes Tag Misuse</strong>
-          <p><span role="img" aria-label="error">?</span> [note] tag must open and close on its own lines.</p>
-          <p>Notes are block-level only.</p>
-          <pre>[note]Camera tight shot[/note]</pre>
-          <p>Correct:</p>
-          <pre>[note]
-Camera tight shot.
-[/note]</pre>
-        </li>
-        <li>
-          <strong>Text Outside Any Speaker Block</strong>
-          <p><span role="img" aria-label="error">?</span> Text found outside of a speaker block.</p>
-          <p>Every spoken line must live inside [s1]/[s2]/[g1]/[g2].</p>
-          <pre>Welcome back to the show.
-[s1]
-Joe starts here.
-[/s1]</pre>
-          <p>Correct:</p>
-          <pre>[s1]
-Welcome back to the show.
-Joe starts here.
-[/s1]</pre>
-        </li>
-        <li>
-          <strong>Empty Speaker Block</strong>
-          <p><span role="img" aria-label="error">?</span> Empty speaker block: [s2] contains no text.</p>
-          <p>Either add content or delete the empty block.</p>
-        </li>
-        <li>
-          <strong>Multiple Speaker Blocks Open at Once</strong>
-          <p><span role="img" aria-label="error">?</span> Multiple active speaker blocks detected.</p>
-          <p>Speakers are sequential - you cannot have two blocks open simultaneously.</p>
-        </li>
-        <li>
-          <strong>Validation Halt (Why the Script Is Blank)</strong>
-          <p><span role="img" aria-label="error">?</span> Script validation failed. Rendering halted to prevent incorrect display.</p>
-          <p>The system refuses to guess. Fix the first listed error - many others disappear after that.</p>
-        </li>
-      </ol>
-      <p>Tip: If your script suddenly appears blank, check for a missing or crossed speaker tag. One incorrect tag stops the entire render.</p>
-    </section>
-    <!-- JS will inject the Tag Guide here, including the Normalize button -->
-  </div>
 </div><!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
 <div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings" hidden>
   <div class="sheet settings-sheet">
