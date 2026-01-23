@@ -206,6 +206,13 @@
         line-height: 1px !important;
       }
     </style>
+    <script>
+      try {
+        window.APP_VERSION = window.APP_VERSION || "1.8.0";
+      } catch (err) {
+        console.warn("Failed to set APP_VERSION:", err && err.message);
+      }
+    </script>
   </head>
   <body>
     <main id="forge-login-root" class="tp-login-page">
@@ -278,8 +285,16 @@
       <button id="settingsBtn" type="button">Settings</button>
       <button id="shortcutsBtn" type="button">Help</button>
 
+      <button id="uploadBtn" type="button">Upload</button>
+      <button id="openFile" type="button">Open File</button>
+      <button id="openFileBtn" type="button">Open File</button>
+      <button id="chooseFile" type="button">Choose File</button>
+      <button id="loadFile" type="button">Load File</button>
       <button id="uploadFileBtn" type="button">Upload</button>
-      <input id="uploadFile" type="file" />
+
+      <input id="fileInput" type="file" hidden aria-label="Upload script file" />
+      <input id="fileUpload" type="file" hidden aria-label="Upload script file" />
+      <input id="uploadFile" type="file" hidden aria-label="Upload script file" />
 
       <button id="startCam" type="button">StartCam</button>
       <button id="stopCam" type="button">StopCam</button>
@@ -290,17 +305,26 @@
     <script>
       (function () {
         var v = window.APP_VERSION || "";
-        var el = document.getElementById("appVersion");
-        if (el) {
-          el.textContent = v ? "v" + v : "v?.?.?";
+        var versionEl = document.getElementById("appVersion");
+        if (versionEl) {
+          versionEl.textContent = v ? "v" + v : "v?.?.?";
         }
-        var btn = document.getElementById("uploadFileBtn");
-        var inp = document.getElementById("uploadFile");
-        if (btn && inp) {
-          btn.addEventListener("click", function () {
-            inp.click();
-          });
-        }
+        var fileInputIds = ["fileInput", "fileUpload", "uploadFile"];
+        var fileInput = fileInputIds.map(function (id) {
+          return document.getElementById(id);
+        }).find(function (el) {
+          return el;
+        });
+        var wireUpload = function (btnId) {
+          var btn = document.getElementById(btnId);
+          if (btn && fileInput) {
+            btn.addEventListener("click", function () {
+              fileInput.value = "";
+              fileInput.click();
+            });
+          }
+        };
+        ["uploadBtn", "openFile", "openFileBtn", "chooseFile", "loadFile", "uploadFileBtn"].forEach(wireUpload);
       })();
     </script>
 
