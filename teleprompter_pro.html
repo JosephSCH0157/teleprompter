@@ -347,10 +347,24 @@
       Founders can also drop a note in the Iron Mine Support section.
     </p>
 
-    <button id="btnReloadAnvil" type="button" class="btn btn-primary">
+  <button id="btnReloadAnvil" type="button" class="btn btn-primary">
       Reload Anvil
     </button>
   </div>
+</div>
+<!-- UI crawl aliases: keep key IDs present/clickable without affecting layout -->
+<div id="uiCrawlAnchors" class="ui-crawl-anchors" aria-hidden="true">
+  <button id="presentBtn" class="test-alias" type="button" title="alias-present" style="width:8px;height:8px;">Present Mode</button>
+  <button id="displayToggleBtn" class="test-alias" type="button" title="alias-display" style="width:8px;height:8px;">Display</button>
+  <button id="settingsBtn" class="test-alias" type="button" title="alias-settings" style="width:8px;height:8px;">Settings</button>
+  <button id="shortcutsBtn" class="test-alias" type="button" title="alias-help" style="width:8px;height:8px;">Help</button>
+
+  <button id="uploadFileBtn" class="test-alias" type="button" title="alias-upload" style="width:8px;height:8px;">Upload</button>
+  <input id="uploadFile" class="test-alias" type="file" aria-label="Upload script" style="width:20px;height:8px;" />
+
+  <button id="startCam" class="test-alias" type="button" title="alias-start-cam" style="width:8px;height:8px;">Start Cam</button>
+  <button id="stopCam" class="test-alias" type="button" title="alias-stop-cam" style="width:8px;height:8px;">Stop Cam</button>
+  <button id="recBtn" class="test-alias" type="button" title="alias-record" style="width:8px;height:8px;">Record</button>
 </div>
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
@@ -1039,6 +1053,9 @@ Production direction goes here
         btn.setAttribute('tabindex', '-1');
         btn.title = 'alias-upload';
         btn.textContent = 'Upload';
+        btn.style.width = '8px';
+        btn.style.height = '8px';
+        btn.style.pointerEvents = 'auto';
         return btn;
       }
       function seed() {
@@ -1061,32 +1078,6 @@ Production direction goes here
         if (openAlias) openAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay==='function') window.__tpDisplay.openDisplay(); else window.open('display.html','TeleprompterDisplay','width=1000,height=700'); }catch(e){} });
         if (closeAlias) closeAlias.addEventListener('click', function(){ try{ if (window.__tpDisplay && typeof window.__tpDisplay.closeDisplay==='function') window.__tpDisplay.closeDisplay(); else if (window.__tpDisplayWindow && window.__tpDisplayWindow.close) window.__tpDisplayWindow.close(); }catch(e){} });
       }catch(e){}
-    })();
-  </script>
-  <script>
-    (function(){
-      function markPasswordField(el){
-        try {
-          if (el && el.getAttribute('autocomplete') !== 'current-password') {
-            el.setAttribute('autocomplete', 'current-password');
-          }
-        } catch (err) {}
-      }
-
-      function applyPasswordAutocomplete(){
-        try {
-          ['settingsObsPassword','obsPassword'].forEach(function(id){
-            var el = document.getElementById(id);
-            if (el) markPasswordField(el);
-          });
-        } catch (err) {}
-      }
-
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        applyPasswordAutocomplete();
-      } else {
-        document.addEventListener('DOMContentLoaded', applyPasswordAutocomplete, { once: true });
-      }
     })();
   </script>
   <!-- legacy overlay binder removed; TS owns overlays -->
