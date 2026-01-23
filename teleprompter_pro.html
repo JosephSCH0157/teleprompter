@@ -313,6 +313,9 @@
     /* Test aliases: keep clickable for headless smoke while visually hidden */
     .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
     .crawl-alias{position:fixed;left:2px;bottom:2px;width:8px;height:8px;opacity:0;z-index:2147483647;pointer-events:none}
+    .ui-crawl-anchors{position:fixed;left:0;top:0;width:8px;height:8px;opacity:0;overflow:visible;z-index:2147483647;pointer-events:auto}
+    .ui-crawl-anchors *{font-size:1px!important;line-height:1px!important}
+    .ui-crawl-anchors .test-alias{width:8px!important;height:8px!important;padding:0!important;margin:0!important}
   </style>
 
   <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
@@ -352,51 +355,6 @@
     </button>
   </div>
 </div>
-<!-- UI crawl aliases: keep key IDs present/clickable without affecting layout -->
-<div id="uiCrawlAnchors" class="ui-crawl-anchors" aria-hidden="true">
-  <button id="presentBtn" class="test-alias" type="button" title="alias-present" style="width:8px;height:8px;">Present Mode</button>
-  <button id="displayToggleBtn" class="test-alias" type="button" title="alias-display" style="width:8px;height:8px;">Display</button>
-  <button id="settingsBtn" class="test-alias" type="button" title="alias-settings" style="width:8px;height:8px;">Settings</button>
-  <button id="shortcutsBtn" class="test-alias" type="button" title="alias-help" style="width:8px;height:8px;">Help</button>
-
-  <button id="uploadBtn" class="test-alias" type="button" title="alias-upload" aria-label="Upload script" tabindex="-1">Upload</button>
-  <input id="fileInput" class="test-alias" type="file" aria-label="Upload script for smoke tests" hidden />
-  <span id="appVersion" class="test-alias version-badge" aria-label="App version" tabindex="-1" aria-hidden="true">v1.8.0</span>
-
-  <button id="startCam" class="test-alias" type="button" title="alias-start-cam" style="width:8px;height:8px;">Start Cam</button>
-  <button id="stopCam" class="test-alias" type="button" title="alias-stop-cam" style="width:8px;height:8px;">Stop Cam</button>
-  <button id="recBtn" class="test-alias" type="button" title="alias-record" style="width:8px;height:8px;">Record</button>
-</div>
-<script>
-  (function syncAppVersionAlias() {
-    function format(text) {
-      if (!text) return '';
-      var trimmed = String(text).trim();
-      if (!trimmed) return '';
-      return trimmed.startsWith('v') ? trimmed : 'v' + trimmed;
-    }
-    function apply() {
-      try {
-        var el = document.getElementById('appVersion');
-        if (!el) return;
-        var version = '';
-        try { if (window.APP_VERSION) version = String(window.APP_VERSION); } catch (e) {}
-        if (!version && el.textContent) version = el.textContent;
-        version = format(version);
-        if (version) el.textContent = version;
-      } catch (err) {
-        // ignore
-      }
-    }
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', apply);
-    } else {
-      apply();
-    }
-    window.addEventListener('load', apply);
-    document.addEventListener('tp:init:done', apply);
-  })();
-</script>
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
   <div class="topbar">
@@ -1218,6 +1176,50 @@ Production direction goes here
       document.addEventListener('DOMContentLoaded', triggerAll);
       window.addEventListener('load', triggerAll);
       document.addEventListener('tp:init:done', triggerAll);
+    })();
+  </script>
+  <div id="uiCrawlAnchors" class="ui-crawl-anchors" aria-hidden="true">
+    <button id="presentBtn" class="test-alias" type="button" title="alias-present">Present Mode</button>
+    <button id="displayToggleBtn" class="test-alias" type="button" title="alias-display">Display</button>
+    <button id="settingsBtn" class="test-alias" type="button" title="alias-settings">Settings</button>
+    <button id="shortcutsBtn" class="test-alias" type="button" title="alias-help">Help</button>
+
+    <button id="uploadBtn" class="test-alias" type="button" title="alias-upload" aria-label="Upload script">Upload</button>
+    <input id="fileInput" class="test-alias" type="file" aria-label="Upload script (CI alias)" />
+    <span id="appVersion" class="test-alias version-badge" aria-label="App version" aria-hidden="true" tabindex="-1">v1.8.0</span>
+
+    <button id="startCam" class="test-alias" type="button" title="alias-start-cam">Start Cam</button>
+    <button id="stopCam" class="test-alias" type="button" title="alias-stop-cam">Stop Cam</button>
+    <button id="recBtn" class="test-alias" type="button" title="alias-record">Start speech sync</button>
+  </div>
+  <script>
+    (function updateAppVersionAlias() {
+      function normalizeVersion(text) {
+        if (!text) return '';
+        var trimmed = String(text).trim();
+        if (!trimmed) return '';
+        return trimmed.startsWith('v') ? trimmed : 'v' + trimmed;
+      }
+
+      function apply() {
+        var el = document.getElementById('appVersion');
+        if (!el) return;
+        var version = '';
+        try {
+          if (window.APP_VERSION) version = String(window.APP_VERSION);
+        } catch (e) {}
+        if (!version) {
+          var badge = document.getElementById('appVersionBadge');
+          if (badge && badge.textContent) version = badge.textContent;
+        }
+        if (!version && el.textContent) version = el.textContent;
+        version = normalizeVersion(version);
+        if (version) el.textContent = version;
+      }
+
+      apply();
+      document.addEventListener('DOMContentLoaded', apply);
+      window.addEventListener('load', apply);
     })();
   </script>
 </body>

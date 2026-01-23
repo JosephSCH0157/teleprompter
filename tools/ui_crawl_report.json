@@ -1,38 +1,6 @@
 {
   "clicked": [
     {
-      "id": "presentBtn",
-      "text": "Present Mode"
-    },
-    {
-      "id": "displayToggleBtn",
-      "text": "Display: Closed"
-    },
-    {
-      "id": "settingsBtn",
-      "text": "Settings"
-    },
-    {
-      "id": "shortcutsBtn",
-      "text": "Help"
-    },
-    {
-      "id": "uploadBtn",
-      "text": "Upload"
-    },
-    {
-      "id": "startCam",
-      "text": "Start Cam"
-    },
-    {
-      "id": "stopCam",
-      "text": "Stop Cam"
-    },
-    {
-      "id": "recBtn",
-      "text": "Start speech sync"
-    },
-    {
       "id": "logoutBtn",
       "text": "Log out"
     }
@@ -580,21 +548,66 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
+      "type": "info",
+      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 50560,
-        "columnNumber": 14
+        "lineNumber": 38112,
+        "columnNumber": 12
       }
     },
     {
       "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 51739,
-        "columnNumber": 16
+        "lineNumber": 22391,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 22391,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "script-store:syncMapped JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 22398,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 22391,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "log",
+      "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 22391,
+        "columnNumber": 12
+      }
+    },
+    {
+      "type": "debug",
+      "text": "folder:cleared JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 22398,
+        "columnNumber": 12
       }
     },
     {
@@ -769,6 +782,24 @@
       }
     },
     {
+      "type": "log",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 51739,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 50560,
+        "columnNumber": 14
+      }
+    },
+    {
       "type": "info",
       "text": "[HYBRID_CTRL] engaged JSHandle@object",
       "location": {
@@ -839,38 +870,11 @@
         "lineNumber": 17653,
         "columnNumber": 16
       }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
     }
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 51 candidate controls"
+    "Found 52 candidate controls"
   ],
   "meta": {
     "target": {
@@ -879,17 +883,17 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "71a8cefbf0cf471e7a18a04f08d4421d2c88c00b",
+      "gitSha": "7f7412a75ab4ae3fd99decc318e19fd5fe99c090",
       "branch": "main",
-      "buildTime": "2026-01-23T02:26:45.628Z"
+      "buildTime": "2026-01-23T02:38:59.189Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
   "ci": true,
   "scrollMove": {
     "before": 0,
-    "after": 757,
-    "delta": 757
+    "after": 396,
+    "delta": 396
   },
   "contentLines": 70,
   "editorContentLines": 70,
