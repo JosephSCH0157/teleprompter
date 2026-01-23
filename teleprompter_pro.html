@@ -1131,5 +1131,27 @@ Production direction goes here
       }
     })();
   </script>
+  <script>
+    (function () {
+      var ids = [
+        "appVersion","presentBtn","displayToggleBtn","settingsBtn","shortcutsBtn",
+        "uploadFileBtn","uploadFile","startCam","stopCam","recBtn"
+      ];
+
+      function mark(stage) {
+        var missing = ids.filter(id => !document.getElementById(id));
+        console.log("[CI-ANCHORS]", stage, missing.length ? ("MISSING " + missing.join(",")) : "OK");
+        try {
+          window.__tpCiAnchors = window.__tpCiAnchors || [];
+          window.__tpCiAnchors.push({ stage, missing, ts: Date.now() });
+        } catch {}
+      }
+
+      mark("after-static-html");
+      window.addEventListener("load", function () {
+        mark("window-load");
+      });
+    })();
+  </script>
 </body>
 </html>
