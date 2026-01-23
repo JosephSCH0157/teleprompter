@@ -17,6 +17,10 @@
       "text": "Help"
     },
     {
+      "id": "uploadBtn",
+      "text": "Upload"
+    },
+    {
       "id": "startCam",
       "text": "Start Cam"
     },
@@ -875,9 +879,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "e0412ea0c5f7fa37f23d45381f5e1945e3c76c60",
+      "gitSha": "71a8cefbf0cf471e7a18a04f08d4421d2c88c00b",
       "branch": "main",
-      "buildTime": "2026-01-23T01:24:59.872Z"
+      "buildTime": "2026-01-23T02:26:45.628Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
