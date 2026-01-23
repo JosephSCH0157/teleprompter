@@ -355,9 +355,10 @@
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
   <div class="topbar">
-    <button id="logoutBtn" class="chip logout-pill" type="button">Log out</button>
     <strong>Anvil - Teleprompter</strong>
       <span id="appVersion" class="version-badge" aria-label="App version">v1.8.0</span>
+    <span id="whoamiChip" class="chip chip-muted" title="Which account is logged in">Logged in: ...</span>
+    <button id="logoutBtn" class="chip logout-pill" type="button">Log out</button>
   <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
   <span class="chip" id="asrCalChip" data-tp-asr-cal-chip aria-live="polite" aria-atomic="true">ASR: No calibration</span>
   <span class="chip" id="displayChip">Display: closed</span>

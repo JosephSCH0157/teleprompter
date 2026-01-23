@@ -63,7 +63,7 @@ import { initDevDrawer } from './dev/dev-drawer';
 import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
 import { ensureUserAndProfile, loadProfileSettings, saveProfileSettings, applySettingsPatch, type PersistedAppKey, type UserSettings } from './forge/authProfile';
-import { hasSupabaseConfig } from './forge/supabaseClient';
+import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
@@ -92,6 +92,7 @@ import { hasActiveAsrProfile, onAsr } from './asr/store';
 import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
+import { wireWhoamiChip } from './ui/whoami-chip';
 
 function showFatalFallback(): void {
   try {
@@ -187,6 +188,11 @@ function shouldGateAuth(): boolean {
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
+try {
+	if (hasSupabaseConfig) {
+		wireWhoamiChip(supabase);
+	}
+} catch {}
 // Early-safe OBS UI/status wiring: binders are idempotent and will wait for DOM
 try { bindObsSettingsUI(); } catch {}
 try { bindObsStatusPills(); } catch {}
