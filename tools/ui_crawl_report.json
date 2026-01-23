@@ -3,212 +3,6 @@
     {
       "id": "logoutBtn",
       "text": "Log out"
-    },
-    {
-      "id": "micCalBtn",
-      "text": "Calibrate Mic"
-    },
-    {
-      "id": "presentBtn",
-      "text": "Present Mode"
-    },
-    {
-      "id": "displayToggleBtn",
-      "text": "Display: Closed"
-    },
-    {
-      "id": "settingsBtn",
-      "text": "Settings"
-    },
-    {
-      "id": "shortcutsBtn",
-      "text": "Help"
-    },
-    {
-      "id": "ironMineTab",
-      "text": "Iron Mine"
-    },
-    {
-      "id": "displayToggleBtnSidebar",
-      "text": "Display: Closed"
-    },
-    {
-      "id": "micToggleBtn",
-      "text": "Request Mic"
-    },
-    {
-      "id": "recBtn",
-      "text": "Start speech sync"
-    },
-    {
-      "id": "sidebarCalManage",
-      "text": "Manage calibrations..."
-    },
-    {
-      "id": "autoDec",
-      "text": "-"
-    },
-    {
-      "id": "autoInc",
-      "text": "+"
-    },
-    {
-      "id": "autoToggle",
-      "text": "Auto-scroll: Off"
-    },
-    {
-      "id": "stepPrevBtn",
-      "text": "Step ↑"
-    },
-    {
-      "id": "stepNextBtn",
-      "text": "Step ↓"
-    },
-    {
-      "id": "catchUpBtn",
-      "text": "Catch Up"
-    },
-    {
-      "id": "enableObs",
-      "text": null
-    },
-    {
-      "id": "cameraToggleBtn",
-      "text": "Camera: Off"
-    },
-    {
-      "id": "camMirror",
-      "text": null
-    },
-    {
-      "id": "camPiP",
-      "text": "Picture-in-Picture"
-    },
-    {
-      "id": "resetBtn",
-      "text": "Reset timer"
-    },
-    {
-      "id": "loadSample",
-      "text": "Load sample text"
-    },
-    {
-      "id": "normalizeTopBtn",
-      "text": "Normalize"
-    },
-    {
-      "id": "clearText",
-      "text": "Clear"
-    },
-    {
-      "id": "toggleSpeakers",
-      "text": "Hide"
-    },
-    {
-      "id": "wrap-s1",
-      "text": "S1"
-    },
-    {
-      "id": "wrap-s2",
-      "text": "S2"
-    },
-    {
-      "id": "wrap-g1",
-      "text": "G1"
-    },
-    {
-      "id": "wrap-g2",
-      "text": "G2"
-    },
-    {
-      "id": "wrap-bold",
-      "text": "B"
-    },
-    {
-      "id": "wrap-italic",
-      "text": "I"
-    },
-    {
-      "id": "wrap-underline",
-      "text": "U"
-    },
-    {
-      "id": "wrap-note",
-      "text": "Note"
-    },
-    {
-      "id": "wrap-color",
-      "text": "ColorGO"
-    },
-    {
-      "id": "uploadBtn",
-      "text": "Upload"
-    },
-    {
-      "id": "scriptRefreshBtn",
-      "text": "Refresh"
-    },
-    {
-      "id": "settingsClose",
-      "text": "Close"
-    },
-    {
-      "id": "typoResetMain",
-      "text": "Reset to Default"
-    },
-    {
-      "id": "typoCopyMainToDisplay",
-      "text": "Copy ??? Display"
-    },
-    {
-      "id": "typoPresetApplyBoth",
-      "text": null
-    },
-    {
-      "id": "typoResetDisplay",
-      "text": "Reset to Default"
-    },
-    {
-      "id": "typoCopyDisplayToMain",
-      "text": "Copy ??? Main"
-    },
-    {
-      "id": "openDisplayBtn",
-      "text": "Open Display (alias)"
-    },
-    {
-      "id": "closeDisplayBtn",
-      "text": "Close Display (alias)"
-    },
-    {
-      "id": "uploadBtn",
-      "text": "Upload"
-    },
-    {
-      "checkboxIndex": 0
-    },
-    {
-      "checkboxIndex": 1
-    },
-    {
-      "checkboxIndex": 2
-    },
-    {
-      "checkboxIndex": 3
-    },
-    {
-      "checkboxIndex": 4
-    },
-    {
-      "checkboxIndex": 5
-    },
-    {
-      "id": "startCam",
-      "text": "Start Camera"
-    },
-    {
-      "id": "stopCam",
-      "text": "Stop Camera"
     }
   ],
   "errors": [],
@@ -272,7 +66,7 @@
       "text": "[core-recorder] bridged to __tpRecording",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 34464,
+        "lineNumber": 34471,
         "columnNumber": 18
       }
     },
@@ -299,7 +93,7 @@
       "text": "[SCRIPT-EDITOR] wiring complete",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40308,
+        "lineNumber": 40343,
         "columnNumber": 12
       }
     },
@@ -308,7 +102,7 @@
       "text": "[build] asr-scroll-<DATE>",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54461,
+        "lineNumber": 54541,
         "columnNumber": 14
       }
     },
@@ -317,7 +111,7 @@
       "text": "[TP-BOOT] TS index.ts booted",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54465,
+        "lineNumber": 54545,
         "columnNumber": 14
       }
     },
@@ -326,7 +120,7 @@
       "text": "[ROUTER_STAMP] index-app 1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54488,
+        "lineNumber": 54568,
         "columnNumber": 14
       }
     },
@@ -344,7 +138,7 @@
       "text": "[Scroll Mode] ASR rejected JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53035,
+        "lineNumber": 53114,
         "columnNumber": 14
       }
     },
@@ -353,7 +147,7 @@
       "text": "[Scroll Mode] UI: step | Brain: step | Clamp: free | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53197,
+        "lineNumber": 53276,
         "columnNumber": 12
       }
     },
@@ -362,7 +156,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 46733,
+        "lineNumber": 46768,
         "columnNumber": 10
       }
     },
@@ -371,7 +165,7 @@
       "text": "[display-debug] bindStaticDom:display-btn JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 45725,
+        "lineNumber": 45760,
         "columnNumber": 14
       }
     },
@@ -380,7 +174,7 @@
       "text": "[display-debug] wireDisplayBridge JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 45725,
+        "lineNumber": 45760,
         "columnNumber": 14
       }
     },
@@ -389,7 +183,7 @@
       "text": "[SCROLL] initOnce: scroll-router (viewer=true)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53753,
+        "lineNumber": 53832,
         "columnNumber": 22
       }
     },
@@ -398,7 +192,7 @@
       "text": "[AUTO_INTENT] INLINE_WIRE about to addEventListener tp:auto:intent",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53757,
+        "lineNumber": 53836,
         "columnNumber": 22
       }
     },
@@ -407,7 +201,7 @@
       "text": "[AUTO_INTENT] INLINE_WIRE done",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53779,
+        "lineNumber": 53858,
         "columnNumber": 22
       }
     },
@@ -416,7 +210,7 @@
       "text": "[AUTO_INTENT] index-app about to call scrollRouter.wireAutoIntentListener scroll-router-wire-v1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53783,
+        "lineNumber": 53862,
         "columnNumber": 22
       }
     },
@@ -470,7 +264,7 @@
       "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53763,
+        "lineNumber": 53842,
         "columnNumber": 26
       }
     },
@@ -515,7 +309,7 @@
       "text": "[AUTO_INTENT] index-app returned from wireAutoIntentListener scroll-router-wire-v1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53791,
+        "lineNumber": 53870,
         "columnNumber": 22
       }
     },
@@ -542,7 +336,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 38077,
+        "lineNumber": 38112,
         "columnNumber": 12
       }
     },
@@ -560,7 +354,7 @@
       "text": "[src/features/persistence] initPersistence",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 39924,
+        "lineNumber": 39959,
         "columnNumber": 12
       }
     },
@@ -569,7 +363,7 @@
       "text": "[src/features/telemetry] initTelemetry",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 39937,
+        "lineNumber": 39972,
         "columnNumber": 12
       }
     },
@@ -578,7 +372,7 @@
       "text": "[src/features/hotkeys] initHotkeys",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 39911,
+        "lineNumber": 39946,
         "columnNumber": 12
       }
     },
@@ -587,7 +381,7 @@
       "text": "[src/features/toasts] initToasts",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 39950,
+        "lineNumber": 39985,
         "columnNumber": 12
       }
     },
@@ -596,7 +390,7 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53945,
+        "lineNumber": 54024,
         "columnNumber": 18
       }
     },
@@ -605,7 +399,7 @@
       "text": "[Scroll Mode] UI: step | Brain: step | Clamp: free | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53197,
+        "lineNumber": 53276,
         "columnNumber": 12
       }
     },
@@ -614,7 +408,7 @@
       "text": "[TP-INIT] {\"tp_init_done\":true,\"reason\":\"ts:index:onReady\"}",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 37391,
+        "lineNumber": 37426,
         "columnNumber": 22
       }
     },
@@ -623,7 +417,7 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 47042,
+        "lineNumber": 47077,
         "columnNumber": 16
       }
     },
@@ -758,7 +552,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 38077,
+        "lineNumber": 38112,
         "columnNumber": 12
       }
     },
@@ -821,7 +615,7 @@
       "text": "[ASR] legacy state built JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40065,
+        "lineNumber": 40100,
         "columnNumber": 12
       }
     },
@@ -974,7 +768,7 @@
       "text": "[publishDisplayScript] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
+        "lineNumber": 33563,
         "columnNumber": 14
       }
     },
@@ -983,16 +777,7 @@
       "text": "[publishDisplayScript] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 50481,
+        "lineNumber": 33563,
         "columnNumber": 14
       }
     },
@@ -1001,8 +786,17 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 51660,
+        "lineNumber": 51739,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 50560,
+        "columnNumber": 14
       }
     },
     {
@@ -1076,1252 +870,11 @@
         "lineNumber": 17653,
         "columnNumber": 16
       }
-    },
-    {
-      "type": "info",
-      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 38077,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "script-store:syncMapped JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22398,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "folder:cleared JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22398,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[ASR] legacy state built JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40065,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16383,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16340,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_TRUTH] {\"basePxps\":24,\"finalPxps\":21.6,\"errorPx\":null,\"errorLines\":null,\"effectiveErrorLines\":null,\"targetMult\":1,\"lineMult\":1,\"capReason\":\"none\",\"scaleReason\":\"base\",\"weakMatch\":false,\"driftWeak\":false,\"bestSim\":null,\"offScriptActive\":false,\"noMatch\":null,\"sawNoMatch\":false,\"hardNoMatch\":false,\"targetTopSource\":null}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16420,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_BRAKE] set JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 17653,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "log",
-      "text": "Connecting to OBS at ws://127.0.0.1:4455",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 30901,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[OBS-UI] toggled JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 32143,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[OBS-UI] toggled JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 32143,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[OBS-UI] toggled JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 32143,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[OBS-UI] toggled JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 32143,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "OBS: connected and ready.",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 30901,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[ASR] legacy state built JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40065,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[ASR] legacy state built JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40065,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_IGNORED_OFF mode=step sessionPhase=idle sessionIntent=true pxPerSec=21 blocked=blocked:noScrollTarget",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53763,
-        "columnNumber": 26
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16661,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent route JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16665,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent calling processor",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16671,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_IGNORED_OFF mode=step sessionPhase=idle sessionIntent=true pxPerSec=21 blocked=blocked:noScrollTarget",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] tp:auto:intent mode=step brain=auto phase=idle decision=motor-start-request userEnabled=true",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18226,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] mode= step enabled= true pxPerSec= 21 sessionPhase= idle userEnabled= true",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18229,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] processor RUN JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18267,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-      "location": {
-        "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
-        "lineNumber": 6
-      }
-    },
-    {
-      "type": "info",
-      "text": "[SCROLL_WRITE] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16620,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 38077,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "script-store:syncMapped JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22398,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "log",
-      "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22391,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "debug",
-      "text": "folder:cleared JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22398,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31656,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[publishDisplayScript] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33556,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16383,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16340,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_TRUTH] {\"basePxps\":24,\"finalPxps\":21.6,\"errorPx\":null,\"errorLines\":null,\"effectiveErrorLines\":null,\"targetMult\":1,\"lineMult\":1,\"capReason\":\"none\",\"scaleReason\":\"base\",\"weakMatch\":false,\"driftWeak\":false,\"bestSim\":null,\"offScriptActive\":false,\"noMatch\":null,\"sawNoMatch\":false,\"hardNoMatch\":false,\"targetTopSource\":null}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16420,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_BRAKE] set JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 17653,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_DEBUG] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16894,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_STOP mode=step sessionPhase=idle sessionIntent=false pxPerSec=21 blocked=blocked:sessionOff",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53763,
-        "columnNumber": 26
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16661,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent route JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16665,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent calling processor",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16671,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_IGNORED_OFF mode=step sessionPhase=idle sessionIntent=false pxPerSec=21 blocked=blocked:sessionOff",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] tp:auto:intent mode=step brain=auto phase=idle decision=motor-stop-request userEnabled=false",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18226,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] mode= step enabled= false pxPerSec= 21 sessionPhase= idle userEnabled= false",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18229,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] processor RUN JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18267,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_START mode=step sessionPhase=idle sessionIntent=true pxPerSec=21 blocked=none",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53763,
-        "columnNumber": 26
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16661,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent route JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16665,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent calling processor",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16671,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_ALREADY_RUNNING mode=step sessionPhase=idle sessionIntent=true pxPerSec=21 blocked=none",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] tp:auto:intent mode=step brain=auto phase=idle decision=motor-start-request userEnabled=true",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18226,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] mode= step enabled= true pxPerSec= 21 sessionPhase= idle userEnabled= true",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18229,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] processor RUN JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18267,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[SCROLL_WRITE] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16620,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_TRUTH] {\"basePxps\":24,\"finalPxps\":21.6,\"errorPx\":null,\"errorLines\":null,\"effectiveErrorLines\":null,\"targetMult\":1,\"lineMult\":1,\"capReason\":\"none\",\"scaleReason\":\"base\",\"weakMatch\":false,\"driftWeak\":false,\"bestSim\":null,\"offScriptActive\":false,\"noMatch\":null,\"sawNoMatch\":false,\"hardNoMatch\":false,\"targetTopSource\":null}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16420,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16383,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_CTRL] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16340,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_TRUTH] {\"basePxps\":24,\"finalPxps\":21.6,\"errorPx\":null,\"errorLines\":null,\"effectiveErrorLines\":null,\"targetMult\":1,\"lineMult\":1,\"capReason\":\"none\",\"scaleReason\":\"base\",\"weakMatch\":false,\"driftWeak\":false,\"bestSim\":null,\"offScriptActive\":false,\"noMatch\":null,\"sawNoMatch\":false,\"hardNoMatch\":false,\"targetTopSource\":null}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16420,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_STOP mode=step sessionPhase=idle sessionIntent=false pxPerSec=3 blocked=blocked:sessionOff",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53763,
-        "columnNumber": 26
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16661,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent route JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16665,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent calling processor",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16671,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_IGNORED_OFF mode=step sessionPhase=idle sessionIntent=false pxPerSec=3 blocked=blocked:sessionOff",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] tp:auto:intent mode=step brain=auto phase=idle decision=motor-stop-request userEnabled=false",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18226,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] mode= step enabled= false pxPerSec= 3 sessionPhase= idle userEnabled= false",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18229,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] processor RUN JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18267,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_START mode=step sessionPhase=idle sessionIntent=true pxPerSec=3 blocked=none",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53763,
-        "columnNumber": 26
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] recv JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16661,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent route JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16665,
-        "columnNumber": 10
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] onAutoIntent calling processor",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16671,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] MOTOR_ALREADY_RUNNING mode=step sessionPhase=idle sessionIntent=true pxPerSec=3 blocked=none",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
-        "columnNumber": 18
-      }
-    },
-    {
-      "type": "info",
-      "text": "[scroll-router] tp:auto:intent mode=step brain=auto phase=idle decision=motor-start-request userEnabled=true",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18226,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] mode= step enabled= true pxPerSec= 3 sessionPhase= idle userEnabled= true",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18229,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[AUTO_INTENT] processor RUN JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18267,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "info",
-      "text": "[SCROLL_WRITE] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16620,
-        "columnNumber": 12
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
-        "columnNumber": 16
-      }
-    },
-    {
-      "type": "info",
-      "text": "[HYBRID_BRAKE] set JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 17653,
-        "columnNumber": 16
-      }
     }
   ],
   "notes": [
     "Navigated to http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
-    "Found 68 candidate controls"
+    "Found 44 candidate controls"
   ],
   "meta": {
     "target": {
@@ -2330,9 +883,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "36c7f3d70c3784acf4da53b4b522ff1fc2683a99",
+      "gitSha": "1ab0c66c6cc0a4190726cec2d08a4903da8a11c8",
       "branch": "main",
-      "buildTime": "2026-01-22T00:04:24.827Z"
+      "buildTime": "2026-01-23T01:07:29.167Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -2344,97 +897,59 @@
   },
   "contentLines": 70,
   "editorContentLines": 70,
-  "fileInputs": [
-    {
-      "id": "uploadFile",
-      "hidden": true,
-      "width": 0,
-      "height": 0,
-      "ariaLabel": null
-    },
-    {
-      "id": "folderFallback",
-      "hidden": true,
-      "width": 0,
-      "height": 0,
-      "ariaLabel": null
-    }
-  ],
-  "legendProbe": [
-    {
-      "text": "S1",
-      "color": "rgb(96, 165, 250)"
-    },
-    {
-      "text": "S2",
-      "color": "rgb(250, 204, 21)"
-    },
-    {
-      "text": "G1",
-      "color": "rgb(52, 211, 153)"
-    },
-    {
-      "text": "G2",
-      "color": "rgb(244, 114, 182)"
-    }
-  ],
+  "fileInputs": [],
+  "legendProbe": [],
   "renderProbe": {
-    "lineCount": 3,
-    "iHello": 0,
-    "iWorld": 1,
-    "cHello": "rgb(96, 165, 250)",
-    "cWorld": "rgb(250, 204, 21)"
+    "lineCount": 0,
+    "iHello": -1,
+    "iWorld": -1,
+    "cHello": null,
+    "cWorld": null
   },
   "hudProbe": {
     "isDevClass": false,
     "hasHudChildren": false
   },
   "lateProbe": {
-    "supported": true,
-    "approxFps": 60,
-    "jitterStd": 0,
-    "moved": false
+    "supported": false
   },
   "settingsProbe": {
-    "hasBody": true,
-    "tabs": 6,
-    "hasMedia": true,
-    "hasMicSel": true,
+    "hasBody": false,
+    "tabs": 0,
+    "hasMedia": false,
+    "hasMicSel": false,
     "hasMicLevel": false,
-    "hasAsrCalibBtn": true
+    "hasAsrCalibBtn": false
   },
   "obsTestProbe": {
-    "hasBtn": true,
-    "hasDataAction": true,
-    "hadPillBefore": true,
-    "hasPillAfter": true,
-    "btnId": "settingsObsTest"
+    "hasBtn": false,
+    "hasDataAction": false,
+    "hadPillBefore": false,
+    "hasPillAfter": false,
+    "btnId": null
   },
   "sidebarProbe": {
-    "mainExists": true,
-    "sideExists": true,
-    "mainCount": 1,
-    "sideCount": 1,
-    "mainBusy": "false",
-    "sideBusy": "false",
+    "mainExists": false,
+    "sideExists": false,
+    "mainCount": -1,
+    "sideCount": -1,
+    "mainBusy": null,
+    "sideBusy": null,
     "sameValue": false
   },
-  "renderedLines": 60,
+  "renderedLines": 0,
   "scrollProbe": {
-    "hasControls": true,
-    "delta": 8,
-    "label": "Auto-scroll: On (3.0 px/s)"
+    "hasControls": false
   },
   "autoState": {
     "sawEvent": true,
-    "intentOn": true,
-    "gate": "on",
-    "speed": 5,
-    "label": "Auto-scroll: On (5.0 px/s)",
-    "chip": "Auto: On",
-    "delta": 8,
-    "mode": "step"
+    "intentOn": false,
+    "gate": "manual",
+    "speed": 21,
+    "label": "",
+    "chip": "",
+    "delta": 0,
+    "mode": "hybrid"
   },
-  "appVersionText": "v1.8.0",
   "screenshot": "tools\\ui_crawl_screenshot.png"
 }
