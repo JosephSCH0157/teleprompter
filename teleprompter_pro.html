@@ -375,8 +375,7 @@
     <button id="logoutBtn" class="chip logout-pill" type="button">Log out</button>
   <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
   <span class="chip" id="asrCalChip" data-tp-asr-cal-chip aria-live="polite" aria-atomic="true">ASR: No calibration</span>
-  <span class="chip" id="displayChip">Display: closed</span>
-  <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+    <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
   <span class="chip" id="scrollChip">Scroll: idle</span>
   <span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor - * scrollTop -</span>
   <span class="chip" id="camRtcChip">CamRTC: idle</span>
@@ -1038,7 +1037,6 @@ Production direction goes here
       <!-- crawl-only alias: required by validate_ui_crawl.js; do not remove without updating contract -->
       <button id="uploadBtn" class="crawl-alias" type="button" aria-label="Upload file" aria-hidden="true" tabindex="-1" title="alias-upload">Upload</button>
       <!-- Hidden aliases for removed status chips -->
-      <span id="displayChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-display"></span>
     </div>
   </div>
   <script>
