@@ -311,10 +311,11 @@
     #asrStatsHud{display:none !important}
     html.dev1 #asrStatsHud{display:block !important}
     /* Test aliases: keep clickable for headless smoke while visually hidden */
-    .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
+    .test-alias{position:fixed;left:0;top:0;width:12px;height:12px;opacity:0;z-index:2147483647;pointer-events:auto}
     .crawl-alias{position:fixed;left:2px;bottom:2px;width:8px;height:8px;opacity:0;z-index:2147483647;pointer-events:none}
-    .ui-crawl-anchors{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;overflow:hidden;z-index:2147483647;pointer-events:auto}
+    .ui-crawl-anchors{position:fixed;left:0;top:0;width:12px;height:12px;opacity:0;overflow:hidden;z-index:2147483647;pointer-events:auto}
     .ui-crawl-anchors *{font-size:1px!important;line-height:1px!important;pointer-events:auto}
+    .ui-crawl-anchors .test-alias{width:12px!important;height:12px!important;padding:0!important;margin:0!important}
   </style>
 
   <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
@@ -1103,123 +1104,85 @@ Production direction goes here
     })();
   </script>
   <script>
-    (function ensureCiAnchors() {
-      function formatVersion(value) {
+    (function installUiCrawlAnchors() {
+      var markup = `
+        <span id="appVersion" class="test-alias" aria-label="App version" tabindex="-1">v?.?.?.</span>
+
+        <button id="presentBtn" class="test-alias" type="button" title="alias-present">Present</button>
+        <button id="displayToggleBtn" class="test-alias" type="button" title="alias-display">Display</button>
+        <button id="settingsBtn" class="test-alias" type="button" title="alias-settings">Settings</button>
+        <button id="shortcutsBtn" class="test-alias" type="button" title="alias-help">Help</button>
+
+        <button id="uploadFileBtn" class="test-alias" type="button" title="alias-upload">Upload</button>
+        <button id="uploadBtn" class="test-alias" type="button" title="alias-upload-alt">Upload</button>
+        <input id="uploadFile" class="test-alias" type="file" title="alias-upload-input" aria-label="Upload script (CI alias)" />
+        <input id="fileInput" class="test-alias" type="file" title="alias-upload-input-alt" aria-label="Upload script (CI alias alt)" />
+
+        <button id="startCam" class="test-alias" type="button" title="alias-start-cam">Start Cam</button>
+        <button id="stopCam" class="test-alias" type="button" title="alias-stop-cam">Stop Cam</button>
+        <button id="recBtn" class="test-alias" type="button" title="alias-record">Rec</button>
+      `;
+
+      function normalizeVersion(value) {
         if (!value) return '';
         var trimmed = String(value).trim();
         if (!trimmed) return '';
         return trimmed.startsWith('v') ? trimmed : 'v' + trimmed;
       }
 
-      function findRoot() {
-        var root = document.getElementById('ciAnchorsRoot');
-        if (root) return root;
-        root = document.createElement('div');
-        root.id = 'ciAnchorsRoot';
-        root.className = 'ui-crawl-anchors';
-        root.setAttribute('aria-hidden', 'true');
-        root.style.position = 'fixed';
-        root.style.left = '0';
-        root.style.bottom = '0';
-        root.style.width = '1px';
-        root.style.height = '1px';
-        root.style.opacity = '0';
-        root.style.pointerEvents = 'none';
-        try { document.documentElement.appendChild(root); } catch (err) {}
-        return root;
-      }
-
-      function ensureFileInput(root) {
-        if (document.getElementById('fileInput')) return;
-        var input = document.createElement('input');
-        input.id = 'fileInput';
-        input.type = 'file';
-        input.hidden = true;
-        input.setAttribute('aria-label', 'Upload script (CI alias)');
-        input.className = 'test-alias';
-        root.appendChild(input);
-      }
-
-      function ensureVersionBadge(root) {
+      function syncUiCrawlAliasElements() {
         var el = document.getElementById('appVersion');
-        if (!el) {
-          el = document.createElement('span');
-          el.id = 'appVersion';
-          el.className = 'test-alias version-badge';
-          el.setAttribute('aria-label', 'App version');
-          el.setAttribute('aria-hidden', 'true');
-          el.setAttribute('tabindex', '-1');
-          root.appendChild(el);
-        } else if (!el.parentElement) {
-          root.appendChild(el);
+        if (el) {
+          var version = '';
+          try {
+            if (window.APP_VERSION) version = String(window.APP_VERSION);
+          } catch {}
+          if (!version) {
+            var badge = document.getElementById('appVersionBadge');
+            if (badge && badge.textContent) version = badge.textContent;
+          }
+          if (!version && el.textContent) version = el.textContent;
+          version = normalizeVersion(version);
+          el.textContent = version || 'v?.?.?.';
         }
-        var version = '';
-        try { if (window.APP_VERSION) version = String(window.APP_VERSION); } catch (e) {}
-        if (!version && el.textContent) version = el.textContent;
-        version = formatVersion(version);
-        if (version) el.textContent = version;
-      }
 
-      function ensureAll() {
-        var root = findRoot();
-        ensureFileInput(root);
-        ensureVersionBadge(root);
-      }
-
-      function triggerAll() {
-        ensureAll();
-        setTimeout(ensureAll, 500);
-      }
-
-      if (document.readyState !== 'loading') triggerAll();
-      document.addEventListener('DOMContentLoaded', triggerAll);
-      window.addEventListener('load', triggerAll);
-      document.addEventListener('tp:init:done', triggerAll);
-    })();
-  </script>
-  <div id="uiCrawlAnchors" class="ui-crawl-anchors" aria-hidden="true">
-    <span id="appVersion" class="test-alias" aria-label="App version" tabindex="-1">v?.?.?.</span>
-
-    <button id="presentBtn" class="test-alias" type="button" title="alias-present">Present</button>
-    <button id="displayToggleBtn" class="test-alias" type="button" title="alias-display">Display</button>
-    <button id="settingsBtn" class="test-alias" type="button" title="alias-settings">Settings</button>
-    <button id="shortcutsBtn" class="test-alias" type="button" title="alias-help">Help</button>
-
-    <button id="uploadFileBtn" class="test-alias" type="button" title="alias-upload">Upload</button>
-    <input id="uploadFile" class="test-alias" type="file" title="alias-upload-input" />
-
-    <button id="startCam" class="test-alias" type="button" title="alias-start-cam">Start Cam</button>
-    <button id="stopCam" class="test-alias" type="button" title="alias-stop-cam">Stop Cam</button>
-    <button id="recBtn" class="test-alias" type="button" title="alias-record">Rec</button>
-  </div>
-  <script>
-    (function () {
-      var el = document.getElementById('appVersion');
-      if (el) {
-        var version = '';
-        try {
-          if (window.APP_VERSION) version = String(window.APP_VERSION).trim();
-        } catch (err) {
-          console.error('appVersion alias read error', err);
+        var uploadBtn = document.getElementById('uploadFileBtn');
+        var uploadInput = document.getElementById('uploadFile');
+        if (uploadBtn && uploadInput) {
+          uploadBtn.addEventListener('click', function () {
+            uploadInput.click();
+          });
         }
-        if (!version) {
-          var badge = document.getElementById('appVersionBadge');
-          if (badge && badge.textContent) version = badge.textContent.trim();
-        }
-        if (!version && el.textContent) version = el.textContent.trim();
-        if (version && !version.startsWith('v')) {
-          version = 'v' + version;
-        }
-        el.textContent = version || 'v?.?.?.';
       }
 
-      var uploadBtn = document.getElementById('uploadFileBtn');
-      var uploadInput = document.getElementById('uploadFile');
-      if (uploadBtn && uploadInput) {
-        uploadBtn.addEventListener('click', function () {
-          uploadInput.click();
-        });
+      function createContainer() {
+        var container = document.createElement('div');
+        container.id = 'uiCrawlAnchors';
+        container.className = 'ui-crawl-anchors';
+        container.innerHTML = markup;
+        document.documentElement.appendChild(container);
+        return container;
       }
+
+      function ensure() {
+        var existing = document.getElementById('uiCrawlAnchors');
+        if (existing) {
+          existing.remove();
+        }
+        createContainer();
+        syncUiCrawlAliasElements();
+      }
+
+      var observer = new MutationObserver(function () {
+        ensure();
+      });
+      var target = document.documentElement || document.body;
+      if (target) observer.observe(target, { childList: true, subtree: true });
+      document.addEventListener('DOMContentLoaded', ensure);
+      window.addEventListener('load', ensure);
+      document.addEventListener('tp:init:done', ensure);
+      setInterval(ensure, 250);
+      ensure();
     })();
   </script>
 </body>
