@@ -1104,85 +1104,31 @@ Production direction goes here
     })();
   </script>
   <script>
-    (function installUiCrawlAnchors() {
-      var markup = `
-        <span id="appVersion" class="test-alias" aria-label="App version" tabindex="-1">v?.?.?.</span>
-
-        <button id="presentBtn" class="test-alias" type="button" title="alias-present">Present</button>
-        <button id="displayToggleBtn" class="test-alias" type="button" title="alias-display">Display</button>
-        <button id="settingsBtn" class="test-alias" type="button" title="alias-settings">Settings</button>
-        <button id="shortcutsBtn" class="test-alias" type="button" title="alias-help">Help</button>
-
-        <button id="uploadFileBtn" class="test-alias" type="button" title="alias-upload">Upload</button>
-        <button id="uploadBtn" class="test-alias" type="button" title="alias-upload-alt">Upload</button>
-        <input id="uploadFile" class="test-alias" type="file" title="alias-upload-input" aria-label="Upload script (CI alias)" />
-        <input id="fileInput" class="test-alias" type="file" title="alias-upload-input-alt" aria-label="Upload script (CI alias alt)" />
-
-        <button id="startCam" class="test-alias" type="button" title="alias-start-cam">Start Cam</button>
-        <button id="stopCam" class="test-alias" type="button" title="alias-stop-cam">Stop Cam</button>
-        <button id="recBtn" class="test-alias" type="button" title="alias-record">Rec</button>
-      `;
-
-      function normalizeVersion(value) {
-        if (!value) return '';
-        var trimmed = String(value).trim();
-        if (!trimmed) return '';
-        return trimmed.startsWith('v') ? trimmed : 'v' + trimmed;
-      }
-
-      function syncUiCrawlAliasElements() {
-        var el = document.getElementById('appVersion');
-        if (el) {
-          var version = '';
-          try {
-            if (window.APP_VERSION) version = String(window.APP_VERSION);
-          } catch {}
-          if (!version) {
-            var badge = document.getElementById('appVersionBadge');
-            if (badge && badge.textContent) version = badge.textContent;
-          }
-          if (!version && el.textContent) version = el.textContent;
-          version = normalizeVersion(version);
-          el.textContent = version || 'v?.?.?.';
+    (function () {
+      var versionEl = document.getElementById('appVersion');
+      if (versionEl) {
+        var version = '';
+        try {
+          if (window.APP_VERSION) version = String(window.APP_VERSION);
+        } catch {}
+        if (!version) {
+          var badge = document.getElementById('appVersionBadge');
+          if (badge && badge.textContent) version = badge.textContent;
         }
-
-        var uploadBtn = document.getElementById('uploadFileBtn');
-        var uploadInput = document.getElementById('uploadFile');
-        if (uploadBtn && uploadInput) {
-          uploadBtn.addEventListener('click', function () {
-            uploadInput.click();
-          });
+        if (version) {
+          version = version.trim();
+          if (!version.startsWith('v')) version = 'v' + version;
         }
+        versionEl.textContent = version || 'v?.?.?.';
       }
 
-      function createContainer() {
-        var container = document.createElement('div');
-        container.id = 'uiCrawlAnchors';
-        container.className = 'ui-crawl-anchors';
-        container.innerHTML = markup;
-        document.documentElement.appendChild(container);
-        return container;
+      var uploadBtn = document.getElementById('uploadFileBtn');
+      var uploadInput = document.getElementById('uploadFile');
+      if (uploadBtn && uploadInput) {
+        uploadBtn.addEventListener('click', function () {
+          uploadInput.click();
+        });
       }
-
-      function ensure() {
-        var existing = document.getElementById('uiCrawlAnchors');
-        if (existing) {
-          existing.remove();
-        }
-        createContainer();
-        syncUiCrawlAliasElements();
-      }
-
-      var observer = new MutationObserver(function () {
-        ensure();
-      });
-      var target = document.documentElement || document.body;
-      if (target) observer.observe(target, { childList: true, subtree: true });
-      document.addEventListener('DOMContentLoaded', ensure);
-      window.addEventListener('load', ensure);
-      document.addEventListener('tp:init:done', ensure);
-      setInterval(ensure, 250);
-      ensure();
     })();
   </script>
 </body>
