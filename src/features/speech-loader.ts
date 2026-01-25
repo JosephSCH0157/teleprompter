@@ -25,6 +25,9 @@ import {
 } from '../ui/speaker-profiles-store';
 import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
 import type { SpeakerSlot } from '../types/speaker-profiles';
+import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
+
+ensureSpeechGlobals();
 
 type AnyFn = (...args: any[]) => any;
 
@@ -1194,21 +1197,20 @@ async function resolveOrchestratorUrl(): Promise<string> {
         return false;
       })();
 
-      // Optional probe: only if explicitly opted-in; default avoids 404 noise in dev
-      const probeOptIn = (() => { try { return localStorage.getItem('tp_probe_speech') === '1' || new URLSearchParams(location.search).get('probe') === '1'; } catch { return false; } })();
-        let hasOrchestrator = hasGlobalOrch;
-        if (!hasOrchestrator && !ciGuard && probeOptIn) {
-          try {
-            hasOrchestrator = await probeUrl('/dist/speech/orchestrator.js');
-          } catch {}
-        }
+      const backendAllowed = isSpeechBackendAllowed();
+      let hasOrchestrator = hasGlobalOrch;
+      if (!hasOrchestrator && backendAllowed && !ciGuard) {
+        try {
+          hasOrchestrator = await probeUrl('/dist/speech/orchestrator.js');
+        } catch {}
+      }
 
       const supported = SRAvail || hasOrchestrator;
       const canUse = supported || force;
 
       if (canUse) setReadyUi(); else setUnsupportedUi();
       // Stash a flag for start path to decide whether to attempt dynamic import (no probe by default)
-      try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
+      try { window.__tpSpeechCanDynImport = backendAllowed && !!hasOrchestrator && !ciGuard; } catch {}
 
       async function startBackend(): Promise<boolean> {
         if (isDevMode()) {

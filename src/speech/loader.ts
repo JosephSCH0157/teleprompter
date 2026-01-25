@@ -1,9 +1,13 @@
 // @ts-nocheck
+import { ensureSpeechGlobals, isSpeechBackendAllowed } from './backend-guard';
 export {};
 
 // Loader for speech recognizer/matcher. Attaches `window.__tpRecognizer` and `window.__tpMatcher`
 // factories to allow gradual adoption by the legacy runtime.
+ensureSpeechGlobals();
 (async function () {
+  if (!isSpeechBackendAllowed()) return;
+
   const isDevMode = (() => {
     try {
       const qs = new URLSearchParams(location.search || '');
