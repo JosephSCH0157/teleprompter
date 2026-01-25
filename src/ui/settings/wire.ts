@@ -185,6 +185,55 @@ async function pickFolder({ force }: { force?: boolean } = {}) {
     });
   }
 
+  const audioOnlyChk = rootEl.querySelector('#settingsAudioOnly') as HTMLInputElement | null;
+  const audioOnlyHint = rootEl.querySelector('#settingsAudioOnlyHint') as HTMLElement | null;
+  const cameraSelect = rootEl.querySelector('#settingsCamSel') as HTMLSelectElement | null;
+  let lastAudioOnlyState: boolean | null = null;
+  const resolveAudioStore = () => store || (window as any).__tpStore || null;
+  const applyAudioOnlyState = (on: boolean) => {
+    const normalized = !!on;
+    if (audioOnlyChk && audioOnlyChk.checked !== normalized) {
+      audioOnlyChk.checked = normalized;
+    }
+    if (audioOnlyHint) {
+      audioOnlyHint.hidden = !normalized;
+    }
+    if (cameraSelect) cameraSelect.disabled = normalized;
+    if (lastAudioOnlyState === normalized) return;
+    lastAudioOnlyState = normalized;
+    if (normalized) {
+      try { window.__tpCamera?.stopCamera?.(); } catch {}
+      try { store?.set?.('cameraEnabled', false); } catch {}
+    }
+  };
+
+  if (audioOnlyChk && !audioOnlyChk.dataset[DATASET_CARD_WIRED]) {
+    audioOnlyChk.dataset[DATASET_CARD_WIRED] = '1';
+    audioOnlyChk.addEventListener('change', () => {
+      try {
+        const next = !!audioOnlyChk.checked;
+        try { resolveAudioStore()?.set?.('recordAudioOnly', next); } catch {}
+        applyAudioOnlyState(next);
+      } catch {}
+    });
+  }
+
+  const hydrateAudioOnly = () => {
+    try {
+      const nextStore = resolveAudioStore();
+      if (nextStore) {
+        applyAudioOnlyState(!!nextStore.get('recordAudioOnly'));
+      }
+    } catch {}
+  };
+  hydrateAudioOnly();
+  onStoreReady(store || null, (s) => {
+    try {
+      applyAudioOnlyState(!!s.get('recordAudioOnly'));
+      s.subscribe('recordAudioOnly', (value) => applyAudioOnlyState(!!value));
+    } catch {}
+  });
+
   await renderFolder();
 }
 

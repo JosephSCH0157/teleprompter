@@ -431,6 +431,33 @@ export function wireCamera() {
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
+  const cameraControls = [camSel, size, op, mir];
+  const store = (window as any).__tpStore;
+  const startLabel = start?.textContent || 'Start Camera';
+  let lastAudioOnlyState: boolean | null = null;
+  const applyAudioOnlyState = (on: boolean) => {
+    const normalized = !!on;
+    if (start) {
+      start.disabled = normalized;
+      start.textContent = normalized ? 'Camera: Disabled (Audio-only)' : startLabel;
+    }
+    if (stop) stop.disabled = normalized;
+    cameraControls.forEach((el) => {
+      if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
+        el.disabled = normalized;
+      }
+    });
+    if (lastAudioOnlyState === normalized) return;
+    lastAudioOnlyState = normalized;
+    if (normalized) {
+      try { window.__tpCamera?.stopCamera?.(); } catch {}
+      try { store?.set?.('cameraEnabled', false); } catch {}
+    }
+  };
+  try {
+    applyAudioOnlyState(!!store?.get?.('recordAudioOnly'));
+    store?.subscribe?.('recordAudioOnly', (value) => applyAudioOnlyState(!!value));
+  } catch {}
   if (start && !start.dataset.captureWired) {
     start.dataset.captureWired = '1';
     start.addEventListener('click', async (e) => {

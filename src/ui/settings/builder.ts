@@ -198,6 +198,14 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         </div>
         <small class="muted">These buttons call the recorder registry so Bridge + OBS stay in sync.</small>
       </div>
+
+      <div class="settings-card anim-in">
+        <h4>Audio-only mode</h4>
+        <div class="row">
+          <label><input type="checkbox" id="settingsAudioOnly" /> Audio only (no camera required)</label>
+        </div>
+        <div class="settings-small muted" id="settingsAudioOnlyHint" hidden>Camera controls are disabled while audio-only mode is enabled.</div>
+      </div>
       </section>
 
       <section class="settings-panel" data-settings-panel="advanced" data-tab-content="advanced" hidden>

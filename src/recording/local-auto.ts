@@ -6,6 +6,41 @@
   let chunks: Blob[] = [];
   let active = false;
   let currentStream: MediaStream | null = null;
+  const AUDIO_ONLY_KEY = 'tp_record_audio_only';
+  const VIDEO_MIME_CANDIDATES = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+  const AUDIO_MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm'];
+  function isAudioOnlyEnabled(): boolean {
+    try {
+      const store = (window as any).__tpStore;
+      const stored = store?.get?.('recordAudioOnly');
+      if (typeof stored === 'boolean') return stored;
+    } catch {}
+    try {
+      return localStorage.getItem(AUDIO_ONLY_KEY) === '1';
+    } catch {}
+    return false;
+  }
+  function chooseSupportedMime(candidates: string[], fallback: string): string {
+    try {
+      for (const candidate of candidates) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidate)) {
+          return candidate;
+        }
+      }
+    } catch {}
+    return fallback;
+  }
+  const pickMime = (audioOnly: boolean): string => {
+    const list = audioOnly ? AUDIO_MIME_CANDIDATES : VIDEO_MIME_CANDIDATES;
+    const fallback = audioOnly ? 'audio/webm' : 'video/webm';
+    return chooseSupportedMime(list, fallback);
+  };
 
   const pad = (n: number) => String(n).padStart(2, '0');
   function formatTimestamp(date: Date): string {
@@ -50,16 +85,6 @@
     } catch {
       return `Script_${formatTimestamp(new Date())}.webm`;
     }
-  };
-
-  const pickMime = (): string => {
-    try {
-      const cand = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-      for (const t of cand) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
-      }
-    } catch {}
-    return 'video/webm';
   };
 
   const getVideoStream = async (): Promise<MediaStream> => {
@@ -120,18 +145,26 @@
         });
       } catch {}
 
-      const v = await getVideoStream();
+      const audioOnly = isAudioOnlyEnabled();
       const a = await getAudioStream();
       const mix = new MediaStream();
       try {
         a.getAudioTracks().forEach((t) => mix.addTrack(t));
       } catch {}
-      try {
-        v.getVideoTracks().forEach((t) => mix.addTrack(t));
-      } catch {}
+      if (!audioOnly) {
+        try {
+          const v = await getVideoStream();
+          v.getVideoTracks().forEach((t) => mix.addTrack(t));
+        } catch (err) {
+          try { console.warn('[core-recorder] video capture failed', err); } catch {}
+        }
+      }
       currentStream = mix;
-      const mime = pickMime();
-      mediaRecorder = new MediaRecorder(mix, { mimeType: mime, videoBitsPerSecond: 5_000_000, audioBitsPerSecond: 128_000 });
+      const mime = pickMime(audioOnly);
+      const options = audioOnly
+        ? { mimeType: mime, audioBitsPerSecond: 128_000 }
+        : { mimeType: mime, videoBitsPerSecond: 5_000_000, audioBitsPerSecond: 128_000 };
+      mediaRecorder = new MediaRecorder(mix, options);
       chunks = [];
       mediaRecorder.ondataavailable = (e: BlobEvent) => {
         try {

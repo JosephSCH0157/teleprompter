@@ -26,6 +26,7 @@ const ASR_PROFILES_KEY = 'tp_asr_profiles_v1';
 const ASR_ACTIVE_PROFILE_KEY = 'tp_asr_active_profile_v1';
 const ASR_TUNING_PROFILES_KEY = 'tp_asr_tuning_profiles_v1';
 const ASR_TUNING_ACTIVE_PROFILE_KEY = 'tp_asr_tuning_active_profile_v1';
+const RECORD_AUDIO_ONLY_KEY = 'tp_record_audio_only';
 
 // Scroll router keys
 const SCROLL_MODE_KEY = 'scrollMode';
@@ -65,6 +66,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   hudSpeechNotesEnabledByUser: HUD_SPEECH_NOTES_KEY,
   overlay: OVERLAY_KEY,
   cameraEnabled: CAMERA_KEY,
+  recordAudioOnly: RECORD_AUDIO_ONLY_KEY,
   // Scroll router persistence
   scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
@@ -128,6 +130,7 @@ export type AppStoreState = {
   obsHost: string;
   obsPassword: string;
   autoRecord: boolean;
+  recordAudioOnly: boolean;
   prerollSeconds: number;
   devHud: boolean;
   hudSupported: boolean;
@@ -318,6 +321,13 @@ function buildInitialState(): AppStoreState {
     autoRecord: (() => {
       try {
         return localStorage.getItem(AUTO_RECORD_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    recordAudioOnly: (() => {
+      try {
+        return localStorage.getItem(RECORD_AUDIO_ONLY_KEY) === '1';
       } catch {
         return false;
       }
@@ -654,6 +664,9 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   }
   if (!state.settingsSaveStatus || typeof state.settingsSaveStatus !== 'object') {
     state.settingsSaveStatus = { state: 'idle', at: 0 };
+  }
+  if (typeof state.recordAudioOnly !== 'boolean') {
+    state.recordAudioOnly = false;
   }
   return state;
 }
