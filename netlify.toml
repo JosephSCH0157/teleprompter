@@ -51,6 +51,26 @@
   to = "/account.html"
   status = 200
 
+[[redirects]]
+  from = "/sitemaps.xml"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/rss"
+  to = "/atom.xml"
+  status = 200
+
+[[redirects]]
+  from = "/rss.xml"
+  to = "/atom.xml"
+  status = 200
+
+[[redirects]]
+  from = "/feed.xml"
+  to = "/atom.xml"
+  status = 200
+
 # If you ever add SPA routes later, keep this OFF for now unless you need it.
 # [[redirects]]
 #   from = "/*"
