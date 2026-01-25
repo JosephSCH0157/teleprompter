@@ -100,6 +100,30 @@
         box-shadow: inset 0 0 6px rgba(0,0,0,0.25);
       }
       .tp-login-button:hover { filter: brightness(1.05); }
+      .tp-beta-cta {
+        margin-top: 1.25rem;
+        text-align: center;
+      }
+      .tp-beta-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.85rem 1.6rem;
+        border-radius: 999px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: linear-gradient(135deg, #ffd56b, #ff8b00);
+        color: #1a1a1a;
+        box-shadow: 0 16px 35px rgba(255, 168, 57, 0.45);
+        text-decoration: none;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+      }
+      .tp-beta-link:hover {
+        filter: brightness(1.05);
+        box-shadow: 0 18px 40px rgba(255, 168, 57, 0.55);
+      }
       .tp-login-secondary {
         margin-top: 0.9rem;
         margin-bottom: 1.75rem;
@@ -234,6 +258,17 @@
           <div class="tp-login-subtitle">
             Forge your voice. Shape your story.<br>
             <span style="font-size:0.8rem; opacity:0.7;">Private beta Â· invite required</span>
+          </div>
+
+          <div class="tp-beta-cta">
+            <a
+              href="https://podcastersforge.com/beta"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="tp-beta-link"
+            >
+              Apply to join the Beta Here
+            </a>
           </div>
 
           <form id="login-form">
