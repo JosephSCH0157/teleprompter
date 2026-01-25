@@ -831,6 +831,25 @@ export function wireOverlays() {
           close('settings');
         } catch {}
       });
+
+      const attachSettingsBtn = () => {
+        try {
+          const selector = '#settingsBtn, [data-action="settings-open"]';
+          const buttons = document.querySelectorAll<HTMLElement>(selector);
+          buttons.forEach((btn) => {
+            const bound = (btn as any).__tpSettingsBound;
+            if (bound) return;
+            try {
+              btn.addEventListener('click', () => {
+                try { open('settings'); } catch {}
+              }, { capture: true });
+              (btn as any).__tpSettingsBound = true;
+            } catch {}
+          });
+        } catch {}
+      };
+
+      attachSettingsBtn();
     } catch {}
   });
 }
