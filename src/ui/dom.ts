@@ -759,6 +759,9 @@ export function wireOverlays() {
       try {
         window.addEventListener('tp:help:open', () => { try { ensureHelpContents(); } catch {} });
       } catch {}
+      const SETTINGS_OPEN_SEL = '#settingsBtn, [data-action="settings-open"]';
+      const HANDLED_FLAG = '__tpSettingsHandled';
+
       const open = (name) => {
         try {
           const btn = $id(name + 'Btn');
@@ -807,7 +810,8 @@ export function wireOverlays() {
             try { (window as any).__tpStore?.set?.('page', 'help'); } catch {}
             return open('shortcuts');
           }
-          if (t && t.closest && t.closest('#settingsBtn, [data-action="settings-open"]')) {
+          if (t && t.closest && t.closest(SETTINGS_OPEN_SEL)) {
+            if ((e as any)?.[HANDLED_FLAG]) return;
             // Ensure Scripts Folder card injected before/after opening
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
             try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
@@ -840,8 +844,17 @@ export function wireOverlays() {
             const bound = (btn as any).__tpSettingsBound;
             if (bound) return;
             try {
-              btn.addEventListener('click', () => {
+              btn.addEventListener('click', (e) => {
+                try { e.preventDefault(); } catch {}
+                try { e.stopPropagation(); } catch {}
+                try { (e as any).stopImmediatePropagation?.(); } catch {}
+                try {
+                  (e as any)[HANDLED_FLAG] = true;
+                } catch {}
+                try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+                try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
                 try { open('settings'); } catch {}
+                try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
               }, { capture: true });
               (btn as any).__tpSettingsBound = true;
             } catch {}
