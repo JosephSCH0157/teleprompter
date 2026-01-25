@@ -42,10 +42,10 @@ ensureSpeechGlobals();
     };
 
     const recMod = await pick([
-      '/dist/speech/recognizer.js',
+      '/dist/speech/recognizer.real.js',
     ]);
     const matchMod = await pick([
-      '/dist/speech/matcher.js',
+      '/dist/speech/matcher.real.js',
     ]);
 
     if (recMod) {
@@ -63,7 +63,7 @@ ensureSpeechGlobals();
 
     // high-level orchestrator (best-effort)
     const orch = await pick([
-      '/dist/speech/orchestrator.js',
+      '/dist/speech/orchestrator.real.js',
     ]);
     if (orch) {
       (window).__tpSpeech = (window).__tpSpeech || {};

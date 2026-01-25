@@ -8,6 +8,7 @@ const shared = {
   sourcemap: true,
   target: ['es2020'],
   outdir: 'dist/speech',            // served at /speech/*.js
+  outExtension: { '.js': '.real.js' },
 };
 
 const entries = [

@@ -30,6 +30,16 @@ const STATIC_PATHS = [
   path.join('adapters', 'obsBridge.js'),
 ];
 
+const SPEECH_STUBS = [
+  { src: path.join('speech-stubs', 'recognizer.js'), dest: path.join('speech', 'recognizer.js') },
+  { src: path.join('speech-stubs', 'matcher.js'), dest: path.join('speech', 'matcher.js') },
+  { src: path.join('speech-stubs', 'orchestrator.js'), dest: path.join('speech', 'orchestrator.js') },
+];
+
 for (const rel of STATIC_PATHS) {
   copy(path.join(ROOT, rel), path.join(DIST, rel));
+}
+
+for (const stub of SPEECH_STUBS) {
+  copy(path.join(ROOT, stub.src), path.join(DIST, stub.dest));
 }

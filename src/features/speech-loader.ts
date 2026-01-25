@@ -127,7 +127,7 @@ function _showToast(msg: string) {
 }
 
 // One entry point for speech. Uses Web Speech by default.
-// If /dist/speech/orchestrator.js exists (built from TS), we load it instead.
+// If /dist/speech/orchestrator.real.js exists (built from TS), we load it instead.
 // Autoscroll is managed externally; buffered stop handled in index listener
 
 let running = false;
@@ -347,7 +347,7 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
   } catch {}
 }
 
-// (dynamic import of '/dist/speech/orchestrator.js' is performed inline where needed)
+// (dynamic import of '/dist/speech/orchestrator.real.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
 function _startWebSpeech(): { stop: () => void } | null {
@@ -1172,7 +1172,7 @@ async function probeUrl(url: string): Promise<boolean> {
 
 async function resolveOrchestratorUrl(): Promise<string> {
   const v = Date.now();
-  const primary = `/dist/speech/orchestrator.js?v=${v}`;
+  const primary = `/dist/speech/orchestrator.real.js?v=${v}`;
   try { console.log('[SPEECH] orchestrator resolved ->', primary); } catch {}
   return primary;
 }
@@ -1199,11 +1199,11 @@ async function resolveOrchestratorUrl(): Promise<string> {
 
       const backendAllowed = isSpeechBackendAllowed();
       let hasOrchestrator = hasGlobalOrch;
-      if (!hasOrchestrator && backendAllowed && !ciGuard) {
-        try {
-          hasOrchestrator = await probeUrl('/dist/speech/orchestrator.js');
-        } catch {}
-      }
+        if (!hasOrchestrator && backendAllowed && !ciGuard) {
+          try {
+            hasOrchestrator = await probeUrl('/dist/speech/orchestrator.real.js');
+          } catch {}
+        }
 
       const supported = SRAvail || hasOrchestrator;
       const canUse = supported || force;
