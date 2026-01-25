@@ -82,7 +82,7 @@
       "text": "[VIEWER_ROLE] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 20556,
+        "lineNumber": 20568,
         "columnNumber": 14
       }
     },
@@ -91,7 +91,7 @@
       "text": "[ROUTER_STAMP] 1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 20564,
+        "lineNumber": 20576,
         "columnNumber": 14
       }
     },
@@ -100,7 +100,7 @@
       "text": "[router-probe] scroll-router loaded",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 20571,
+        "lineNumber": 20583,
         "columnNumber": 16
       }
     },
@@ -109,7 +109,7 @@
       "text": "[HYBRID_CTRL] flag JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 20765,
+        "lineNumber": 20777,
         "columnNumber": 16
       }
     },
@@ -118,7 +118,7 @@
       "text": "[ROUTER_STAMP] render-script 1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31950,
+        "lineNumber": 31962,
         "columnNumber": 14
       }
     },
@@ -127,7 +127,7 @@
       "text": "SCROLL_SESSION_FINGERPRINT scroll-session-v3-2025-12-19-a",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33321,
+        "lineNumber": 33333,
         "columnNumber": 14
       }
     },
@@ -136,7 +136,7 @@
       "text": "[core-recorder] bridged to __tpRecording",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 34547,
+        "lineNumber": 34595,
         "columnNumber": 18
       }
     },
@@ -145,7 +145,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -154,7 +154,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore: missing select JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -163,7 +163,7 @@
       "text": "[SCRIPT-EDITOR] wiring complete",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40419,
+        "lineNumber": 40533,
         "columnNumber": 12
       }
     },
@@ -172,7 +172,7 @@
       "text": "[build] asr-scroll-<DATE>",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54617,
+        "lineNumber": 54765,
         "columnNumber": 14
       }
     },
@@ -181,7 +181,7 @@
       "text": "[TP-BOOT] TS index.ts booted",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54621,
+        "lineNumber": 54769,
         "columnNumber": 14
       }
     },
@@ -190,7 +190,7 @@
       "text": "[ROUTER_STAMP] index-app 1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54644,
+        "lineNumber": 54792,
         "columnNumber": 14
       }
     },
@@ -199,7 +199,7 @@
       "text": "[OBS-UI] wiring settings/sidebar controls",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 32262,
+        "lineNumber": 32274,
         "columnNumber": 14
       }
     },
@@ -208,7 +208,7 @@
       "text": "[Scroll Mode] ASR rejected JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53190,
+        "lineNumber": 53338,
         "columnNumber": 14
       }
     },
@@ -217,7 +217,7 @@
       "text": "[Scroll Mode] UI: step | Brain: step | Clamp: free | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53352,
+        "lineNumber": 53500,
         "columnNumber": 12
       }
     },
@@ -226,7 +226,7 @@
       "text": "[src/ui/dom] bindStaticDom",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 46844,
+        "lineNumber": 46992,
         "columnNumber": 10
       }
     },
@@ -235,7 +235,7 @@
       "text": "[display-debug] bindStaticDom:display-btn JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 45836,
+        "lineNumber": 45950,
         "columnNumber": 14
       }
     },
@@ -244,7 +244,7 @@
       "text": "[display-debug] wireDisplayBridge JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 45836,
+        "lineNumber": 45950,
         "columnNumber": 14
       }
     },
@@ -253,7 +253,7 @@
       "text": "[SCROLL] initOnce: scroll-router (viewer=true)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53908,
+        "lineNumber": 54056,
         "columnNumber": 22
       }
     },
@@ -262,7 +262,7 @@
       "text": "[AUTO_INTENT] INLINE_WIRE about to addEventListener tp:auto:intent",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53912,
+        "lineNumber": 54060,
         "columnNumber": 22
       }
     },
@@ -271,7 +271,7 @@
       "text": "[AUTO_INTENT] INLINE_WIRE done",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53934,
+        "lineNumber": 54082,
         "columnNumber": 22
       }
     },
@@ -280,7 +280,7 @@
       "text": "[AUTO_INTENT] index-app about to call scrollRouter.wireAutoIntentListener scroll-router-wire-v1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53938,
+        "lineNumber": 54086,
         "columnNumber": 22
       }
     },
@@ -289,7 +289,7 @@
       "text": "[AUTO_INTENT] triggerWireAutoIntentListener ENTER scroll-router-wire-v1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16678,
+        "lineNumber": 16690,
         "columnNumber": 12
       }
     },
@@ -298,7 +298,7 @@
       "text": "[AUTO_INTENT] TRIGGER body reached JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16682,
+        "lineNumber": 16694,
         "columnNumber": 12
       }
     },
@@ -307,7 +307,7 @@
       "text": "[AUTO_INTENT] TRIGGER step=3 wiring now",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16692,
+        "lineNumber": 16704,
         "columnNumber": 14
       }
     },
@@ -316,7 +316,7 @@
       "text": "[AUTO_INTENT] listener wired v2026-01-07c JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16699,
+        "lineNumber": 16711,
         "columnNumber": 14
       }
     },
@@ -325,7 +325,7 @@
       "text": "[AUTO_INTENT] TRIGGER step=4 wired ok",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16703,
+        "lineNumber": 16715,
         "columnNumber": 14
       }
     },
@@ -334,7 +334,7 @@
       "text": "[AUTO_INTENT] INLINE recv JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53918,
+        "lineNumber": 54066,
         "columnNumber": 26
       }
     },
@@ -343,7 +343,7 @@
       "text": "[AUTO_INTENT] recv JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16661,
+        "lineNumber": 16673,
         "columnNumber": 12
       }
     },
@@ -352,7 +352,7 @@
       "text": "[AUTO_INTENT] onAutoIntent route JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16665,
+        "lineNumber": 16677,
         "columnNumber": 10
       }
     },
@@ -361,7 +361,7 @@
       "text": "[AUTO_INTENT] TRIGGER wired listeners (window+document)",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16721,
+        "lineNumber": 16733,
         "columnNumber": 14
       }
     },
@@ -370,7 +370,7 @@
       "text": "[AUTO_INTENT] triggerWireAutoIntentListener EXIT scroll-router-wire-v1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16726,
+        "lineNumber": 16738,
         "columnNumber": 12
       }
     },
@@ -379,7 +379,7 @@
       "text": "[AUTO_INTENT] index-app returned from wireAutoIntentListener scroll-router-wire-v1",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53946,
+        "lineNumber": 54094,
         "columnNumber": 22
       }
     },
@@ -388,7 +388,7 @@
       "text": "[OBS-UI] wiring settings/sidebar controls",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 32262,
+        "lineNumber": 32274,
         "columnNumber": 14
       }
     },
@@ -397,7 +397,7 @@
       "text": "OBS connected.",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 30977,
+        "lineNumber": 30989,
         "columnNumber": 12
       }
     },
@@ -406,7 +406,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 38188,
+        "lineNumber": 38236,
         "columnNumber": 12
       }
     },
@@ -415,7 +415,7 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22120,
+        "lineNumber": 22132,
         "columnNumber": 14
       }
     },
@@ -424,7 +424,7 @@
       "text": "[src/features/persistence] initPersistence",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40035,
+        "lineNumber": 40149,
         "columnNumber": 12
       }
     },
@@ -433,7 +433,7 @@
       "text": "[src/features/telemetry] initTelemetry",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40048,
+        "lineNumber": 40162,
         "columnNumber": 12
       }
     },
@@ -442,7 +442,7 @@
       "text": "[src/features/hotkeys] initHotkeys",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40022,
+        "lineNumber": 40136,
         "columnNumber": 12
       }
     },
@@ -451,7 +451,7 @@
       "text": "[src/features/toasts] initToasts",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40061,
+        "lineNumber": 40175,
         "columnNumber": 12
       }
     },
@@ -460,7 +460,7 @@
       "text": "[TP-READY] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 54100,
+        "lineNumber": 54248,
         "columnNumber": 18
       }
     },
@@ -469,7 +469,7 @@
       "text": "[Scroll Mode] UI: step | Brain: step | Clamp: free | ASR: off | Auto: off",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 53352,
+        "lineNumber": 53500,
         "columnNumber": 12
       }
     },
@@ -478,7 +478,7 @@
       "text": "[TP-INIT] {\"tp_init_done\":true,\"reason\":\"ts:index:onReady\"}",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 37502,
+        "lineNumber": 37550,
         "columnNumber": 22
       }
     },
@@ -487,7 +487,7 @@
       "text": "JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 47153,
+        "lineNumber": 47301,
         "columnNumber": 16
       }
     },
@@ -505,7 +505,7 @@
       "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -514,7 +514,7 @@
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -523,7 +523,7 @@
       "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22478,
+        "lineNumber": 22490,
         "columnNumber": 12
       }
     },
@@ -532,7 +532,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -541,7 +541,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -550,7 +550,7 @@
       "text": "folder:cleared JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22478,
+        "lineNumber": 22490,
         "columnNumber": 12
       }
     },
@@ -559,7 +559,7 @@
       "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -568,7 +568,7 @@
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -577,7 +577,7 @@
       "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22478,
+        "lineNumber": 22490,
         "columnNumber": 12
       }
     },
@@ -586,7 +586,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -595,7 +595,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -604,7 +604,7 @@
       "text": "folder:cleared JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22478,
+        "lineNumber": 22490,
         "columnNumber": 12
       }
     },
@@ -613,7 +613,7 @@
       "text": "[settings-builder] renderSettingsBody TS v2025-12-07",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 38188,
+        "lineNumber": 38236,
         "columnNumber": 12
       }
     },
@@ -622,7 +622,7 @@
       "text": "[SCRIPT-STORE] syncMapped entries JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -631,7 +631,7 @@
       "text": "[SCRIPT-STORE] scriptsById size after sync 0 JSHandle@array",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -640,7 +640,7 @@
       "text": "script-store:syncMapped JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22478,
+        "lineNumber": 22490,
         "columnNumber": 12
       }
     },
@@ -649,7 +649,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -658,7 +658,7 @@
       "text": "[SCRIPT-EDITOR] syncSelectFromStore JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22471,
+        "lineNumber": 22483,
         "columnNumber": 12
       }
     },
@@ -667,7 +667,7 @@
       "text": "folder:cleared JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 22478,
+        "lineNumber": 22490,
         "columnNumber": 12
       }
     },
@@ -676,7 +676,7 @@
       "text": "[ASR] legacy state built JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 40176,
+        "lineNumber": 40290,
         "columnNumber": 12
       }
     },
@@ -685,7 +685,7 @@
       "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31732,
+        "lineNumber": 31744,
         "columnNumber": 14
       }
     },
@@ -694,7 +694,7 @@
       "text": "[SCROLL_ROUTER] render-script installing router now",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31742,
+        "lineNumber": 31754,
         "columnNumber": 18
       }
     },
@@ -703,7 +703,7 @@
       "text": "[SCROLL_ROUTER] install debug JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31753,
+        "lineNumber": 31765,
         "columnNumber": 18
       }
     },
@@ -712,7 +712,7 @@
       "text": "ABOUT TO CALL installScrollRouter",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31762,
+        "lineNumber": 31774,
         "columnNumber": 18
       }
     },
@@ -721,7 +721,7 @@
       "text": "[AUTO_INTENT] processor assigned JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18046,
+        "lineNumber": 18058,
         "columnNumber": 12
       }
     },
@@ -730,7 +730,7 @@
       "text": "[AUTO_INTENT] flushing pending JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18048,
+        "lineNumber": 18060,
         "columnNumber": 14
       }
     },
@@ -739,7 +739,7 @@
       "text": "[SCROLL_ROUTER] installScrollRouter ENTER JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18058,
+        "lineNumber": 18070,
         "columnNumber": 12
       }
     },
@@ -748,7 +748,7 @@
       "text": "[ScrollRouter] stopAllMotors mode switch to step",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 17901,
+        "lineNumber": 17913,
         "columnNumber": 14
       }
     },
@@ -757,7 +757,7 @@
       "text": "[AUTO_INTENT] processor assigned JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18374,
+        "lineNumber": 18386,
         "columnNumber": 10
       }
     },
@@ -766,7 +766,7 @@
       "text": "[scroll-router] tp:auto:intent listener installed",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 18384,
+        "lineNumber": 18396,
         "columnNumber": 12
       }
     },
@@ -775,7 +775,7 @@
       "text": "[ScrollRouter] stopAllMotors phase change",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 17848,
+        "lineNumber": 17860,
         "columnNumber": 16
       }
     },
@@ -784,7 +784,7 @@
       "text": "[scroll-router] MOTOR_IGNORED_OFF mode=step sessionPhase=idle sessionIntent=false pxPerSec=21 blocked=blocked:sessionOff",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
+        "lineNumber": 19790,
         "columnNumber": 18
       }
     },
@@ -793,7 +793,7 @@
       "text": "[scroll-router] tp:autoIntent listener installed",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 20413,
+        "lineNumber": 20425,
         "columnNumber": 14
       }
     },
@@ -802,7 +802,7 @@
       "text": "[scroll-router] tp:session:intent listener installed",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 20442,
+        "lineNumber": 20454,
         "columnNumber": 14
       }
     },
@@ -811,7 +811,7 @@
       "text": "[scroll-router] MOTOR_IGNORED_OFF mode=step sessionPhase=idle sessionIntent=false pxPerSec=21 blocked=blocked:sessionOff",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19778,
+        "lineNumber": 19790,
         "columnNumber": 18
       }
     },
@@ -820,7 +820,7 @@
       "text": "RETURNED FROM installScrollRouter",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 31768,
+        "lineNumber": 31780,
         "columnNumber": 20
       }
     },
@@ -829,7 +829,7 @@
       "text": "[publishDisplayScript] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33639,
+        "lineNumber": 33651,
         "columnNumber": 14
       }
     },
@@ -838,16 +838,7 @@
       "text": "[publishDisplayScript] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 33639,
-        "columnNumber": 14
-      }
-    },
-    {
-      "type": "warning",
-      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 50636,
+        "lineNumber": 33651,
         "columnNumber": 14
       }
     },
@@ -856,8 +847,17 @@
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 51815,
+        "lineNumber": 51963,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 50784,
+        "columnNumber": 14
       }
     },
     {
@@ -865,7 +865,7 @@
       "text": "[HYBRID_CTRL] engaged JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19098,
+        "lineNumber": 19110,
         "columnNumber": 16
       }
     },
@@ -874,7 +874,7 @@
       "text": "[HYBRID_CTRL] mult-debug JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16383,
+        "lineNumber": 16395,
         "columnNumber": 12
       }
     },
@@ -883,7 +883,7 @@
       "text": "[HYBRID_CTRL] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16340,
+        "lineNumber": 16352,
         "columnNumber": 12
       }
     },
@@ -892,7 +892,7 @@
       "text": "[HYBRID_TRUTH] {\"basePxps\":24,\"finalPxps\":21.6,\"errorPx\":null,\"errorLines\":null,\"effectiveErrorLines\":null,\"targetMult\":1,\"lineMult\":1,\"capReason\":\"none\",\"scaleReason\":\"base\",\"weakMatch\":false,\"driftWeak\":false,\"bestSim\":null,\"offScriptActive\":false,\"noMatch\":null,\"sawNoMatch\":false,\"hardNoMatch\":false,\"targetTopSource\":null}",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 16420,
+        "lineNumber": 16432,
         "columnNumber": 12
       }
     },
@@ -901,7 +901,7 @@
       "text": "[HYBRID_FINAL_MILE] basePxps=24.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=1.000 preClampScale=1.000 scaleAfterCaps=1.000 capMax=2.800 floorMin=0.900 finalScale=1.000 finalPxps=21.60 reasons=deadband",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19464,
+        "lineNumber": 19476,
         "columnNumber": 16
       }
     },
@@ -910,7 +910,7 @@
       "text": "[HYBRID_FINAL_MILE_STATE] noMatch=true weakMatch=false hardNoMatch=false offScriptActive=false reason=base conf=0.00 sim=0.00 matchSim=null matchReason=unknown targetTopSrc=unknown",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19478,
+        "lineNumber": 19490,
         "columnNumber": 16
       }
     },
@@ -919,7 +919,7 @@
       "text": "[HYBRID_POST_CLAMP] {\"stage\":\"unknown_post_final_mile\",\"basePxps\":24,\"finalScale\":1,\"wantedPxps\":24,\"finalPxps\":21.6,\"deltaLines\":0,\"reasons\":[\"deadband\"],\"capMax\":2.8,\"capMin\":0.9}",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 19495,
+        "lineNumber": 19507,
         "columnNumber": 16
       }
     },
@@ -928,15 +928,8 @@
       "text": "[HYBRID_BRAKE] set JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 17653,
+        "lineNumber": 17665,
         "columnNumber": 16
-      }
-    },
-    {
-      "type": "error",
-      "text": "Failed to load module script: Expected a JavaScript module script but the server responded with a MIME type of \"text/html\". Strict MIME type checking is enforced for module scripts per HTML spec.",
-      "location": {
-        "url": "http://127.0.0.1:5180/forge/login.js"
       }
     }
   ],
@@ -951,9 +944,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "c09cae498ae64d739b439f39d11e6641779164ea",
+      "gitSha": "8e94e80010e503d6fa16a8e91259329612db0486",
       "branch": "main",
-      "buildTime": "2026-01-25T22:19:13.484Z"
+      "buildTime": "2026-01-25T22:40:49.290Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
