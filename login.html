@@ -365,7 +365,26 @@
 
     <script src="/forge-config.js"></script>
     <!-- Adjust path if your bundler outputs somewhere else -->
-<script type="module" src="/dist/forge/login.js"></script>
+    <script>
+      (function () {
+        const candidates = ['/dist/forge/login.js', '/forge/login.js'];
+        function tryPath(index) {
+          if (index >= candidates.length) {
+            console.error('Unable to load /forge/login.js from any expected path.');
+            return;
+          }
+          const script = document.createElement('script');
+          script.type = 'module';
+          script.src = candidates[index];
+          script.onerror = () => {
+            script.remove();
+            tryPath(index + 1);
+          };
+          document.body.appendChild(script);
+        }
+        tryPath(0);
+      })();
+    </script>
   </body>
 </html>
 
