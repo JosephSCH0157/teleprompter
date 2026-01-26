@@ -767,16 +767,26 @@ export function wireOverlays() {
           const btn = $id(name + 'Btn');
           const dlg = $id(name + 'Overlay');
           if (!dlg) return;
-          // Ensure settings content is mounted before showing
+
+          // Prevent overlays from stacking
+          if (name === 'settings') {
+            close('shortcuts');
+          } else if (name === 'shortcuts') {
+            close('settings');
+          }
+
+          // Ensure settings content is mounted before showing, but never abort showing
           if (name === 'settings') {
             try {
               const api = (window.__tp && window.__tp.settings) ? window.__tp.settings : null;
               if (api && typeof api.mount === 'function') api.mount();
-            } catch {}
+            } catch (err) {
+              try { console.warn('[settings] mount failed', err); } catch {}
+            }
           } else if (name === 'shortcuts') {
-            // Inject help contents if missing
-            ensureHelpContents();
+            try { ensureHelpContents(); } catch {}
           }
+
           dlg.classList.remove('hidden');
           dlg.removeAttribute('hidden');
           dlg.setAttribute('aria-hidden', 'false');
