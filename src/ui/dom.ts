@@ -759,7 +759,9 @@ export function wireOverlays() {
       try {
         window.addEventListener('tp:help:open', () => { try { ensureHelpContents(); } catch {} });
       } catch {}
-      const SETTINGS_OPEN_SEL = '#settingsBtn, [data-action="settings-open"]';
+      const SETTINGS_BTN_SEL = '#settingsBtn';
+      const SETTINGS_FALLBACK_SEL = '[data-action="settings-open"]';
+      const SETTINGS_OPEN_SEL = `${SETTINGS_BTN_SEL}, ${SETTINGS_FALLBACK_SEL}`;
       const HANDLED_FLAG = '__tpSettingsHandled';
 
       const open = (name) => {
@@ -817,7 +819,9 @@ export function wireOverlays() {
         try {
           const t = e.target as HTMLElement | null;
           if (!t || !t.closest) return;
-          if (!t.closest(SETTINGS_OPEN_SEL)) return;
+          const matchesMainBtn = Boolean(t.closest(SETTINGS_BTN_SEL));
+          const matchesFallback = !matchesMainBtn && Boolean(t.closest(SETTINGS_FALLBACK_SEL));
+          if (!matchesMainBtn && !matchesFallback) return;
           if ((e as any)[HANDLED_FLAG]) return;
           try { (e as any)[HANDLED_FLAG] = true; } catch {}
           try { e.preventDefault(); } catch {}
