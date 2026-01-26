@@ -23,6 +23,8 @@ type MappedEntry = { id: string; title: string; handle?: FileSystemFileHandle };
 
 type SelectRole = 'sidebar' | 'settings';
 const SETTINGS_SELECT_ID = 'scriptSelect';
+const OPEN_SETTINGS_COMMAND = '__OPEN_SETTINGS__';
+let lastSidebarValidSelection: string | null = null;
 
 function gatherScriptEntries(): MappedEntry[] {
   const entries = ScriptStore.getMappedEntries ? ScriptStore.getMappedEntries() as MappedEntry[] : [];
@@ -35,14 +37,6 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
     return;
   }
   const previous = select.value;
-  if (previous && previous.startsWith('__')) {
-    debugLog('[SCRIPT-EDITOR] syncSelectFromStore: sentinel value already present, skipping', {
-      role,
-      entries: entries.length,
-      value: previous,
-    });
-    return;
-  }
 
   const finishSync = () => {
     try { select.setAttribute('aria-busy', 'false'); } catch {}
@@ -51,7 +45,26 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
       entries: entries.length,
       value: select.value,
     });
+    if (role === 'sidebar' && select.value && select.value !== OPEN_SETTINGS_COMMAND) {
+      lastSidebarValidSelection = select.value;
+    }
   };
+
+  if (role === 'sidebar' && previous === OPEN_SETTINGS_COMMAND) {
+    debugLog('[SCRIPT-EDITOR] syncSelectFromStore: sentinel command consumed, reverting', {
+      role,
+      entries: entries.length,
+      value: previous,
+      revertTo: lastSidebarValidSelection,
+    });
+    if (lastSidebarValidSelection) {
+      select.value = lastSidebarValidSelection;
+    } else {
+      select.value = '';
+    }
+    finishSync();
+    return;
+  }
 
   select.innerHTML = '';
   if (!entries.length) {
@@ -59,7 +72,7 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
       role === 'sidebar'
         ? 'Map script folder...'
         : 'No existing scripts yet - map folder and save new ones here';
-    const placeholder = new Option(placeholderText, role === 'sidebar' ? '__OPEN_SETTINGS__' : '', true, true);
+    const placeholder = new Option(placeholderText, role === 'sidebar' ? OPEN_SETTINGS_COMMAND : '', true, true);
     if (role === 'sidebar') {
       (placeholder as any).dataset.settingsLink = '1';
       select.disabled = false;
