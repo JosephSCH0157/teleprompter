@@ -812,7 +812,6 @@ export function wireOverlays() {
           }
           if (t && t.closest && t.closest(SETTINGS_OPEN_SEL)) {
             if ((e as any)?.[HANDLED_FLAG]) return;
-            // Ensure Scripts Folder card injected before/after opening
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
             try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
             open('settings');
@@ -843,21 +842,21 @@ export function wireOverlays() {
           buttons.forEach((btn) => {
             const bound = (btn as any).__tpSettingsBound;
             if (bound) return;
-            try {
-              btn.addEventListener('click', (e) => {
-                try { e.preventDefault(); } catch {}
-                try { e.stopPropagation(); } catch {}
-                try { (e as any).stopImmediatePropagation?.(); } catch {}
-                try {
-                  (e as any)[HANDLED_FLAG] = true;
-                } catch {}
-                try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
-                try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
-                try { open('settings'); } catch {}
-                try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
-              }, { capture: true });
-              (btn as any).__tpSettingsBound = true;
-            } catch {}
+              try {
+                btn.addEventListener('click', (e) => {
+                  try {
+                    (e as any)[HANDLED_FLAG] = true;
+                  } catch {}
+                  try { e.preventDefault(); } catch {}
+                  try { e.stopPropagation(); } catch {}
+                  try { (e as any).stopImmediatePropagation?.(); } catch {}
+                  try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+                  try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
+                  try { open('settings'); } catch {}
+                  try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+                }, { capture: true });
+                (btn as any).__tpSettingsBound = true;
+              } catch {}
           });
         } catch {}
       };
