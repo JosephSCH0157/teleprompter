@@ -57,6 +57,10 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
       value: previous,
       revertTo: lastSidebarValidSelection,
     });
+    if (!entries.length) {
+      finishSync();
+      return;
+    }
     if (lastSidebarValidSelection) {
       select.value = lastSidebarValidSelection;
     } else {
