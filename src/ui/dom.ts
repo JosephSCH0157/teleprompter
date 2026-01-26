@@ -825,7 +825,7 @@ export function wireOverlays() {
           const se = $id('settingsOverlay');
           if (se && t === se) close('settings');
         } catch {}
-      }, { capture: true });
+      }, false);
 
       window.addEventListener('keydown', (e) => {
         try {
