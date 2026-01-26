@@ -234,21 +234,4 @@ module.exports = [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
     },
   },
-  {
-    files: ['dist/**/*.js'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-    },
-    rules: {
-      'no-unused-vars': 'off',
-      'no-empty': 'off',
-      'no-restricted-syntax': 'off',
-      'no-undef': 'off',
-      'no-fallthrough': 'off',
-      'no-cond-assign': 'off',
-      'no-prototype-builtins': 'off',
-      'no-constant-condition': 'off',
-    },
-  },
 ];
