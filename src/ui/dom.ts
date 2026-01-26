@@ -813,6 +813,24 @@ export function wireOverlays() {
         } catch {}
       };
 
+      const handleCaptureSettingsClick = (e: Event) => {
+        try {
+          const t = e.target as HTMLElement | null;
+          if (!t || !t.closest) return;
+          if (!t.closest(SETTINGS_OPEN_SEL)) return;
+          if ((e as any)[HANDLED_FLAG]) return;
+          try { (e as any)[HANDLED_FLAG] = true; } catch {}
+          try { e.preventDefault(); } catch {}
+          try { e.stopPropagation(); } catch {}
+          try { (e as any).stopImmediatePropagation?.(); } catch {}
+          try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+          try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
+          try { open('settings'); } catch {}
+          try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+        } catch {}
+      };
+      try { document.addEventListener('click', handleCaptureSettingsClick, { capture: true }); } catch {}
+
       document.addEventListener('click', (e) => {
         try {
           const t = e.target;
