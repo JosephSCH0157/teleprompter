@@ -35,6 +35,24 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
     return;
   }
   const previous = select.value;
+  if (previous && previous.startsWith('__')) {
+    debugLog('[SCRIPT-EDITOR] syncSelectFromStore: sentinel value already present, skipping', {
+      role,
+      entries: entries.length,
+      value: previous,
+    });
+    return;
+  }
+
+  const finishSync = () => {
+    try { select.setAttribute('aria-busy', 'false'); } catch {}
+    debugLog('[SCRIPT-EDITOR] syncSelectFromStore', {
+      role,
+      entries: entries.length,
+      value: select.value,
+    });
+  };
+
   select.innerHTML = '';
   if (!entries.length) {
     const placeholderText =
@@ -50,28 +68,25 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
     }
     select.append(placeholder);
     select.value = placeholder.value;
-  } else {
-    select.disabled = false;
-    const fragment = document.createDocumentFragment();
-    for (const entry of entries) {
-      const option = document.createElement('option');
-      option.value = entry.id;
-      option.textContent = entry.title || entry.id;
-      fragment.appendChild(option);
-    }
-    select.append(fragment);
-    if (previous && entries.some((entry) => entry.id === previous)) {
-      select.value = previous;
-    } else {
-      select.value = entries[0].id;
-    }
+    finishSync();
+    return;
   }
-  try { select.setAttribute('aria-busy', 'false'); } catch {}
-  debugLog('[SCRIPT-EDITOR] syncSelectFromStore', {
-    role,
-    entries: entries.length,
-    value: select.value,
-  });
+
+  select.disabled = false;
+  const fragment = document.createDocumentFragment();
+  for (const entry of entries) {
+    const option = document.createElement('option');
+    option.value = entry.id;
+    option.textContent = entry.title || entry.id;
+    fragment.appendChild(option);
+  }
+  select.append(fragment);
+  if (previous && entries.some((entry) => entry.id === previous)) {
+    select.value = previous;
+  } else {
+    select.value = entries[0].id;
+  }
+  finishSync();
 }
 
 function syncScriptSelectsFromStore(): void {
