@@ -1013,21 +1013,21 @@
       }
     },
     {
-      "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 52312,
-        "columnNumber": 16
-      }
-    },
-    {
       "type": "warning",
       "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 51133,
         "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 52312,
+        "columnNumber": 16
       }
     },
     {
@@ -1868,9 +1868,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "e69305b9bcd1b61d36a202677adc05d0bdd7bcdd",
+      "gitSha": "8f0a7ddebd7d289823f578b5d2bbf178e396e9c2",
       "branch": "main",
-      "buildTime": "2026-01-27T22:02:21.042Z"
+      "buildTime": "2026-01-27T22:20:46.462Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
