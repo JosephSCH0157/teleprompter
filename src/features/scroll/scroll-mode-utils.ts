@@ -1,7 +1,7 @@
 import type { ScrollMode } from './mode-router';
 
 const ALLOWED_MODES: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'step', 'rehearsal', 'auto', 'off'];
-const AUTO_ALLOWED: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'auto'];
+const AUTO_ALLOWED: ScrollMode[] = ['timed', 'wpm', 'hybrid', 'asr', 'auto'];
 
 function sanitize(raw?: string | null): string {
   const value = String(raw || '').trim().toLowerCase();

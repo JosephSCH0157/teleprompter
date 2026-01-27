@@ -777,11 +777,6 @@ export function triggerWireAutoIntentListener(): void {
       ];
       console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
     } catch {}
-    try {
-      window.dispatchEvent(
-        new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'wire-selftest' } }),
-      );
-    } catch {}
     try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window+document)'); } catch {}
   }
   try {
@@ -4255,9 +4250,12 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         } catch {}
       }
       const viewerReady = hasScrollableTarget();
+      const isLivePhase = sessionPhase === "live";
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
-      if (sessionBlocked) {
+      if (!isLivePhase) {
+        autoBlocked = "blocked:phaseNotLive";
+      } else if (sessionBlocked) {
         autoBlocked = "blocked:sessionOff";
       } else if (!userEnabled) {
         autoBlocked = "blocked:userIntentOff";

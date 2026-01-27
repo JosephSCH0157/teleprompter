@@ -1420,7 +1420,6 @@ async function resolveOrchestratorUrl(): Promise<string> {
           } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
           // Optionally flip user intent OFF when speech stops
-          try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'speech' } })); } catch {}
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
         } finally {
         }
