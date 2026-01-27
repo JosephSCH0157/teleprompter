@@ -1840,6 +1840,14 @@ let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
 let lastHybridCtrlLogAt = 0;
+let userEnabled = false;
+let userIntentOn = false;
+let dbGate = false;
+let vadGate = false;
+let gatePref = getUiPrefs().hybridGate;
+let speechActive = false;
+let sessionIntentOn = false;
+let sessionPhase = 'idle';
 const hybridCtrl = {
   mult: 1,
   lastTs: 0,
@@ -1853,6 +1861,26 @@ const hybridCtrl = {
 let hybridSessionPhase = 'idle';
 function getHybridSessionPhase() {
   return hybridSessionPhase;
+}
+function syncDebugState() {
+  if (typeof window === 'undefined') return;
+  try {
+    const win = window as any;
+    win.__tpSessionPhase = sessionPhase;
+    win.__tpSessionIntent = sessionIntentOn;
+    win.__tpSessionIntentOn = sessionIntentOn;
+    win.__tpIntentActive = sessionIntentOn;
+    win.__tpModeCurrent = state2.mode;
+    const globalMode = win.__tpMode;
+    if (globalMode && typeof globalMode === 'object') {
+      try {
+        globalMode.current = state2.mode;
+        globalMode.mode = state2.mode;
+      } catch {}
+    } else {
+      win.__tpMode = state2.mode;
+    }
+  } catch {}
 }
 function isPauseTokenText(text?: string | null) {
   if (!text) return false;
@@ -2551,35 +2579,15 @@ function installScrollRouter(opts) {
   } catch {
   }
   
-  let userEnabled = false;
-  let userIntentOn = false;
-  let dbGate = false;
-  let vadGate = false;
-  let gatePref = getUiPrefs().hybridGate;
-  let speechActive = false;
-  let sessionIntentOn = false;
-  let sessionPhase = 'idle';
+  userEnabled = false;
+  userIntentOn = false;
+  dbGate = false;
+  vadGate = false;
+  gatePref = getUiPrefs().hybridGate;
+  speechActive = false;
+  sessionIntentOn = false;
+  sessionPhase = 'idle';
   hybridSessionPhase = sessionPhase;
-  function syncDebugState() {
-    if (typeof window === 'undefined') return;
-    try {
-      const win = window as any;
-      win.__tpSessionPhase = sessionPhase;
-      win.__tpSessionIntent = sessionIntentOn;
-      win.__tpSessionIntentOn = sessionIntentOn;
-      win.__tpIntentActive = sessionIntentOn;
-      win.__tpModeCurrent = state2.mode;
-      const globalMode = win.__tpMode;
-      if (globalMode && typeof globalMode === 'object') {
-        try {
-          globalMode.current = state2.mode;
-          globalMode.mode = state2.mode;
-        } catch {}
-      } else {
-        win.__tpMode = state2.mode;
-      }
-    } catch {}
-  }
   syncDebugState();
   const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
   function isFatalAutoStopReason(reason?: string | null): boolean {
