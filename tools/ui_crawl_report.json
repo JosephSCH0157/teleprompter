@@ -1013,21 +1013,21 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 51133,
-        "columnNumber": 14
-      }
-    },
-    {
       "type": "log",
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 52312,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 51133,
+        "columnNumber": 14
       }
     },
     {
@@ -1696,6 +1696,51 @@
     },
     {
       "type": "info",
+      "text": "[display-bridge] openDisplay()",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 43446,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[display-bridge] opening http://127.0.0.1:5180/display.html",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 43457,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "debug",
+      "text": "[display-bridge] display window opened about:blank",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 43484,
+        "columnNumber": 20
+      }
+    },
+    {
+      "type": "log",
+      "text": "[publishDisplayScript] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 33858,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "log",
+      "text": "[publishDisplayScript] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 33858,
+        "columnNumber": 14
+      }
+    },
+    {
+      "type": "info",
       "text": "[MARKER_PADDING] markerPct=0.4 hostH=714 markerOffset=286 paddingTop=#script scrollPaddingTop=#viewer",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
@@ -1823,9 +1868,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "cf040a2d502367493602011e7f8808838de1aac4",
+      "gitSha": "e69305b9bcd1b61d36a202677adc05d0bdd7bcdd",
       "branch": "main",
-      "buildTime": "2026-01-27T21:40:00.137Z"
+      "buildTime": "2026-01-27T22:02:21.042Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
@@ -1860,7 +1905,32 @@
       "ariaLabel": null
     }
   ],
-  "legendProbe": [],
+  "legendProbeMain": [],
+  "legendProbeDisplay": [
+    {
+      "text": "Joe",
+      "color": "rgb(96, 165, 250)"
+    },
+    {
+      "text": "Brad",
+      "color": "rgb(250, 204, 21)"
+    }
+  ],
+  "legendProbeSource": "display",
+  "legendProbe": [
+    {
+      "text": "Joe",
+      "color": "rgb(96, 165, 250)"
+    },
+    {
+      "text": "Brad",
+      "color": "rgb(250, 204, 21)"
+    }
+  ],
+  "displayWindow": {
+    "present": true,
+    "url": "http://127.0.0.1:5180/display.html"
+  },
   "renderProbe": {
     "lineCount": 3,
     "iHello": 0,
