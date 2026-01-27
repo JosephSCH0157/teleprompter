@@ -3,6 +3,7 @@
 import { debugLog } from '../env/logging';
 import { ScriptStore } from '../features/scripts-store';
 import { applyScript } from '../features/apply-script';
+import { getLastScriptId } from '../features/script-selection';
 
 declare global {
   interface Window {
@@ -61,11 +62,17 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
       finishSync();
       return;
     }
-    if (lastSidebarValidSelection) {
-      select.value = lastSidebarValidSelection;
-    } else {
-      select.value = '';
+    let nextValue = lastSidebarValidSelection;
+    if (!nextValue) {
+      const lastId = getLastScriptId();
+      if (lastId && entries.some((entry) => entry.id === lastId)) {
+        nextValue = lastId;
+      }
     }
+    if (!nextValue && entries.length) {
+      nextValue = entries[0].id;
+    }
+    select.value = nextValue || '';
     finishSync();
     return;
   }

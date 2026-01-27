@@ -1504,6 +1504,23 @@ var DEFAULTS = {
 };
 var state2 = { ...DEFAULTS };
 var viewer = null;
+const ALLOWED_MODES = new Set(["timed", "wpm", "hybrid", "asr", "step", "rehearsal"]);
+function normalizeRouterMode(raw) {
+  const v = String(raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  if (v === "manual") return "step";
+  if (v === "auto") return "hybrid";
+  return ALLOWED_MODES.has(v) ? v : null;
+}
+function readModeFromStore() {
+  try {
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    const raw = store?.get?.("scrollMode");
+    return normalizeRouterMode(raw);
+  } catch {
+    return null;
+  }
+}
 function ensureViewerElement() {
   if (!viewer) {
     try {
@@ -2210,6 +2227,12 @@ function persistMode() {
 }
 function restoreMode() {
   try {
+    const storeMode = readModeFromStore();
+    if (storeMode) {
+      state2.mode = storeMode;
+      syncDebugState();
+      return;
+    }
     const legacy = LEGACY_LS_KEYS.map((k) => {
       try {
         return localStorage.getItem(k);
@@ -2234,6 +2257,24 @@ function restoreMode() {
     }
   } catch {
   }
+}
+let scrollModeStoreWired = false;
+function wireScrollModeStore() {
+  if (scrollModeStoreWired) return;
+  scrollModeStoreWired = true;
+  try {
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    if (typeof store?.subscribe !== "function") return;
+    store.subscribe("scrollMode", (next) => {
+      const normalized = normalizeRouterMode(next);
+      if (!normalized || normalized === state2.mode) return;
+      applyMode(normalized);
+      emitScrollModeSnapshot("mode-change");
+      if (normalized === "hybrid" || normalized === "wpm") {
+        seedHybridBaseSpeed();
+      }
+    });
+  } catch {}
 }
 function findNextLine(offsetTop, dir) {
   if (!viewer) return null;
@@ -2504,6 +2545,7 @@ function installScrollRouter(opts) {
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     seedHybridBaseSpeed();
   }
+  wireScrollModeStore();
   const orch = createOrchestrator();
   let orchRunning = false;
   let wpmUpdateInterval = null;
