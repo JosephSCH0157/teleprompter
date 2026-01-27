@@ -2596,6 +2596,9 @@ function installScrollRouter(opts) {
   }
 
   function setAutoIntentState(on: boolean, _reason?: string) {
+    try {
+      console.trace('[probe] setAutoIntentState', { on, reason: _reason });
+    } catch {}
     if (on && state2.mode === "hybrid" && !hasActiveAsrProfile()) {
       try { showToast('Select a saved mic calibration to use ASR/Hybrid.', { type: 'warning' }); } catch {}
       try { focusSidebarCalibrationSelect(); } catch {}

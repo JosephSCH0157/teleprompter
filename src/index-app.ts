@@ -792,6 +792,9 @@ function applyUiScrollMode(
   };
   const dispatchAutoIntentEvent = (on: boolean) => {
     try {
+      console.trace('[probe] dispatch tp:autoIntent', { on });
+    } catch {}
+    try {
       document.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
     } catch {}
   };

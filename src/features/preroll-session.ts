@@ -12,9 +12,9 @@ import {
   shouldAutoStartForMode,
 } from './scroll/scroll-mode-utils';
 
-function computeScrollAutoOnLive(): boolean {
+function computeScrollAutoOnLive(rawMode?: string | undefined): boolean {
   try {
-    const mode = appStore.get('scrollMode') as string | undefined;
+    const mode = rawMode ?? (appStore.get('scrollMode') as string | undefined);
     return shouldAutoStartForMode(mode);
   } catch {
     return true;
@@ -111,8 +111,9 @@ function computeAsrArmed(desired: boolean): boolean {
 }
 
 function snapshotPreroll(): void {
-  const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
-  const scrollAutoOnLive = computeScrollAutoOnLive();
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const mode = normalizeScrollMode(rawMode);
+  const scrollAutoOnLive = computeScrollAutoOnLive(rawMode);
   const autoRecordEnabled = wantsAutoRecord();
   const { recordOnLive, reason } = computeRecordArmOnLive(autoRecordEnabled);
   const asrDesired = computeAsrDesired();
@@ -131,6 +132,22 @@ function snapshotPreroll(): void {
   appStore.set('session.asrDesired', asrDesired);
   appStore.set('session.asrArmed', asrArmed);
   appStore.set('session.asrReady', asrArmed);
+  try {
+    console.log('[probe] scrollAutoOnLive computed', {
+      rawMode,
+      normalizedMode: mode,
+      scrollAutoOnLive,
+    });
+  } catch {}
+  if (scrollAutoOnLive) {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('tp:autoIntent', {
+          detail: { on: true, source: 'preroll', reason: 'live-start' },
+        }),
+      );
+    } catch {}
+  }
 
   try {
     console.debug(

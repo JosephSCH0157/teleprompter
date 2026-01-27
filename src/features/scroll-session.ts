@@ -42,6 +42,9 @@ type StopAutoScrollContext = {
 
 function dispatchAutoIntent(enabled: boolean): void {
   try {
+    console.trace('[probe] dispatch tp:autoIntent', { enabled });
+  } catch {}
+  try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {
       detail: { enabled, reason: 'session' },
     }));
@@ -134,7 +137,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
   }
 
   if (!session.scrollAutoOnLive) {
-    try { console.debug('[scroll-session] auto-scroll disabled for live phase'); } catch {}
+    try { console.debug('[scroll-session] auto-scroll not starting on live (scrollAutoOnLive=false)'); } catch {}
     return;
   }
   if (!shouldRun) {

@@ -2,6 +2,12 @@ import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 import './scroll/adapter';
 import './features/scroll/scroll-router';
 
+try {
+  window.addEventListener('tp:autoIntent', (ev: any) => {
+    try { console.log('[probe] tp:autoIntent', ev?.detail); } catch {}
+  });
+} catch {}
+
 function isDisplayContext(): boolean {
   try {
     const params = new URLSearchParams(window.location.search || '');
