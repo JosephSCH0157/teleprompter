@@ -504,10 +504,10 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
           toggleEl.addEventListener('click', () => {
             if (active) {
               stop();
-              dispatchAutoIntent(false, 'legacy-toggle');
+              dispatchAutoIntent(false, 'user');
             } else {
               start();
-              dispatchAutoIntent(true, 'legacy-toggle');
+              dispatchAutoIntent(true, 'user');
             }
           });
         }

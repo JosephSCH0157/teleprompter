@@ -528,7 +528,7 @@ function resetRun() {
   try { window.stopAutoScroll && window.stopAutoScroll(); } catch {}
   try { window.__scrollCtl?.stopAutoCatchup?.(); } catch {}
   try { window.resetTimer && window.resetTimer(); } catch {}
-  try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: false } })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'scriptEnd' } })); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
   try { setSessionPhase('idle'); } catch {}
 

@@ -136,7 +136,7 @@ function initAutoControls(): void {
 
   toggleEl?.addEventListener('click', (ev) => {
     try { ev.preventDefault(); } catch {}
-    dispatchAutoIntent(!autoRunning, 'user-toggle');
+    dispatchAutoIntent(!autoRunning, 'user');
   }, { capture: true });
 
   window.addEventListener('tp:motorState', (ev) => {

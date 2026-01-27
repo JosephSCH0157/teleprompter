@@ -5,7 +5,7 @@ import './features/scroll/scroll-router';
 try {
   window.addEventListener('tp:autoIntent', (ev: any) => {
     try {
-      console.log('[probe] tp:autoIntent', ev?.detail);
+      console.warn('[AUTO_INTENT] legacy tp:autoIntent event', ev?.detail);
       const on = ev?.detail?.on;
       const reason = ev?.detail?.reason;
       if (typeof on === 'boolean') {

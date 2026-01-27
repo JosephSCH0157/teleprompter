@@ -46,7 +46,7 @@ function dispatchAutoIntent(enabled: boolean): void {
   } catch {}
   try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {
-      detail: { enabled, reason: 'session' },
+      detail: { enabled, reason: 'scriptEnd' },
     }));
   } catch {
     // ignore

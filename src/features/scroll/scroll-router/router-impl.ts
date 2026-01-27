@@ -2594,6 +2594,19 @@ function installScrollRouter(opts) {
   function resolveAutoIntentReason(detail: any): string | undefined {
     return typeof detail.reason === 'string' ? detail.reason : undefined;
   }
+  const SESSION_INTENT_ALLOWED_OFF_REASONS = new Set([
+    'user',
+    'sessionstop',
+    'sessionintent',
+    'scriptend',
+  ]);
+  function normalizeSessionReason(reason?: string): string {
+    return (reason || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+  function canDisableSessionIntent(reason?: string): boolean {
+    if (!reason) return false;
+    return SESSION_INTENT_ALLOWED_OFF_REASONS.has(normalizeSessionReason(reason));
+  }
 
   function setAutoIntentState(on: boolean, _reason?: string) {
     try {
@@ -2607,7 +2620,15 @@ function installScrollRouter(opts) {
     userIntentOn = on;
     userEnabled = on;
     hybridWantedRunning = on;
-    sessionIntentOn = on;
+    if (on) {
+      sessionIntentOn = true;
+    } else if (canDisableSessionIntent(_reason)) {
+      sessionIntentOn = false;
+    } else {
+      try {
+        console.info('[AUTO_INTENT] denying sessionIntent disable', { reason: _reason });
+      } catch {}
+    }
     if (hybridWantedRunning && state2.mode === "hybrid") {
       seedHybridBaseSpeed();
       ensureOrchestratorForMode();
@@ -4827,7 +4848,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     }
   } catch {}
   try {
-      window.addEventListener("tp:session:intent", (e) => {
+    window.addEventListener("tp:session:intent", (e) => {
       try {
         const detail = (e as CustomEvent)?.detail || {};
         const active = detail.active === true;
@@ -4836,10 +4857,33 @@ function applyHybridVelocityCore(silence = hybridSilence) {
             `[scroll-router] tp:session:intent active=${active} mode=${detail.mode || state2.mode} reason=${detail.reason || 'unknown'}`,
           );
         } catch {}
-        setAutoIntentState(active);
+        setAutoIntentState(active, detail.reason);
       } catch {}
     });
     try { console.info('[scroll-router] tp:session:intent listener installed'); } catch {}
+  } catch {}
+  try {
+    const makeTerminalHandler = (name: string) => {
+      return (ev: Event) => {
+        try {
+          const detail = (ev as CustomEvent)?.detail || {};
+          const reason = detail.reason;
+          if (!canDisableSessionIntent(reason)) {
+            try {
+              console.warn('[scroll-router] ignored session termination', {
+                event: name,
+                reason,
+              });
+            } catch {}
+            return;
+          }
+          sessionIntentOn = false;
+          applyGate();
+        } catch {}
+      };
+    };
+    window.addEventListener('tp:session:stop', makeTerminalHandler('tp:session:stop'));
+    window.addEventListener('tp:session:wrap', makeTerminalHandler('tp:session:wrap'));
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;

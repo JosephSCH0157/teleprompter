@@ -795,7 +795,7 @@ function applyUiScrollMode(
       console.trace('[probe] dispatch tp:auto:intent', { on });
     } catch {}
     try {
-      document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on } }));
+      document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));
     } catch {}
   };
   let micPermissionCheckPending = false;
