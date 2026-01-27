@@ -2271,6 +2271,17 @@ function stopAllMotors(reason: string) {
       try { console.debug("[ScrollRouter] stopAllMotors", reason); } catch {}
     }
   } catch {}
+  const wasHybridRunning = hybridMotor.isRunning();
+  const activeMotorIds: string[] = [];
+  if (enabledNow) activeMotorIds.push("auto");
+  if (wasHybridRunning) activeMotorIds.push("hybrid");
+  try {
+    console.debug("[ScrollRouter] stopAllMotors active", {
+      reason: reason || "unknown",
+      motorCount: activeMotorIds.length,
+      motorIds: activeMotorIds,
+    });
+  } catch {}
   if (enabledNow) {
     try {
       auto.setEnabled?.(false);
@@ -2279,7 +2290,6 @@ function stopAllMotors(reason: string) {
     enabledNow = false;
     emitMotorState("auto", false);
   }
-  const wasHybridRunning = hybridMotor.isRunning();
   hybridMotor.stop();
   cancelHybridVelocityRefresh();
   hybridGraceUntil = 0;
