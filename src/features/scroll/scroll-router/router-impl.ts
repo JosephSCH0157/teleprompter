@@ -2192,6 +2192,7 @@ function restoreMode() {
     const m = localStorage.getItem(LS_KEY) || legacy;
     if (m) {
       state2.mode = m;
+      syncDebugState();
       try {
         localStorage.setItem(LS_KEY, m);
         LEGACY_LS_KEYS.forEach((k) => {
@@ -2307,33 +2308,15 @@ function hybridHandleDb(db, auto) {
   else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
 function applyMode(m) {
-  const currentAutoEnabled = (() => {
-    try {
-      return !!opts.auto.getState?.().enabled;
-    } catch {
-      return false;
-    }
-  })();
   try {
     try { console.debug("[ScrollRouter] stopAllMotors", `mode switch to ${m}`); } catch {}
   } catch {}
-  if (currentAutoEnabled) {
-    try {
-      auto.setEnabled?.(false);
-      auto.stop?.();
-    } catch {}
-    enabledNow = false;
-    emitMotorState("auto", false);
-  }
-  const wasHybridRunning = hybridMotor.isRunning();
-  hybridMotor.stop();
-  if (wasHybridRunning) {
-    emitMotorState("hybridWpm", false);
-  }
+  stopAllMotors("mode switch");
   if (m !== 'auto') {
     persistStoredAutoEnabled(false);
   }
   state2.mode = m;
+  syncDebugState();
   persistMode();
   viewer = document.getElementById("viewer");
   refreshHybridWriter();
@@ -2567,6 +2550,27 @@ function installScrollRouter(opts) {
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
   hybridSessionPhase = sessionPhase;
+  function syncDebugState() {
+    if (typeof window === 'undefined') return;
+    try {
+      const win = window as any;
+      win.__tpSessionPhase = sessionPhase;
+      win.__tpSessionIntent = sessionIntentOn;
+      win.__tpSessionIntentOn = sessionIntentOn;
+      win.__tpIntentActive = sessionIntentOn;
+      win.__tpModeCurrent = state2.mode;
+      const globalMode = win.__tpMode;
+      if (globalMode && typeof globalMode === 'object') {
+        try {
+          globalMode.current = state2.mode;
+          globalMode.mode = state2.mode;
+        } catch {}
+      } else {
+        win.__tpMode = state2.mode;
+      }
+    } catch {}
+  }
+  syncDebugState();
   const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
   function isFatalAutoStopReason(reason?: string | null): boolean {
     if (!reason) return false;
@@ -2587,6 +2591,7 @@ function installScrollRouter(opts) {
     if (storedPhase) {
       sessionPhase = String(storedPhase);
       hybridSessionPhase = sessionPhase;
+      syncDebugState();
     }
   } catch {
     // ignore
@@ -2650,6 +2655,7 @@ function installScrollRouter(opts) {
       clearHybridSilenceTimer();
     }
     persistStoredAutoEnabled(on);
+    syncDebugState();
     try { applyGate(); } catch {}
   }
   function handleAutoIntent(detail: any): AutoIntentPayload | null {
@@ -4523,8 +4529,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       if (typeof appStore.subscribe === "function") {
         appStore.subscribe("session.phase", (phase) => {
           const prevPhase = sessionPhase;
-          sessionPhase = String(phase || "idle");
-          hybridSessionPhase = sessionPhase;
+        sessionPhase = String(phase || "idle");
+        hybridSessionPhase = sessionPhase;
+        syncDebugState();
         if (sessionPhase !== "live") {
           stopAllMotors("phase change");
           liveSessionWpmLocked = false;
@@ -4957,6 +4964,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
             return;
           }
           sessionIntentOn = false;
+          syncDebugState();
           applyGate();
         } catch {}
       };

@@ -1154,7 +1154,7 @@ export function installSpeech(): void {
           }
           try { console.debug('[session/start] phase', session.phase, '→ preroll'); } catch {}
           const startIntent = { source: 'recBtn', reason: 'user' };
-          dispatchSessionIntent(true, startIntent);
+          try { setSessionPhase('preroll'); } catch {}
           try {
             window.dispatchEvent(
               new CustomEvent('tp:session:start', {
@@ -1162,7 +1162,7 @@ export function installSpeech(): void {
               }),
             );
           } catch {}
-          try { setSessionPhase('preroll'); } catch {}
+          dispatchSessionIntent(true, startIntent);
           syncBtnUi('preroll');
         },
         { capture: true },
