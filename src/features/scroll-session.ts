@@ -42,7 +42,7 @@ type StopAutoScrollContext = {
 
 function dispatchAutoIntent(enabled: boolean): void {
   try {
-    console.trace('[probe] dispatch tp:autoIntent', { enabled });
+    console.trace('[probe] dispatch tp:auto:intent', { enabled });
   } catch {}
   try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {

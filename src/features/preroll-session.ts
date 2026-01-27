@@ -142,8 +142,8 @@ function snapshotPreroll(): void {
   if (scrollAutoOnLive) {
     try {
       window.dispatchEvent(
-        new CustomEvent('tp:autoIntent', {
-          detail: { on: true, source: 'preroll', reason: 'live-start' },
+        new CustomEvent('tp:auto:intent', {
+          detail: { enabled: true, source: 'preroll', reason: 'live-start' },
         }),
       );
     } catch {}

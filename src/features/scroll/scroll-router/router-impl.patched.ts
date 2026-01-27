@@ -4532,14 +4532,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
   // Allow external intent control (e.g., speech start/stop) to flip user intent deterministically
   try {
-    window.addEventListener("tp:autoIntent", (e) => {
-      try {
-        const detail = (e as CustomEvent)?.detail || {};
-        const on = !!(detail.on ?? detail.enabled);
-        setAutoIntentState(on);
-      } catch {}
-    });
-    try { console.info('[scroll-router] tp:autoIntent listener installed'); } catch {}
     const pending = (window as any).__tpAutoIntentPending;
     if (typeof pending === "boolean") {
       setAutoIntentState(pending);

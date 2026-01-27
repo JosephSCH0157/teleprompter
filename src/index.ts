@@ -4,7 +4,16 @@ import './features/scroll/scroll-router';
 
 try {
   window.addEventListener('tp:autoIntent', (ev: any) => {
-    try { console.log('[probe] tp:autoIntent', ev?.detail); } catch {}
+    try {
+      console.log('[probe] tp:autoIntent', ev?.detail);
+      const on = ev?.detail?.on;
+      const reason = ev?.detail?.reason;
+      if (typeof on === 'boolean') {
+        window.dispatchEvent(
+          new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: reason ?? 'bridge:autoIntent' } }),
+        );
+      }
+    } catch {}
   });
 } catch {}
 

@@ -1302,7 +1302,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
               setListeningUi(true);
               try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
               await beginCountdownThen(sec, async () => {
-                try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+              try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true } })); } catch {}
                 try {
                   window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
                     detail: { source: 'auto-only', preroll: sec }
@@ -1342,7 +1342,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
           });
           await beginCountdownThen(sec, async () => {
             // NOW start auto-scroll after countdown completes
-            try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true } })); } catch {}
             const ok = await startBackend();
             console.debug('[ASR] didCallStartRecognizer', { ok });
             console.debug('[ASR] recognizerRef', {
@@ -1409,7 +1409,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
           } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
           // Optionally flip user intent OFF when speech stops
-          try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
+          try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: false } })); } catch {}
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
         } finally {
         }

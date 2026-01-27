@@ -40,9 +40,6 @@ function dispatchAutoIntent(on: boolean, reason?: string): void {
     // ignore
   }
   try {
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on, reason } }));
-  } catch {}
-  try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason } }));
   } catch {}
 }

@@ -121,7 +121,7 @@ function dispatchAutoIntent(on: boolean, reason?: string): void {
     if (typeof window !== 'undefined') {
       window.__tpAutoIntentPending = on;
     }
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on, reason } }));
+    window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason } }));
   } catch {}
 }
 
