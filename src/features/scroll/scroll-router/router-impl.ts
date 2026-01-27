@@ -3,6 +3,7 @@ export {};
 
 import { getScrollWriter } from '../../../scroll/scroll-writer';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
+import { getScrollEl, writeScrollTop } from '../../../scroll/scroller';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -1015,7 +1016,7 @@ function createAutoMotor() {
     const dtSec = lastTs ? Math.max(0, (now - lastTs) / 1000) : 0;
     lastTs = now;
     const pxPerSec = currentSpeed;
-    const el = scrollerEl;
+    const el = getScrollEl();
     if (!el) {
       logAutoTick('tick', el, pxPerSec, dtSec, 'no-element');
       scheduleTick();
@@ -1050,8 +1051,8 @@ function createAutoMotor() {
     const before = el.scrollTop || 0;
     const next = Math.min(room, before + step);
     markHybridProgrammaticScroll();
-    el.scrollTop = next;
-    const after = el.scrollTop || 0;
+    const actualTop = writeScrollTop(next, { scroller: el, reason: 'auto-motor' });
+    const after = el.scrollTop || actualTop;
     if (after > before) {
       lastTickMoved = true;
       logAutoTick('tick', el, pxPerSec, dtSec, 'moved', { delta: after - before });
