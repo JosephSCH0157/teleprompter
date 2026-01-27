@@ -1963,7 +1963,15 @@ function scheduleHybridVelocityRefresh() {
       return;
     }
       try {
-        runHybridVelocity(hybridSilence);
+        if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+          console.warn('[HYBRID_CALLSITE]', {
+            mode: String(state2.mode),
+            sessionPhase: String(sessionPhase),
+            sessionIntent: Boolean(sessionIntentOn),
+            userEnabled: Boolean(userEnabled),
+          });
+          runHybridVelocity(hybridSilence);
+        }
       } catch (err) {
       if (isDevMode()) {
         try {
@@ -2035,7 +2043,15 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     reason,
   };
   scheduleHybridVelocityRefresh();
-  runHybridVelocity(hybridSilence);
+  if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+    console.warn('[HYBRID_CALLSITE]', {
+      mode: String(state2.mode),
+      sessionPhase: String(sessionPhase),
+      sessionIntent: Boolean(sessionIntentOn),
+      userEnabled: Boolean(userEnabled),
+    });
+    runHybridVelocity(hybridSilence);
+  }
   if (isDevMode()) {
     let shouldLogBrake = true;
     if (reason === 'manual-scroll') {
@@ -2928,7 +2944,15 @@ function handleHybridSilenceTimeout() {
   if (!motorRunning) return;
   hybridSilence.pausedBySilence = true;
   speechActive = false;
-  runHybridVelocity(hybridSilence);
+  if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+    console.warn('[HYBRID_CALLSITE]', {
+      mode: String(state2.mode),
+      sessionPhase: String(sessionPhase),
+      sessionIntent: Boolean(sessionIntentOn),
+      userEnabled: Boolean(userEnabled),
+    });
+    runHybridVelocity(hybridSilence);
+  }
   emitHybridSafety();
   armHybridSilenceTimer(softDelayMs);
   try { applyGate(); } catch {}
@@ -2946,10 +2970,18 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), nextDelay);
   }
   function ensureHybridMotorRunningForSpeech() {
-    if (state2.mode !== "hybrid") return;
+    if (state2.mode !== "hybrid" && state2.mode !== "asr") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    runHybridVelocity(hybridSilence);
+    if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+      console.warn('[HYBRID_CALLSITE]', {
+        mode: String(state2.mode),
+        sessionPhase: String(sessionPhase),
+        sessionIntent: Boolean(sessionIntentOn),
+        userEnabled: Boolean(userEnabled),
+      });
+      runHybridVelocity(hybridSilence);
+    }
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
@@ -2958,7 +2990,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
   }
   function startHybridMotorFromSpeedChange() {
-    if (state2.mode !== "hybrid") return;
+    if (state2.mode !== "hybrid" && state2.mode !== "asr") return;
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
     hybridSilence.pausedBySilence = false;
@@ -3205,7 +3237,15 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (hybridScale === clamped) return false;
     hybridScale = clamped;
     hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    runHybridVelocity(hybridSilence);
+    if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+      console.warn('[HYBRID_CALLSITE]', {
+        mode: String(state2.mode),
+        sessionPhase: String(sessionPhase),
+        sessionIntent: Boolean(sessionIntentOn),
+        userEnabled: Boolean(userEnabled),
+      });
+      runHybridVelocity(hybridSilence);
+    }
     return true;
   }
   function getActiveBrakeFactor(now = nowMs()) {
@@ -3337,7 +3377,15 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   pauseAssistTailBoost = 0;
   pauseAssistTailUntil = 0;
   scheduleHybridVelocityRefresh();
+  if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+    console.warn('[HYBRID_CALLSITE]', {
+      mode: String(state2.mode),
+      sessionPhase: String(sessionPhase),
+      sessionIntent: Boolean(sessionIntentOn),
+      userEnabled: Boolean(userEnabled),
+    });
     runHybridVelocity(hybridSilence);
+  }
   }
 
   function handleHybridTargetHintEvent(ev: Event) {
@@ -3776,6 +3824,22 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       modeHint = 'LETTING YOU CATCH UP';
     }
     const finalReasons = reasons.length > 0 ? reasons : ['base'];
+    if (isDevMode()) {
+      console.warn('[HYBRID_POST_CLAMP]', {
+        deltaLines,
+        reasons: finalReasons,
+        effectiveScaleRaw,
+        reason,
+        scaleFromSilence,
+        scaleFromOffscript,
+        scaleFromGrace,
+        graceActive,
+        pauseLikely,
+        onScriptLocked,
+        offScriptActive,
+        pausedBySilence,
+      });
+    }
     const capReason =
       finalReasons.includes('silence')
         ? 'silence'
@@ -4749,7 +4813,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       hybridSilence.pausedBySilence = true;
       speechActive = false;
       clearHybridSilenceTimer();
-      runHybridVelocity(hybridSilence);
+      if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+        console.warn('[HYBRID_CALLSITE]', {
+          mode: String(state2.mode),
+          sessionPhase: String(sessionPhase),
+          sessionIntent: Boolean(sessionIntentOn),
+          userEnabled: Boolean(userEnabled),
+        });
+        runHybridVelocity(hybridSilence);
+      }
       armHybridSilenceTimer();
     } else {
       noteHybridSpeechActivity(normalizedTs, { source: "silence" });
@@ -4770,7 +4842,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        runHybridVelocity(hybridSilence);
+        if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
+          console.warn('[HYBRID_CALLSITE]', {
+            mode: String(state2.mode),
+            sessionPhase: String(sessionPhase),
+            sessionIntent: Boolean(sessionIntentOn),
+            userEnabled: Boolean(userEnabled),
+          });
+          runHybridVelocity(hybridSilence);
+        }
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
