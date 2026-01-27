@@ -2673,6 +2673,15 @@ function installScrollRouter(opts) {
       const enabled = resolveAutoIntentEnabled(detail);
       if (typeof enabled !== 'boolean') return null;
       const reasonRaw = resolveAutoIntentReason(detail);
+      if (enabled && state2.mode !== 'timed') {
+        try {
+          console.info('[AUTO_INTENT] ignored start for non-timed mode', {
+            mode: state2.mode,
+            reason: reasonRaw ?? 'unknown',
+          });
+        } catch {}
+        return null;
+      }
       if (shouldIgnoreHybridStop(reasonRaw, enabled)) {
         try {
           console.info('[AUTO_INTENT] hybrid stop ignored (live, non-fatal reason)', { reason: reasonRaw });
@@ -2711,8 +2720,14 @@ function installScrollRouter(opts) {
     if (!payload) return;
     const { enabled, decision, pxs, reason } = payload;
     const mode = state2.mode;
-      const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
-      const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
+    if (decision === 'motor-start-request' && mode !== 'timed') {
+      try {
+        console.info('[AUTO_INTENT] start suppressed (mode not timed)', { mode, reason });
+      } catch {}
+      return;
+    }
+    const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
+    const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
       try {
         console.warn('[AUTO_INTENT] processor RUN', {
           enabled,
