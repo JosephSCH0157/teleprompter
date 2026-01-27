@@ -249,9 +249,11 @@ try {
     } else if (!a.sawEvent) {
       console.error('FAIL auto-state-no-event - router did not emit autoState');
       allOk = false;
-    } else if (!a.intentOn && a.mode !== 'hybrid') {
+    } else if (!a.intentOn && a.mode !== 'hybrid' && a.mode !== 'step') {
       // Accept hybrid if auto normalizes to hybrid in router
       console.warn('WARN auto-state-not-on - intent not ON; mode:', a.mode);
+    } else if (!a.intentOn && a.mode === 'step') {
+      console.log('PASS auto-state — step mode (intent not required)');
     } else if (!!a.intentOn && !(a.delta > 0)) {
       console.error('FAIL auto-state-no-movement - viewport did not move');
       allOk = false;
