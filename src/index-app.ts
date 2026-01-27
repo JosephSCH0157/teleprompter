@@ -133,26 +133,38 @@ function installFatalGuards(): void {
         '';
       const lowered = raw.toLowerCase();
       if (!lowered.includes('resizeobserver')) return false;
-      if (lowered.includes('loop limit exceeded')) return true;
-      if (lowered.includes('undelivered notifications')) return true;
-      return false;
+      return lowered.includes('loop limit exceeded') || lowered.includes('undelivered notifications');
     };
 
-    window.onerror = (msg, _src, _line, _col, err) => {
+    window.onerror = (msg, src, line, col, err) => {
+      const payload = {
+        msg,
+        src,
+        line,
+        col,
+        errMessage: err?.message,
+        errStack: err?.stack,
+      };
       if (isBenignResizeObserverError(msg, err)) {
-        try { console.debug('[TP-FATAL:window] ignored ResizeObserver loop error'); } catch {}
+        try { console.debug('[TP-FATAL:window] ignored ResizeObserver loop error', payload); } catch {}
         return true;
       }
-      try { console.error('[TP-FATAL:window]', err); } catch {}
+      try { console.error('[TP-FATAL:window]', payload); } catch {}
       showFatalFallback();
     };
 
     window.onunhandledrejection = (event) => {
-      if (isBenignResizeObserverError(undefined, event?.reason)) {
-        try { console.debug('[TP-FATAL:promise] ignored ResizeObserver loop error'); } catch {}
+      const reason = event?.reason;
+      const payload = {
+        reason,
+        reasonMessage: reason?.message,
+        reasonStack: reason?.stack,
+      };
+      if (isBenignResizeObserverError(undefined, reason)) {
+        try { console.debug('[TP-FATAL:promise] ignored ResizeObserver loop error', payload); } catch {}
         return;
       }
-      try { console.error('[TP-FATAL:promise]', event?.reason); } catch {}
+      try { console.error('[TP-FATAL:promise]', payload); } catch {}
       showFatalFallback();
     };
   } catch {
