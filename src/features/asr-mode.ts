@@ -283,6 +283,8 @@ export class AsrMode {
   private tryAdvance(hyp: string, isFinal: boolean, confidence: number) {
     const { lines, idx0 } = this.getWindow();
     const threshold = getSpeechStore().get().threshold;
+    const commitFloor = Math.min(threshold, Math.max(0.25, threshold * 0.5));
+    const required = isFinal ? commitFloor : threshold;
 
     let bestIdx = -1; let bestScore = 0;
     for (let i = 0; i < lines.length; i++) {
@@ -290,16 +292,19 @@ export class AsrMode {
       const score = coverage * confidence;
       if (score > bestScore) { bestScore = score; bestIdx = i; }
     }
+    const accepted = bestIdx >= 0 && bestScore >= required;
     logAsrDebug('[ASR threshold]', {
       threshold,
+      commitFloor,
+      required,
       bestScore,
       bestIdx,
-      accepted: bestScore >= threshold,
+      accepted,
       idx0,
       isFinal,
     });
 
-    if (bestIdx >= 0 && bestScore >= threshold) {
+    if (accepted) {
       let newIdx = idx0 + bestIdx;
       
       // Feed-forward: lead the target slightly when reading actively
