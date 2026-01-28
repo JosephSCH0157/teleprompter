@@ -92,6 +92,30 @@ const URL_TO_OPEN = RAW_URL;
         }
       }, { timeout: Math.min(ARG_TIMEOUT, 10000) }).then(() => true).catch(() => false);
       if (!initReady) warnLogs.push('[smoke] app init marker not observed');
+      if (!initReady) {
+        try {
+          const url = page.url();
+          const title = await page.title();
+          const probe = await page.evaluate(() => {
+            try {
+              const h1 = document.querySelector('h1');
+              const h1Text = h1 ? (h1.textContent || '').trim() : '';
+              const bodyText = document.body ? (document.body.innerText || '').trim() : '';
+              const snippet = (h1Text || bodyText).replace(/\s+/g, ' ').slice(0, 200);
+              return {
+                snippet,
+                hasViewer: !!document.querySelector('#viewer'),
+                hasScript: !!document.querySelector('#script'),
+                hasTpStore: !!(window.__tpStore),
+              };
+            } catch {
+              return { snippet: '', hasViewer: false, hasScript: false, hasTpStore: false };
+            }
+          });
+          console.log('[legacy-smoke] url=', url, 'title=', title);
+          console.log('[legacy-smoke] probe=', probe);
+        } catch {}
+      }
 
       // Wait for UI bits (race tolerant)
       const waitFor = async (selector) => {
