@@ -63,6 +63,16 @@ type PendingMatch = {
   stickinessApplied?: boolean;
 };
 
+type DomScriptIndex = {
+  hash: string;
+  lineText: string[];
+  scriptWords: string[];
+  paraIndex: Array<{ start: number; end: number; key: string; line?: number }>;
+  lineCount: number;
+  wordCount: number;
+  builtAt: number;
+};
+
 type AsrEventSnapshot = {
   ts: string;
   currentIndex: number;
@@ -939,6 +949,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let scriptChangeHandler: ((event: Event) => void) | null = null;
   let missingMatchIdKeysLogged = false;
   let fallbackMatchIdSeq = 0;
+  let domScriptIndexCache: DomScriptIndex | null = null;
   let finalNoMatchStreak = 0;
   let dynamicNoMatchAhead = 0;
   let lastNoMatchDiagAt = 0;
@@ -1919,6 +1930,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return '';
   };
 
+  const getDomLineTextByIndex = (idx: number) => {
+    if (!Number.isFinite(idx) || idx < 0) return '';
+    try {
+      const root = getScriptRoot() || getPrimaryScroller() || document;
+      const line =
+        root?.querySelector<HTMLElement>(`.line[data-line="${idx}"]`) ||
+        root?.querySelector<HTMLElement>(`.line[data-index="${idx}"]`) ||
+        root?.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
+        document.getElementById(`tp-line-${idx}`);
+      if (line) return formatLogSnippet(String(line.textContent || ''), 80);
+    } catch {}
+    return '';
+  };
+
   const logNoMatchDiagnostics = (
     now: number,
     reason: string,
@@ -2704,6 +2729,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     };
     if (Number.isFinite(commitDelta)) payload.commitDelta = commitDelta;
     logThrottled('ASR_FALLBACK_MATCH', 'debug', '[ASR_FALLBACK_MATCH]', payload);
+    try {
+      const domLine = bestIdx >= 0 ? getDomLineTextByIndex(bestIdx) : '';
+      const legacyLine = Array.isArray(w?.__vParaIndex)
+        ? formatLogSnippet(String(w.__vParaIndex[bestIdx] || ''), 80)
+        : '';
+      if (domLine || legacyLine) {
+        logThrottled('ASR_FALLBACK_LINES', 'debug', '[ASR_FALLBACK_LINES]', {
+          idx: bestIdx,
+          domLine,
+          vParaLine: legacyLine,
+        });
+      }
+    } catch {}
   };
 
   const logFallbackSource = (reason: string) => {
@@ -2758,6 +2796,89 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     } catch {}
   };
 
+  const buildDomScriptIndex = (hash: string): DomScriptIndex | null => {
+    try {
+      const root = getScriptRoot() || getPrimaryScroller() || document;
+      const lineNodes = Array.from(root.querySelectorAll<HTMLElement>('.line'));
+      const fallbackNodes =
+        !lineNodes.length && root !== document
+          ? Array.from(document.querySelectorAll<HTMLElement>('.line'))
+          : [];
+      const nodes = lineNodes.length ? lineNodes : fallbackNodes;
+      if (!nodes.length) return null;
+
+      const lineMap = new Map<number, string>();
+      let seqIndex = 0;
+      nodes.forEach((node) => {
+        const rawIdx =
+          node.dataset.line ?? node.dataset.index ?? node.dataset.i ?? node.dataset.lineIdx ?? '';
+        const parsed = Number(rawIdx);
+        const idx = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : seqIndex;
+        const text = String(node.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!lineMap.has(idx) || (!lineMap.get(idx) && text)) {
+          lineMap.set(idx, text);
+        }
+        seqIndex += 1;
+      });
+
+      let maxIdx = -1;
+      lineMap.forEach((_val, idx) => {
+        if (idx > maxIdx) maxIdx = idx;
+      });
+      const declaredCount = Number((root as any)?.dataset?.lineCount ?? NaN);
+      const lineCount = Number.isFinite(declaredCount)
+        ? Math.max(declaredCount, maxIdx + 1)
+        : maxIdx + 1;
+      if (lineCount <= 0) return null;
+      const lineText = new Array(lineCount).fill('');
+      lineMap.forEach((text, idx) => {
+        if (idx >= 0 && idx < lineText.length) lineText[idx] = text;
+      });
+
+      const scriptWords: string[] = [];
+      const paraIndex: Array<{ start: number; end: number; key: string; line?: number }> = [];
+      let wordIdx = 0;
+      for (let i = 0; i < lineText.length; i++) {
+        const line = lineText[i] ?? '';
+        const tokens = normTokens(line);
+        if (!tokens.length) continue;
+        const start = wordIdx;
+        const end = wordIdx + tokens.length - 1;
+        const entry = { start, end, key: line, line: i };
+        for (let w = start; w <= end; w++) {
+          paraIndex[w] = entry;
+        }
+        scriptWords.push(...tokens);
+        wordIdx += tokens.length;
+      }
+
+      return {
+        hash,
+        lineText,
+        scriptWords,
+        paraIndex,
+        lineCount: lineText.length,
+        wordCount: scriptWords.length,
+        builtAt: Date.now(),
+      };
+    } catch (err) {
+      logDev('fallback dom index build failed', { err: String(err) });
+      return null;
+    }
+  };
+
+  const getDomScriptIndex = () => {
+    const hash = readScriptHash();
+    if (hash && domScriptIndexCache && domScriptIndexCache.hash === hash) {
+      return domScriptIndexCache;
+    }
+    const built = buildDomScriptIndex(hash || '');
+    if (built && hash) {
+      domScriptIndexCache = built;
+    }
+    return built;
+  };
+
   const computeFallbackMatch = (text: string, isFinal: boolean, now: number): MatchResult | null => {
     if (typeof window === 'undefined') return null;
     const normalizeFallbackMatch = (res: MatchResult | null): MatchResult | null => {
@@ -2783,26 +2904,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const currentIndex = Number.isFinite(currentIndexRaw) ? Math.floor(currentIndexRaw) : 0;
 
     const useFullTokens = isFinal && currentIndex === 0;
-    const shim = w?.__tpSpeech?.matchBatch;
-    if (!useFullTokens && typeof shim === 'function') {
-      try {
-        const res = shim(text, isFinal, { currentIndex, windowBack, windowAhead }) as MatchResult | null;
-        if (res) {
-          (res as any).windowBack =
-            Number.isFinite((res as any).windowBack) ? (res as any).windowBack : windowBack;
-          (res as any).windowAhead =
-            Number.isFinite((res as any).windowAhead) ? (res as any).windowAhead : windowAhead;
-          return normalizeFallbackMatch(res);
-        }
-      } catch (err) {
-        logDev('fallback matchBatch shim failed', { err: String(err) });
-      }
-    }
-
-    const scriptWords: string[] = Array.isArray(w?.scriptWords) ? w.scriptWords : [];
-    const paraIndex = Array.isArray(w?.paraIndex) ? w.paraIndex : [];
-    const vParaIndex = Array.isArray(w?.__vParaIndex) ? w.__vParaIndex : null;
-    if (!scriptWords.length || !paraIndex.length) return null;
+    const domIndex = getDomScriptIndex();
+    if (!domIndex || !domIndex.lineText.length) return null;
+    const scriptWords = domIndex.scriptWords;
+    const paraIndex = domIndex.paraIndex;
+    const vParaIndex = domIndex.lineText;
     const tokens = normTokens(text || '');
     if (!tokens.length) return null;
     const matchTokens = useFullTokens ? tokens : tokens.slice(-DEFAULT_MATCH_TOKEN_WINDOW);
@@ -2821,6 +2927,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         cfg,
         currentIndex,
         w.__viterbiIPred || null,
+        { multiLineMinLines: 2, multiLineMaxLines: 3 },
       );
       (res as any).windowBack = windowBack;
       (res as any).windowAhead = windowAhead;
@@ -4258,7 +4365,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     setCurrentIndex(lastLineIndex, 'manualReset');
     updateDebugState('sync-index');
   };
-  const handleScriptChanged = (event: Event) => {
+    const handleScriptChanged = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
     const source = typeof (detail as any)?.source === 'string' ? (detail as any).source : '';
     const incomingHash = typeof (detail as any)?.hash === 'string' ? (detail as any).hash : '';
@@ -4278,6 +4385,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     missingMatchIdKeysLogged = false;
     lastMatchId = undefined;
     fallbackMatchIdSeq = 0;
+    domScriptIndexCache = null;
     bootLogged = false;
     forcedCommitTimes.length = 0;
     jumpHistory = [];
