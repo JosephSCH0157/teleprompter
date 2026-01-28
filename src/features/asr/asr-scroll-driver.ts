@@ -2398,6 +2398,45 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return `fb${Date.now().toString(36)}-${fallbackMatchIdSeq}`;
   };
 
+  const logFallbackMatch = (match: MatchResult, detail: TranscriptDetail) => {
+    if (!isDevMode()) return;
+    const w: any = window as any;
+    const cursorRaw = lastLineIndex >= 0 ? lastLineIndex : Number(w?.currentIndex ?? 0);
+    const cursorLine = Number.isFinite(cursorRaw) ? Math.floor(cursorRaw) : 0;
+    const rawBestIdx = Number(match?.bestIdx);
+    const bestIdx = Number.isFinite(rawBestIdx) ? Math.floor(rawBestIdx) : -1;
+    const rawSim = Number(match?.bestSim);
+    const sim = Number.isFinite(rawSim) ? Number(rawSim.toFixed(3)) : rawSim;
+    const matchWindowBackRaw = Number((match as any)?.windowBack);
+    const matchWindowAheadRaw = Number((match as any)?.windowAhead);
+    const windowBack = Number.isFinite(matchWindowBackRaw)
+      ? Math.max(0, Math.floor(matchWindowBackRaw))
+      : matchBacktrackLines;
+    const windowAhead = Number.isFinite(matchWindowAheadRaw)
+      ? Math.max(0, Math.floor(matchWindowAheadRaw))
+      : matchLookaheadLines;
+    const totalLines = getTotalLines();
+    const bandStart = Number.isFinite((match as any)?.bandStart)
+      ? Math.max(0, Math.floor((match as any).bandStart))
+      : Math.max(0, cursorLine - windowBack);
+    let bandEnd = Number.isFinite((match as any)?.bandEnd)
+      ? Math.max(bandStart, Math.floor((match as any).bandEnd))
+      : Math.max(bandStart, cursorLine + windowAhead);
+    if (totalLines > 0) bandEnd = Math.min(totalLines - 1, bandEnd);
+    const commitDelta = Number.isFinite(bestIdx) ? bestIdx - cursorLine : NaN;
+    const sourceRaw = typeof detail?.source === 'string' ? detail.source : '';
+    const source = sourceRaw && sourceRaw !== 'speech-loader' ? sourceRaw : 'webspeech';
+    const payload: Record<string, unknown> = {
+      source,
+      bestIdx,
+      sim,
+      windowStart: bandStart,
+      windowEnd: bandEnd,
+    };
+    if (Number.isFinite(commitDelta)) payload.commitDelta = commitDelta;
+    logThrottled('ASR_FALLBACK_MATCH', 'debug', '[ASR_FALLBACK_MATCH]', payload);
+  };
+
   const computeFallbackMatch = (text: string, isFinal: boolean, now: number): MatchResult | null => {
     if (typeof window === 'undefined') return null;
     const w: any = window as any;
@@ -2482,6 +2521,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         detailObj.match = fallbackMatch;
         detailObj.matchId = nextFallbackMatchId();
         detailObj.noMatch = false;
+        logFallbackMatch(fallbackMatch, detailObj);
       } else {
         detailObj.matchId = null;
         detailObj.noMatch = true;
