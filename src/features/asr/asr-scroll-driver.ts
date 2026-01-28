@@ -1,4 +1,4 @@
-import { normTokens, type MatchResult } from '../../speech/matcher';
+import { matchBatch as computeMatchBatch, normTokens, type MatchResult } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
 import { ensureAsrTuningProfile, getActiveAsrTuningProfile, onAsrTuning, type AsrTuningProfile } from '../../asr/tuning-store';
@@ -118,6 +118,7 @@ const DEFAULT_INTERIM_SCALE = 1.15;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
 const DEFAULT_MATCH_LOOKAHEAD_STEPS = [DEFAULT_MATCH_LOOKAHEAD_LINES, 120, 200, 400];
+const DEFAULT_MATCH_TOKEN_WINDOW = 18;
 const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
 const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
@@ -900,6 +901,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let lastMatchId: string | undefined;
     let lastScriptHash = '';
     let missingMatchIdKeysLogged = false;
+    let fallbackMatchIdSeq = 0;
     const armPostCatchupGrace = (reason: string) => {
       const now = Date.now();
       postCatchupUntil = now + POST_CATCHUP_MS;
@@ -2391,6 +2393,68 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     });
   };
 
+  const nextFallbackMatchId = () => {
+    fallbackMatchIdSeq += 1;
+    return `fb${Date.now().toString(36)}-${fallbackMatchIdSeq}`;
+  };
+
+  const computeFallbackMatch = (text: string, isFinal: boolean, now: number): MatchResult | null => {
+    if (typeof window === 'undefined') return null;
+    const w: any = window as any;
+    const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
+    const windowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
+    const windowAhead = resolveLookahead(resyncActive);
+    const currentIndexRaw = lastLineIndex >= 0 ? lastLineIndex : Number(w?.currentIndex ?? 0);
+    const currentIndex = Number.isFinite(currentIndexRaw) ? Math.floor(currentIndexRaw) : 0;
+
+    const shim = w?.__tpSpeech?.matchBatch;
+    if (typeof shim === 'function') {
+      try {
+        const res = shim(text, isFinal, { currentIndex, windowBack, windowAhead }) as MatchResult | null;
+        if (res) {
+          (res as any).windowBack =
+            Number.isFinite((res as any).windowBack) ? (res as any).windowBack : windowBack;
+          (res as any).windowAhead =
+            Number.isFinite((res as any).windowAhead) ? (res as any).windowAhead : windowAhead;
+          return res;
+        }
+      } catch (err) {
+        logDev('fallback matchBatch shim failed', { err: String(err) });
+      }
+    }
+
+    const scriptWords: string[] = Array.isArray(w?.scriptWords) ? w.scriptWords : [];
+    const paraIndex = Array.isArray(w?.paraIndex) ? w.paraIndex : [];
+    const vParaIndex = Array.isArray(w?.__vParaIndex) ? w.__vParaIndex : null;
+    if (!scriptWords.length || !paraIndex.length) return null;
+    const tokens = normTokens(text || '');
+    if (!tokens.length) return null;
+    const matchTokens = tokens.slice(-DEFAULT_MATCH_TOKEN_WINDOW);
+    const cfg = {
+      MATCH_WINDOW_AHEAD: windowAhead,
+      MATCH_WINDOW_BACK: windowBack,
+      SIM_THRESHOLD: typeof w?.SIM_THRESHOLD === 'number' ? w.SIM_THRESHOLD : 0.46,
+      MAX_JUMP_AHEAD_WORDS: typeof w?.MAX_JUMP_AHEAD_WORDS === 'number' ? w.MAX_JUMP_AHEAD_WORDS : 18,
+    };
+    try {
+      const res = computeMatchBatch(
+        matchTokens,
+        scriptWords,
+        paraIndex,
+        vParaIndex,
+        cfg,
+        currentIndex,
+        w.__viterbiIPred || null,
+      );
+      (res as any).windowBack = windowBack;
+      (res as any).windowAhead = windowAhead;
+      return res;
+    } catch (err) {
+      logDev('fallback matcher failed', { err: String(err) });
+      return null;
+    }
+  };
+
   const ingest = (text: string, isFinal: boolean, detail?: TranscriptDetail) => {
     if (disposed) return;
     const normalized = String(text || '').trim();
@@ -2398,18 +2462,36 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
-    const rawMatchId = (detail as any)?.matchId;
-    const noMatch = detail?.noMatch === true;
-    const hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
-    const explicitNoMatch = rawMatchId === null && noMatch;
+    const detailObj: TranscriptDetail =
+      detail && typeof detail === 'object' ? { ...(detail as TranscriptDetail) } : {};
+    let rawMatchId = detailObj.matchId;
+    let noMatch = detailObj.noMatch === true;
+    let hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
+    let explicitNoMatch = rawMatchId === null && noMatch;
     if (!hasMatchId && !explicitNoMatch) {
       if (isDevMode() && !missingMatchIdKeysLogged) {
         missingMatchIdKeysLogged = true;
         try {
-          const keys = detail && typeof detail === 'object' ? Object.keys(detail as Record<string, unknown>) : [];
-          console.debug('[ASR_PIPELINE] missing matchId keys=[' + keys.join(',') + ']');
+          const keys = detailObj && typeof detailObj === 'object' ? Object.keys(detailObj as Record<string, unknown>) : [];
+          console.debug('[ASR_PIPELINE] missing matchId; fallback matcher engaged keys=[' + keys.join(',') + ']');
         } catch {}
       }
+      const fallbackMatch = detailObj.match ?? computeFallbackMatch(compacted, isFinal, now);
+      const fallbackBestIdx = Number((fallbackMatch as any)?.bestIdx);
+      if (fallbackMatch && Number.isFinite(fallbackBestIdx)) {
+        detailObj.match = fallbackMatch;
+        detailObj.matchId = nextFallbackMatchId();
+        detailObj.noMatch = false;
+      } else {
+        detailObj.matchId = null;
+        detailObj.noMatch = true;
+      }
+      rawMatchId = detailObj.matchId;
+      noMatch = detailObj.noMatch === true;
+      hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
+      explicitNoMatch = rawMatchId === null && noMatch;
+    }
+    if (!hasMatchId && !explicitNoMatch) {
       const snippet = formatLogSnippet(compacted, 60);
       try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing matchId'); } catch {}
       warnGuard('no_match_pipeline', [
@@ -2428,8 +2510,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     const matchId = rawMatchId as string;
     lastMatchId = matchId;
-    const metaTranscript = detail?.source === 'meta' || detail?.meta === true;
-    const incomingMatch = detail?.match;
+    const metaTranscript = detailObj?.source === 'meta' || detailObj?.meta === true;
+    const incomingMatch = detailObj?.match;
     if (!incomingMatch) {
       const snippet = formatLogSnippet(compacted, 60);
       try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing match payload'); } catch {}
