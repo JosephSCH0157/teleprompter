@@ -1069,6 +1069,20 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   try {
     const ok = await startBackendForSession(mode, info?.reason);
     try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
+    if (ok) {
+      try {
+        const session = getSession();
+        if (session.phase !== 'live' && session.phase !== 'preroll') {
+          dispatchSessionIntent(true, {
+            source: 'asr-backend',
+            reason: info?.reason || 'speech-start',
+            mode,
+            phase: session.phase,
+          });
+          setSessionPhase('live');
+        }
+      } catch {}
+    }
     try { await window.__tpMic?.requestMic?.(); } catch {}
     return ok;
   } catch {
