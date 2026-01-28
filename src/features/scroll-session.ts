@@ -84,9 +84,9 @@ function maybeStartOnLive(phase: SessionPhase): void {
   const rawMode = appStore.get('scrollMode') as string | undefined;
   const canonicalMode = normalizeScrollMode(rawMode);
   const canonicalModeStr = String(canonicalMode);
-  const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(rawMode);
   if (phase !== 'live') {
     if (prevPhase === 'live' && shouldStopAutoForPhase(phase)) {
+      const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(rawMode);
       stopAutoScroll({
         reason: 'phase-change',
         phase,
@@ -142,12 +142,16 @@ function maybeStartOnLive(phase: SessionPhase): void {
     } catch {}
   }
 
-  if (!session.scrollAutoOnLive) {
-    try { console.debug('[scroll-session] auto-scroll not starting on live (scrollAutoOnLive=false)'); } catch {}
+  if (canonicalMode === 'asr') {
+    try { console.debug('[scroll-session] auto-start bypassed for ASR mode'); } catch {}
     return;
   }
-  if (!shouldRun) {
-    try { console.debug('[scroll-session] auto-scroll not allowed for mode', canonicalMode); } catch {}
+  if (!session.scrollAutoOnLive) {
+    try { console.debug('[scroll-session] auto-start disabled: scrollAutoOnLive=false'); } catch {}
+    return;
+  }
+  if (!shouldAutoStartForMode(rawMode)) {
+    try { console.debug('[scroll-session] auto-start blocked: mode not auto-startable', { mode: canonicalMode }); } catch {}
     return;
   }
   try { console.debug('[scroll-session] live phase with auto-on-live; starting auto-scroll', { mode: canonicalMode }); } catch {}
@@ -180,14 +184,18 @@ export function initScrollSessionRouter(): void {
       }
 
       if (session.phase !== 'live') return;
-      if (!session.scrollAutoOnLive) {
-        try { console.debug('[scroll-session] auto-scroll disabled for this mode'); } catch {}
-        return;
-      }
       const rawMode = appStore.get('scrollMode') as string | undefined;
       const canonicalMode = normalizeScrollMode(rawMode);
+      if (canonicalMode === 'asr') {
+        try { console.debug('[scroll-session] auto-start bypassed for ASR mode'); } catch {}
+        return;
+      }
+      if (!session.scrollAutoOnLive) {
+        try { console.debug('[scroll-session] auto-start disabled: scrollAutoOnLive=false'); } catch {}
+        return;
+      }
       if (!shouldAutoStartForMode(rawMode)) {
-        try { console.debug('[scroll-session] auto-scroll disabled for this mode (manual block)', { mode: canonicalMode }); } catch {}
+        try { console.debug('[scroll-session] auto-start blocked: mode not auto-startable', { mode: canonicalMode }); } catch {}
         return;
       }
       startAutoScroll(String(canonicalMode));
