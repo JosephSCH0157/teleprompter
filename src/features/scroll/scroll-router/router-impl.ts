@@ -4325,6 +4325,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       }
       clearHybridSilenceTimer();
       resetHybridSafetyState();
+      if (state2.mode === "asr") {
+        try { auto.setEnabled?.(false); } catch {}
+        try { auto.stop?.(); } catch {}
+        enabledNow = false;
+        emitMotorState("auto", false);
+        setAutoChip("manual", "Mode: ASR • Auto: off • ASR owns scroll");
+        try {
+          console.info('[scroll-router] MOTOR_STOP reason=asrMode');
+        } catch {}
+        try { emitAutoState(); } catch {}
+        lastHybridGateFingerprint = null;
+        return;
+      }
       const requestedAutoPx = getLastKnownAutoSpeed();
       const autoPxPerSec = resolveAutoPxPerSec(requestedAutoPx);
       if (
