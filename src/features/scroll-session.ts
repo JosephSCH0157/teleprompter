@@ -54,9 +54,9 @@ function dispatchAutoIntent(enabled: boolean): void {
 }
 
 function startAutoScroll(mode: string): void {
-  if (mode !== 'timed') {
+  if (!shouldAutoStartForMode(mode)) {
     try {
-      console.debug('[scroll-session] auto-scroll start ignored (mode not timed)', { mode });
+      console.debug('[scroll-session] auto-scroll start ignored (mode not auto)', { mode });
     } catch {}
     return;
   }

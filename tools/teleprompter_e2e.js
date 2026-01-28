@@ -309,8 +309,16 @@ async function main() {
     await page.select('#scrollMode', 'step');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#scrollMode', { timeout: 5000 });
+    try {
+      await page.waitForFunction(() => {
+        const el = document.querySelector('#scrollMode');
+        return !!el && (el).value === 'step';
+      }, { timeout: 1200, polling: 50 });
+    } catch {
+      // fall through to assertion with current value
+    }
     const persisted = await page.$eval('#scrollMode', (el) => el.value);
-    assert(persisted === 'step', 'scrollMode should persist across reloads');
+    assert(persisted === 'step', `scrollMode should persist across reloads (found ${persisted || 'empty'})`);
     // Legacy guard: ensure old Saved Scripts UI never resurfaces
     const legacy = await page.$('#scriptSlots');
     if (legacy) throw new Error('Legacy #scriptSlots found');

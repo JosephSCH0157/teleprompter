@@ -2723,9 +2723,13 @@ function installScrollRouter(opts) {
       const enabled = resolveAutoIntentEnabled(detail);
       if (typeof enabled !== 'boolean') return null;
       const reasonRaw = resolveAutoIntentReason(detail);
-      if (enabled && state2.mode !== 'timed') {
+      const autoEligible =
+        state2.mode === 'timed' ||
+        state2.mode === 'wpm' ||
+        state2.mode === 'hybrid';
+      if (enabled && !autoEligible) {
         try {
-          console.info('[AUTO_INTENT] ignored start for non-timed mode', {
+          console.info('[AUTO_INTENT] ignored start for non-auto mode', {
             mode: state2.mode,
             reason: reasonRaw ?? 'unknown',
           });
@@ -2770,9 +2774,13 @@ function installScrollRouter(opts) {
     if (!payload) return;
     const { enabled, decision, pxs, reason } = payload;
     const mode = state2.mode;
-    if (decision === 'motor-start-request' && mode !== 'timed') {
+    const autoEligible =
+      mode === 'timed' ||
+      mode === 'wpm' ||
+      mode === 'hybrid';
+    if (decision === 'motor-start-request' && !autoEligible) {
       try {
-        console.info('[AUTO_INTENT] start suppressed (mode not timed)', { mode, reason });
+        console.info('[AUTO_INTENT] start suppressed (mode not auto)', { mode, reason });
       } catch {}
       return;
     }
