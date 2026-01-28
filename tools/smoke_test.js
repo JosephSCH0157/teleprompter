@@ -48,6 +48,20 @@ const URL_TO_OPEN = RAW_URL;
 
       // Collect console + errors to detect dup boot and failures
       let bootCount = 0, scriptEnterCount = 0, rsCompleteCount = 0, errorLogs = [], warnLogs = [];
+      const AUTO_TOGGLE_SELECTOR = '#autoToggle, #autoToggleBtn, [data-action="auto-toggle"], button[id*="autoToggle"]';
+      const AUTO_CHIP_SELECTOR = '#autoChip, #autoChipText, [data-role="auto-chip"]';
+      const LINE_SELECTOR = [
+        '#viewer .script p',
+        '#viewer .script .line',
+        '#viewer .script .tp-line',
+        '#viewer p.line',
+        '#viewer p.tp-line',
+        '#viewer .line',
+        '#viewer .tp-line',
+        '#script .line',
+        '#script .tp-line',
+        '#script p',
+      ].join(', ');
 
       page.on('console', msg => {
         const text = msg.text ? msg.text() : String(msg);
@@ -66,6 +80,19 @@ const URL_TO_OPEN = RAW_URL;
       // Open page
       await page.goto(URL_TO_OPEN, { waitUntil: type === 'playwright' ? 'networkidle' : 'networkidle0', timeout: ARG_TIMEOUT });
 
+      const initReady = await page.waitForFunction(() => {
+        try {
+          return !!(window.__tpStore ||
+            window.__TP_INIT_DONE ||
+            window.__tp_init_done ||
+            (window.App && (window.App.inited || window.App.initDone)) ||
+            document.querySelector('#viewer'));
+        } catch {
+          return false;
+        }
+      }, { timeout: Math.min(ARG_TIMEOUT, 10000) }).then(() => true).catch(() => false);
+      if (!initReady) warnLogs.push('[smoke] app init marker not observed');
+
       // Wait for UI bits (race tolerant)
       const waitFor = async (selector) => {
         try { await page.waitForSelector(selector, { timeout: Math.min(ARG_TIMEOUT, 15000) }); return true; }
@@ -78,6 +105,7 @@ const URL_TO_OPEN = RAW_URL;
         try {
           if (document.querySelector('#script')) return true;
           if (document.querySelector('#viewer .script')) return true;
+          if (document.querySelector('#viewer .line, #viewer .tp-line, #script .line, #script .tp-line')) return true;
           // Legacy fallback
           if (document.querySelector('#scriptSlots')) return true;
         } catch {}
@@ -128,21 +156,23 @@ const URL_TO_OPEN = RAW_URL;
             try { window.addEventListener('tp:init:done', ()=>{ clearTimeout(t); resolve(true); }, { once:true }); } catch { resolve(true); }
           }));
         } catch {}
-        await page.waitForSelector('#autoToggle', { timeout: 5000 });
-        const read = async () => {
-          const chip = await page.$eval('#autoChip', n => (n && n.textContent || '').trim()).catch(()=> '');
-          const btn  = await page.$eval('#autoToggle', n => (n && n.textContent || '').trim()).catch(()=> '');
-          const pressed = await page.$eval('#autoToggle', n => (n && n.getAttribute && n.getAttribute('aria-pressed')) || '').catch(()=> '');
-          const pos  = await page.$eval('#viewer', vp => vp ? (vp.scrollTop|0) : 0).catch(()=>0);
+        await page.waitForSelector(AUTO_TOGGLE_SELECTOR, { timeout: 5000 });
+        const read = async () => page.evaluate((autoSel, chipSel) => {
+          const chipEl = document.querySelector(chipSel);
+          const btnEl = document.querySelector(autoSel);
+          const chip = chipEl ? (chipEl.textContent || '').trim() : '';
+          const btn = btnEl ? (btnEl.textContent || '').trim() : '';
+          const pressed = btnEl && btnEl.getAttribute ? (btnEl.getAttribute('aria-pressed') || '') : '';
+          const pos = (document.getElementById('viewer') && (document.getElementById('viewer').scrollTop | 0)) || 0;
           return { chip, btn, pressed, pos };
-        };
+        }, AUTO_TOGGLE_SELECTOR, AUTO_CHIP_SELECTOR);
         const before = await read();
         const clickOnce = async () => {
-          try { await page.$eval('#autoToggle', el => el && el.scrollIntoView && el.scrollIntoView({behavior:'instant', block:'center'})); } catch {}
+          try { await page.$eval(AUTO_TOGGLE_SELECTOR, el => el && el.scrollIntoView && el.scrollIntoView({behavior:'instant', block:'center'})); } catch {}
           // Try DOM click first (bypasses hit-testing flakiness), then synthetic click as fallback
-          try { await page.$eval('#autoToggle', el => el && el.click && el.click()); } catch {}
+          try { await page.$eval(AUTO_TOGGLE_SELECTOR, el => el && el.click && el.click()); } catch {}
           await page.waitForTimeout(30);
-          await page.click('#autoToggle').catch(()=>{});
+          await page.click(AUTO_TOGGLE_SELECTOR).catch(()=>{});
           await page.waitForTimeout(320);
           return await read();
         };
@@ -194,13 +224,13 @@ const URL_TO_OPEN = RAW_URL;
 
       // Typography smoke guard: a line node must respond to font-size var changes
       try {
-        const SEL = '#viewer .script :is(p,.line,.tp-line)';
+        const SEL = LINE_SELECTOR;
         // Ensure at least one candidate exists; if not, create a temporary one
         const hadAny = await page.$(SEL);
         if (!hadAny) {
           await page.evaluate(() => {
             try {
-              const host = document.getElementById('script');
+              const host = document.getElementById('script') || document.getElementById('viewer');
               if (host) {
                 const div = document.createElement('div');
                 div.className = 'line tp-line';
