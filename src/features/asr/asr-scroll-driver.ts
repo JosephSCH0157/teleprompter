@@ -197,6 +197,7 @@ const DEFAULT_SHORT_FINAL_MAX_TOKENS = 6;
 const DEFAULT_SHORT_FINAL_WINDOW_MS = DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
 const DEFAULT_SHORT_FINAL_LOOKAHEAD_LINES = 10;
 const DEFAULT_SHORT_FINAL_SIM_SLACK = 0.12;
+const DEFAULT_SHORT_FINAL_CEILING = 0.3;
 const DEFAULT_OUTRUN_RELAXED_SIM = 0.5;
 const DEFAULT_OUTRUN_WINDOW_MS = DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
 const DEFAULT_OUTRUN_LOOKAHEAD_LINES = 6;
@@ -3114,8 +3115,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal && fragmentTokenCount >= shortFinalMinTokens && fragmentTokenCount <= shortFinalMaxTokens;
     const shortFinalRecent =
       shortFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= shortFinalWindowMs;
+    const commitFloor = Math.min(requiredThreshold, Math.max(0.25, requiredThreshold * 0.5));
+    const shortFinalBase = clamp(requiredThreshold - shortFinalSimSlack, 0, 1);
     const shortFinalNeed = shortFinalRecent
-      ? clamp(requiredThreshold - shortFinalSimSlack, 0, 1)
+      ? Math.max(commitFloor, Math.min(shortFinalBase, DEFAULT_SHORT_FINAL_CEILING))
       : requiredThreshold;
     const outrunRecent =
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
