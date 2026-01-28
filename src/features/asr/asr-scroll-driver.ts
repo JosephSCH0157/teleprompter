@@ -134,6 +134,7 @@ const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
 const DEFAULT_LOOKAHEAD_STALL_MS = 2500;
 const DEFAULT_SAME_LINE_THROTTLE_MS = 300;
 const DEFAULT_SAME_LINE_COMMIT_PX = 6;
+const DEFAULT_SAME_LINE_MIN_PROGRESS_CHARS = 12;
 const DEFAULT_CREEP_PX = 8;
 const DEFAULT_CREEP_NEAR_PX = 12;
 const DEFAULT_CREEP_BUDGET_PX = 40;
@@ -971,6 +972,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const matchLookaheadMax = matchLookaheadSteps[matchLookaheadSteps.length - 1] || matchLookaheadLines;
   const sameLineThrottleMs = DEFAULT_SAME_LINE_THROTTLE_MS;
   const sameLineCommitPx = DEFAULT_SAME_LINE_COMMIT_PX;
+  const sameLineMinProgressChars = DEFAULT_SAME_LINE_MIN_PROGRESS_CHARS;
   const creepPx = DEFAULT_CREEP_PX;
   const creepNearPx = DEFAULT_CREEP_NEAR_PX;
   const creepBudgetPx = DEFAULT_CREEP_BUDGET_PX;
@@ -2298,13 +2300,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
-          const evidenceGrowing =
+          const progressTokens = evidenceTokens - lastSameLineCommitTokens;
+          const progressChars = evidenceChars - lastSameLineCommitChars;
+          const hasNewSpeech =
             bufferGrowing ||
-            evidenceTokens > lastSameLineCommitTokens ||
-            evidenceChars > lastSameLineCommitChars;
+            progressTokens > 0 ||
+            progressChars >= sameLineMinProgressChars;
           const meaningfulEvidence =
-            evidenceGrowing &&
-            (evidenceTokens >= minTokenCount || evidenceChars >= minEvidenceChars);
+            hasNewSpeech &&
+            (evidenceTokens >= minTokenCount || evidenceChars >= sameLineMinProgressChars);
           if (
             isFinal &&
             hasEvidence &&
