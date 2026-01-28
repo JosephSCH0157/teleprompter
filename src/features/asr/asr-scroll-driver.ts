@@ -843,6 +843,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     const payload = { ...opts, scroller };
     const appliedTop = applyCanonicalScrollTop(targetTop, { ...payload, source });
+    try {
+      const afterTop = Number.isFinite(appliedTop) ? appliedTop : (scroller.scrollTop || 0);
+      const delta = afterTop - currentTop;
+      if (Math.abs(delta) >= 0.5) {
+        window.dispatchEvent(new CustomEvent('tp:scroll:commit', {
+          detail: {
+            delta,
+            targetTop: afterTop,
+            currentTop,
+            maxScrollTop: Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0)),
+            source: 'asr',
+          },
+        }));
+      }
+    } catch {
+      // ignore
+    }
     scheduleAsrWriteCheck(scroller, currentTop, reason, targetTop, source);
     return appliedTop;
   }

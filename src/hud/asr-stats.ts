@@ -151,6 +151,23 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
   const onWindowStats = (e: Event) => handleStats((e as CustomEvent<any>)?.detail ?? {});
 
   window.addEventListener('asr:stats', onWindowStats);
+  const onAsrSummary = (e: Event) => {
+    try {
+      const d = (e as CustomEvent<any>)?.detail ?? {};
+      handleStats({
+        detail: {
+          commits: d.commitCount ?? 0,
+          avgScore: d.avgScore,
+          p95GapMs: d.p95GapMs,
+          tweenStepsAvg: d.tweenStepsAvg,
+          suppressed: d.suppressed || {},
+        },
+      });
+    } catch {
+      /* ignore */
+    }
+  };
+  window.addEventListener('tp:asr:summary', onAsrSummary);
 
   let profileLabel = (() => {
     try {
@@ -275,6 +292,7 @@ export function initAsrStatsHud(opts: AsrStatsHudOptions = {}): AsrStatsHudApi |
 
   const destroy = () => {
     window.removeEventListener('asr:stats', onWindowStats);
+    window.removeEventListener('tp:asr:summary', onAsrSummary);
     window.removeEventListener('tp:asr:guard', handleGuard as EventListener);
     window.removeEventListener('tp:asr:thresholds', handleThresholds as EventListener);
     window.removeEventListener('tp:asr:tuning', handleTuning as EventListener);
