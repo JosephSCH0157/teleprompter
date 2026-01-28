@@ -38,6 +38,9 @@ type PendingMatch = {
   isFinal: boolean;
   hasEvidence: boolean;
   snippet: string;
+  tokenCount?: number;
+  evidenceChars?: number;
+  bufferGrowing?: boolean;
   minThreshold?: number;
   forced?: boolean;
   forceReason?: string;
@@ -130,6 +133,7 @@ const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
 const DEFAULT_LOOKAHEAD_STALL_MS = 2500;
 const DEFAULT_SAME_LINE_THROTTLE_MS = 300;
+const DEFAULT_SAME_LINE_COMMIT_PX = 6;
 const DEFAULT_CREEP_PX = 8;
 const DEFAULT_CREEP_NEAR_PX = 12;
 const DEFAULT_CREEP_BUDGET_PX = 40;
@@ -897,6 +901,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindHitWindowStart = 0;
   let lagRelockHits = 0;
   let lagRelockWindowStart = 0;
+  let lastSameLineCommitTokens = 0;
+  let lastSameLineCommitChars = 0;
+  let lastSameLineCommitMatchId: string | null = null;
+  let lastSameLineCommitAt = 0;
   let pendingMatch: PendingMatch | null = null;
   let pendingSeq = 0;
 
@@ -962,6 +970,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const lookaheadStallMs = DEFAULT_LOOKAHEAD_STALL_MS;
   const matchLookaheadMax = matchLookaheadSteps[matchLookaheadSteps.length - 1] || matchLookaheadLines;
   const sameLineThrottleMs = DEFAULT_SAME_LINE_THROTTLE_MS;
+  const sameLineCommitPx = DEFAULT_SAME_LINE_COMMIT_PX;
   const creepPx = DEFAULT_CREEP_PX;
   const creepNearPx = DEFAULT_CREEP_NEAR_PX;
   const creepBudgetPx = DEFAULT_CREEP_BUDGET_PX;
@@ -1499,6 +1508,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const resetHandler = () => {
     clearEvidenceBuffer('script-reset');
+    resetSameLineCommitEvidence('script-reset');
   };
 
   try { window.addEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
@@ -1525,6 +1535,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     resetFinalNoMatch('commit');
     clearFinalBuffer('commit');
+    if (Number.isFinite(prevIndex) && Number.isFinite(nextIndex) && nextIndex > prevIndex) {
+      resetSameLineCommitEvidence('forward-commit');
+    }
     commitCount += 1;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
       firstCommitIndex = Math.max(0, Math.floor(prevIndex));
@@ -1765,6 +1778,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         dynamicAhead: dynamicNoMatchAhead,
       });
     }
+  };
+
+  const resetSameLineCommitEvidence = (reason?: string) => {
+    if (!lastSameLineCommitTokens && !lastSameLineCommitChars && !lastSameLineCommitMatchId) return;
+    lastSameLineCommitTokens = 0;
+    lastSameLineCommitChars = 0;
+    lastSameLineCommitMatchId = null;
+    lastSameLineCommitAt = 0;
+    if (reason) {
+      logDev('same-line evidence reset', { reason });
+    }
+  };
+
+  const noteSameLineCommitEvidence = (tokens: number, chars: number, matchId?: string | null) => {
+    lastSameLineCommitTokens = Math.max(0, Math.floor(tokens));
+    lastSameLineCommitChars = Math.max(0, Math.floor(chars));
+    lastSameLineCommitMatchId = matchId || null;
+    lastSameLineCommitAt = Date.now();
   };
 
   const resetResyncOverrides = () => {
@@ -2082,6 +2113,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         isFinal,
         hasEvidence,
         snippet,
+        tokenCount: pendingTokenCount,
+        evidenceChars: pendingEvidenceChars,
+        bufferGrowing: pendingBufferGrowing,
         minThreshold,
         forced,
         forceReason,
@@ -2096,12 +2130,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         topScores = [],
         tieGap,
       } = pending;
+      const evidenceTokens = typeof pendingTokenCount === 'number' && Number.isFinite(pendingTokenCount)
+        ? Math.max(0, Math.floor(pendingTokenCount))
+        : 0;
+      const evidenceChars = typeof pendingEvidenceChars === 'number' && Number.isFinite(pendingEvidenceChars)
+        ? Math.max(0, Math.floor(pendingEvidenceChars))
+        : 0;
+      const bufferGrowing = pendingBufferGrowing === true;
       const thresholds = getAsrDriverThresholds();
       const requiredThresholdValue =
         typeof pendingRequiredThreshold === 'number' ? pendingRequiredThreshold : NaN;
       const baselineRequired = Number.isFinite(requiredThresholdValue)
         ? clamp(requiredThresholdValue, 0, 1)
         : 0;
+      const commitFloorBase = baselineRequired > 0 ? baselineRequired : thresholds.commitFinalMinSim;
+      const commitFloor = Math.min(commitFloorBase, Math.max(0.25, commitFloorBase * 0.5));
       const minThresholdValue = typeof minThreshold === 'number' ? minThreshold : NaN;
       const matchThreshold = Number.isFinite(minThresholdValue)
         ? clamp(minThresholdValue, 0, 1)
@@ -2255,6 +2298,49 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
+          const evidenceGrowing =
+            bufferGrowing ||
+            evidenceTokens > lastSameLineCommitTokens ||
+            evidenceChars > lastSameLineCommitChars;
+          const meaningfulEvidence =
+            evidenceGrowing &&
+            (evidenceTokens >= minTokenCount || evidenceChars >= minEvidenceChars);
+          if (
+            isFinal &&
+            hasEvidence &&
+            meaningfulEvidence &&
+            conf >= commitFloor &&
+            now - lastSameLineCommitAt >= sameLineThrottleMs
+          ) {
+            const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+            const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
+            const step = Math.min(creepPx, sameLineCommitPx);
+            const desired = clamp(base + step, 0, max);
+            let applied = base;
+            if (desired > base) {
+              applied = applyScrollWithHybridGuard(desired, { scroller, reason: 'asr-same-line-commit' });
+              lastKnownScrollTop = applied;
+              lastMoveAt = Date.now();
+              markProgrammaticScroll();
+            }
+            noteCommit(lastLineIndex, lastLineIndex, now);
+            noteSameLineCommitEvidence(evidenceTokens, evidenceChars, matchId ?? null);
+            lastSameLineNudgeTs = now;
+            logDev('same-line commit', {
+              line: targetLine,
+              px: Math.round(Math.max(0, applied - base)),
+              conf,
+              tokens: evidenceTokens,
+              chars: evidenceChars,
+            });
+            emitHudStatus('same_line_commit', 'Same-line progress commit', {
+              line: targetLine,
+              tokens: evidenceTokens,
+              chars: evidenceChars,
+            });
+            updateDebugState('same-line-commit');
+            return;
+          }
           if (isFinal && hasEvidence && strongMatch && deltaPx > 0 && deltaPx <= creepNearPx) {
             const nextLine = targetLine + 1;
             const nextTop = resolveTargetTop(scroller, nextLine);
@@ -4042,6 +4128,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal,
       hasEvidence,
       snippet,
+      tokenCount,
+      evidenceChars,
+      bufferGrowing,
       minThreshold:
         effectiveThresholdForPending < requiredThreshold ? effectiveThresholdForPending : undefined,
       requiredThreshold,
@@ -4114,6 +4203,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastLineIndex = Math.max(0, Math.floor(index));
     lastSeekTs = 0;
     lastSameLineNudgeTs = 0;
+    resetSameLineCommitEvidence('set-index');
     lastMoveAt = 0;
     lastIngestAt = 0;
     lastCommitAt = Date.now();
