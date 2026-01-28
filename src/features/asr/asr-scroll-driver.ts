@@ -218,6 +218,7 @@ const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
 const DEFAULT_LOW_SIM_FLOOR = 0.35;
+const DEFAULT_BEHIND_NOISE_MIN_SIM = 0.15;
 const DEFAULT_STUCK_RESYNC_WINDOW_MS = 2600;
 const DEFAULT_STUCK_RESYNC_LOOKAHEAD_BONUS = 80;
 const DEFAULT_STUCK_RESYNC_BACKTRACK_LINES = 1;
@@ -2511,6 +2512,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const computeFallbackMatch = (text: string, isFinal: boolean, now: number): MatchResult | null => {
     if (typeof window === 'undefined') return null;
+    const normalizeFallbackMatch = (res: MatchResult | null): MatchResult | null => {
+      if (!res || typeof res !== 'object') return res;
+      const rawIdx = Number((res as any).bestIdx);
+      const rawSim = Number((res as any).bestSim);
+      const sim = Number.isFinite(rawSim) ? rawSim : 0;
+      const idx = Number.isFinite(rawIdx) ? Math.floor(rawIdx) : NaN;
+      if (!Number.isFinite(idx) || idx < 0 || sim <= 0) {
+        (res as any).bestIdx = -1;
+        (res as any).bestSim = sim > 0 ? sim : 0;
+        (res as any).delta = 0;
+        (res as any).noMatch = 1;
+      }
+      return res;
+    };
     logFallbackSource('fallback-start');
     const w: any = window as any;
     const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
@@ -2529,7 +2544,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             Number.isFinite((res as any).windowBack) ? (res as any).windowBack : windowBack;
           (res as any).windowAhead =
             Number.isFinite((res as any).windowAhead) ? (res as any).windowAhead : windowAhead;
-          return res;
+          return normalizeFallbackMatch(res);
         }
       } catch (err) {
         logDev('fallback matchBatch shim failed', { err: String(err) });
@@ -2561,7 +2576,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       );
       (res as any).windowBack = windowBack;
       (res as any).windowAhead = windowAhead;
-      return res;
+      return normalizeFallbackMatch(res);
     } catch (err) {
       logDev('fallback matcher failed', { err: String(err) });
       return null;
@@ -2591,7 +2606,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       const fallbackMatch = detailObj.match ?? computeFallbackMatch(compacted, isFinal, now);
       const fallbackBestIdx = Number((fallbackMatch as any)?.bestIdx);
-      if (fallbackMatch && Number.isFinite(fallbackBestIdx)) {
+      const fallbackBestSim = Number((fallbackMatch as any)?.bestSim);
+      const fallbackNoMatch =
+        (fallbackMatch as any)?.noMatch === 1 || (fallbackMatch as any)?.noMatch === true;
+      const fallbackValid =
+        !!fallbackMatch &&
+        Number.isFinite(fallbackBestIdx) &&
+        fallbackBestIdx >= 0 &&
+        Number.isFinite(fallbackBestSim) &&
+        fallbackBestSim > 0 &&
+        !fallbackNoMatch;
+      if (fallbackValid) {
         detailObj.match = fallbackMatch;
         detailObj.matchId = nextFallbackMatchId();
         detailObj.noMatch = false;
@@ -2939,6 +2964,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     }
     const effectiveRawSim = rawScoreByIdx.get(rawIdx) ?? rawBestSim;
+    if (!Number.isFinite(effectiveRawSim) || effectiveRawSim <= 0) {
+      warnGuard('no_match', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `sim=${formatLogScore(effectiveRawSim)}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      emitHudStatus('no_match', 'No match');
+      noteNoMatchGap(now, 'sim_zero', snippet);
+      resetLagRelock('no_match');
+      return;
+    }
+    if (rawIdx < cursorLine && effectiveRawSim < DEFAULT_BEHIND_NOISE_MIN_SIM) {
+      warnGuard('no_match', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `sim=${formatLogScore(effectiveRawSim)}`,
+        `min=${formatLogScore(DEFAULT_BEHIND_NOISE_MIN_SIM)}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      emitHudStatus('no_match', 'No match');
+      noteNoMatchGap(now, 'behind_sim', snippet);
+      resetLagRelock('behind_sim');
+      return;
+    }
     let effectiveThreshold = requiredThreshold;
     const trustFloor = Math.max(thresholds.candidateMinSim, thresholds.commitInterimMinSim - RECOVERY_SIM_SLACK);
     const recoveryCandidate =
@@ -3126,7 +3176,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `best=${rawIdx}`,
           `minForward=${forwardMinIdx}`,
           `sim=${formatLogScore(bestScore)}`,
-          `need=${formatLogScore(requiredThreshold)}`,
+          `need=${formatLogScore(effectiveThreshold)}`,
           `eps=${forwardTieEps}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
