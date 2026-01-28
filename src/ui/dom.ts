@@ -655,6 +655,7 @@ function installDbMeter() {
           const val = Number.isFinite(peak) ? peak : (Number.isFinite(db) ? db : -60);
           const pct = (clamp(val, -60, 0) + 60) / 60; // map -60..0 â†’ 0..1
           if (topFill) topFill.style.transform = `scaleX(${pct})`;
+          if (hostTop) hostTop.dataset.dbPct = String(pct);
         } catch {}
       };
       render(); // idle
@@ -1348,15 +1349,15 @@ function initSelfChecksChip() {
       try {
         // dB meter listener (robust: toggle across two extremes to avoid equal-state no-op)
         const hostTop = document.getElementById('dbMeterTop');
-        const fill = hostTop && hostTop.querySelector('i');
-        const t0 = fill && getComputedStyle(fill).transform;
+        const t0 = hostTop?.dataset?.dbPct ?? '';
         window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: -60 } }));
-        const t1 = fill && getComputedStyle(fill).transform;
+        const t1 = hostTop?.dataset?.dbPct ?? '';
         window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: 0 } }));
-        const t2 = fill && getComputedStyle(fill).transform;
-        const changed = !!(hostTop && fill && t0 && (t1 !== t0 || t2 !== t1));
-        checks.push({ name: 'dB meter updates', pass: changed });
-      } catch { checks.push({ name: 'dB meter updates', pass: false }); }
+        const t2 = hostTop?.dataset?.dbPct ?? '';
+        const changed = !!(hostTop && (t1 !== t0 || t2 !== t1));
+        const info = hostTop ? `pct=${t0 || '?'}→${t1 || '?'}→${t2 || '?'}` : 'missing';
+        checks.push({ name: 'dB meter updates', pass: changed, info });
+      } catch { checks.push({ name: 'dB meter updates', pass: false, info: 'error' }); }
 
       try {
         // Legend hydration (prefer display window if present)
@@ -1375,9 +1376,7 @@ function initSelfChecksChip() {
                 return { doc, surface: 'display', displayOpen };
               }
               if (doc) return { doc, surface: 'display', displayOpen };
-            } catch {
-              displayOpen = true;
-            }
+            } catch {}
           }
           return { doc: document, surface: 'main', displayOpen };
         };
