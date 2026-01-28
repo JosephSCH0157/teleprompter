@@ -534,8 +534,8 @@ function resetRun() {
 
   const editor = document.getElementById('editor');
   const text = (editor && 'value' in editor) ? editor.value : '';
-  // Re-render to rebuild layout and anchors
-  try { if (typeof window.renderScript === 'function') window.renderScript(text); } catch {}
+  // Re-render + rebuild legacy script index to keep ASR matching aligned.
+  try { applyScript(text, 'editor', { updateEditor: false, force: true }); } catch {}
 
   // Reset logical position + display mirror
   try { window.currentIndex = 0; } catch {}
@@ -581,7 +581,7 @@ export function wireScriptControls() {
           if (editor && 'value' in editor) {
             editor.value = '';
             try { editor.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-            try { if (typeof window.renderScript === 'function') window.renderScript(''); } catch {}
+            try { applyScript('', 'editor', { updateEditor: false, force: true }); } catch {}
           }
           try { (window.setStatus || (()=>{}))('Cleared'); } catch {}
         } catch {}

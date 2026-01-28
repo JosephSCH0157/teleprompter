@@ -810,6 +810,7 @@ function syncAsrIndices(startIdx: number, reason: string): void {
 const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
 let asrScrollDriver: AsrScrollDriver | null = null;
 let transcriptListener: ((event: Event) => void) | null = null;
+let scriptChangeListener: ((event: Event) => void) | null = null;
 let sessionStopHooked = false;
 let asrBrainLogged = false;
 
@@ -831,6 +832,28 @@ function attachAsrScrollDriver(): void {
     asrScrollDriver?.ingest(text, isFinal, detail);
   };
   window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
+  if (!scriptChangeListener) {
+    scriptChangeListener = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail || {};
+      const source = typeof (detail as any)?.source === 'string' ? (detail as any).source : '';
+      const hasPayload =
+        !!source ||
+        typeof (detail as any)?.text === 'string' ||
+        typeof (detail as any)?.hash === 'string';
+      if (!hasPayload) return;
+      if (source === 'editor') return;
+      const hash = typeof (detail as any)?.hash === 'string'
+        ? (detail as any).hash
+        : String((window as any).__TP_LAST_APPLIED_HASH || '');
+      try { console.debug('[ASR] script change detected', { source, hash }); } catch {}
+      if (running) {
+        stopSpeechBackendForSession('script-change');
+        return;
+      }
+      syncAsrIndices(0, 'script-change');
+    };
+    window.addEventListener('tp:scriptChanged', scriptChangeListener, TRANSCRIPT_EVENT_OPTIONS);
+  }
 }
 
 function detachAsrScrollDriver(): void {
@@ -838,6 +861,10 @@ function detachAsrScrollDriver(): void {
     window.removeEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
   }
   transcriptListener = null;
+  if (typeof window !== 'undefined' && scriptChangeListener) {
+    window.removeEventListener('tp:scriptChanged', scriptChangeListener, TRANSCRIPT_EVENT_OPTIONS);
+  }
+  scriptChangeListener = null;
   if (asrScrollDriver) {
     asrScrollDriver.dispose();
     asrScrollDriver = null;

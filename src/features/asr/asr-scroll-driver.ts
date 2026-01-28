@@ -900,6 +900,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let lastStuckDumpAt = 0;
     let lastMatchId: string | undefined;
     let lastScriptHash = '';
+    let lastScriptChangeAt = 0;
+    let lastScriptChangeHash = '';
+    let scriptChangeHandler: ((event: Event) => void) | null = null;
     let missingMatchIdKeysLogged = false;
     let fallbackMatchIdSeq = 0;
     const armPostCatchupGrace = (reason: string) => {
@@ -2437,8 +2440,61 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     logThrottled('ASR_FALLBACK_MATCH', 'debug', '[ASR_FALLBACK_MATCH]', payload);
   };
 
+  const logFallbackSource = (reason: string) => {
+    if (!isDevMode()) return;
+    try {
+      const w: any = window as any;
+      const scriptHash = readScriptHash();
+      const vParaIndex = Array.isArray(w?.__vParaIndex) ? w.__vParaIndex : [];
+      let candidateIdx = -1;
+      let candidateLine = '';
+      for (let i = 0; i < vParaIndex.length; i++) {
+        const val = vParaIndex[i];
+        const text = typeof val === 'string' ? val.trim() : '';
+        if (text) {
+          candidateIdx = i;
+          candidateLine = text;
+          break;
+        }
+      }
+      if (candidateIdx < 0 && vParaIndex.length) {
+        candidateIdx = 0;
+        candidateLine = typeof vParaIndex[0] === 'string' ? String(vParaIndex[0]).trim() : '';
+      }
+      const root = getScriptRoot() || getPrimaryScroller() || document;
+      const lineNodes = root?.querySelectorAll?.('.line');
+      let uiIdx = -1;
+      let uiLine = '';
+      if (lineNodes && lineNodes.length) {
+        for (let i = 0; i < lineNodes.length; i++) {
+          const el = lineNodes[i] as HTMLElement;
+          const text = String(el.textContent || '').trim();
+          if (text) {
+            uiIdx = Number(el.dataset.line || el.dataset.index || el.dataset.i || i);
+            uiLine = text;
+            break;
+          }
+        }
+        if (uiIdx < 0) {
+          const first = lineNodes[0] as HTMLElement;
+          uiIdx = Number(first?.dataset?.line || first?.dataset?.index || first?.dataset?.i || 0);
+          uiLine = String(first?.textContent || '').trim();
+        }
+      }
+      if (!candidateLine && !uiLine) return;
+      const payload: Record<string, unknown> = { reason };
+      if (scriptHash) payload.scriptHash = scriptHash;
+      if (candidateIdx >= 0) payload.candidateIdx = candidateIdx;
+      if (candidateLine) payload.candidateLine = formatLogSnippet(candidateLine, 80);
+      if (uiIdx >= 0) payload.uiIdx = uiIdx;
+      if (uiLine) payload.uiLine = formatLogSnippet(uiLine, 80);
+      logThrottled('ASR_FALLBACK_SOURCE', 'debug', '[ASR_FALLBACK_SOURCE]', payload);
+    } catch {}
+  };
+
   const computeFallbackMatch = (text: string, isFinal: boolean, now: number): MatchResult | null => {
     if (typeof window === 'undefined') return null;
+    logFallbackSource('fallback-start');
     const w: any = window as any;
     const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
     const windowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
@@ -3786,6 +3842,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     try { window.removeEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
     try { window.removeEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
+    try {
+      if (scriptChangeHandler) {
+        window.removeEventListener('tp:scriptChanged', scriptChangeHandler as EventListener);
+      }
+    } catch {}
+    scriptChangeHandler = null;
     detachManualScrollWatcher();
     manualAnchorPending = null;
     updateManualAnchorGlobalState();
@@ -3849,6 +3911,41 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     setCurrentIndex(lastLineIndex, 'manualReset');
     updateDebugState('sync-index');
   };
+  const handleScriptChanged = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const source = typeof (detail as any)?.source === 'string' ? (detail as any).source : '';
+    const incomingHash = typeof (detail as any)?.hash === 'string' ? (detail as any).hash : '';
+    const scriptHash = incomingHash || readScriptHash();
+    const now = Date.now();
+    const hashKnown = !!scriptHash;
+    const sameHash = hashKnown && scriptHash === lastScriptChangeHash;
+    const recent = now - lastScriptChangeAt < 500;
+    if (source === 'editor') {
+      lastScriptChangeAt = now;
+      if (hashKnown) lastScriptChangeHash = scriptHash;
+      return;
+    }
+    if (sameHash && recent) return;
+    lastScriptChangeAt = now;
+    if (hashKnown) lastScriptChangeHash = scriptHash;
+    missingMatchIdKeysLogged = false;
+    lastMatchId = undefined;
+    fallbackMatchIdSeq = 0;
+    bootLogged = false;
+    forcedCommitTimes.length = 0;
+    jumpHistory = [];
+    guardCounts.clear();
+    resetLowSimStreak();
+    resetNoMatchTracking('script-change');
+    resetResyncOverrides();
+    resetLagRelock('script-change');
+    resetLookahead('script-change');
+    setLastLineIndex(0);
+    logDev('script change reset', { source, scriptHash });
+  };
+  scriptChangeHandler = handleScriptChanged;
+  try { window.addEventListener('tp:scriptChanged', handleScriptChanged as EventListener); } catch {}
+
   const getLastLineIndex = () => lastLineIndex;
 
   return { ingest, dispose, setLastLineIndex, getLastLineIndex };

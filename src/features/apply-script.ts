@@ -29,7 +29,11 @@ function getEditorEl(): HTMLTextAreaElement | null {
   return document.getElementById('editor') as HTMLTextAreaElement | null;
 }
 
-export function applyScript(rawIn: string, source: ApplySource, opts?: { updateEditor?: boolean }) {
+export function applyScript(
+  rawIn: string,
+  source: ApplySource,
+  opts?: { updateEditor?: boolean; force?: boolean },
+) {
   const raw = String(rawIn ?? '');
 
   // Re-entrancy: prevents apply triggering apply via events/observers
@@ -56,7 +60,7 @@ export function applyScript(rawIn: string, source: ApplySource, opts?: { updateE
 
   // Optional dedupe: if identical normalized text keeps coming in, don’t spam render/publish
   const h = hashText(normalized);
-  if (window.__TP_LAST_APPLIED_HASH === h) {
+  if (!opts?.force && window.__TP_LAST_APPLIED_HASH === h) {
     window.__TP_APPLY_IN_FLIGHT = false;
     return;
   }
@@ -88,7 +92,7 @@ export function applyScript(rawIn: string, source: ApplySource, opts?: { updateE
     publishDisplayScript(normalized, { source });
 
     // 5) Notify listeners once (optional; keep if you rely on it)
-    window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { source, text: normalized } }));
+    window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { source, text: normalized, hash: h } }));
   } finally {
     window.__TP_LOADING_SCRIPT = prevLoading;
     window.__TP_APPLY_IN_FLIGHT = false;

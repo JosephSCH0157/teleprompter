@@ -1,4 +1,5 @@
 // Simple, explicit wiring for the "Load sample text" button.
+import { applyScript } from '../features/apply-script';
 const SAMPLE_TEXT = [
   '[s1]',
   '[b]Lorem ipsum dolor[/b] sit amet, [i]consectetur[/i] [u]adipiscing[/u] elit. [note]Stage cue: smile and pause.[/note]',
@@ -25,7 +26,7 @@ function applySample(ed: HTMLTextAreaElement | HTMLInputElement): void {
   try {
     (ed as any).value = SAMPLE_TEXT;
     try { ed.dispatchEvent(new Event('input', { bubbles: true })); } catch {}
-    try { if (typeof (window as any).renderScript === 'function') (window as any).renderScript((ed as any).value); } catch {}
+    try { applyScript((ed as any).value, 'sample', { updateEditor: true, force: true }); } catch {}
     try { document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { from: 'load-sample' } })); } catch {}
   } catch {}
 }
