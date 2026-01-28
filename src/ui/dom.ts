@@ -1296,7 +1296,29 @@ function initSelfChecksChip() {
     const chip = document.getElementById('selfChecksChip');
     const txt = document.getElementById('selfChecksText');
     if (!chip || !txt) return;
+    if (chip.dataset.selfChecksWired === '1') return;
+    chip.dataset.selfChecksWired = '1';
     chip.title = 'Click to run self-checks';
+    chip.setAttribute('role', 'button');
+    chip.setAttribute('tabindex', '0');
+    chip.setAttribute('aria-haspopup', 'dialog');
+    chip.setAttribute('aria-expanded', 'false');
+
+    const ensurePopover = () => {
+      let popover = document.getElementById('selfChecksPopover') as HTMLDivElement | null;
+      if (popover) return popover;
+      popover = document.createElement('div');
+      popover.id = 'selfChecksPopover';
+      popover.className = 'self-checks-popover hidden dev-only';
+      popover.setAttribute('role', 'dialog');
+      popover.setAttribute('aria-hidden', 'true');
+      popover.innerHTML = [
+        '<div class="self-checks-title">Self-checks</div>',
+        '<div id="selfChecksList" class="self-checks-list"></div>',
+      ].join('');
+      document.body.appendChild(popover);
+      return popover;
+    };
 
     const runLocalChecks = () => {
       const checks = [];
@@ -1350,8 +1372,32 @@ function initSelfChecksChip() {
       try {
         const total = checks.length;
         const passed = checks.filter(c => c.pass).length;
-        txt.textContent = `${passed}/${total} ${passed===total ? 'âœ”' : 'â€¢'}`;
+        txt.textContent = `${passed}/${total} ${passed===total ? 'OK' : 'WARN'}`;
         console.table(checks);
+        const popover = ensurePopover();
+        const list = popover?.querySelector('#selfChecksList') as HTMLElement | null;
+        if (list) {
+          list.innerHTML = '';
+          checks.forEach((check) => {
+            const row = document.createElement('div');
+            row.className = `self-checks-row ${check.pass ? 'pass' : 'fail'}`;
+            const status = document.createElement('span');
+            status.className = `self-checks-status ${check.pass ? 'pass' : 'fail'}`;
+            status.textContent = check.pass ? 'OK' : 'FAIL';
+            const name = document.createElement('span');
+            name.className = 'self-checks-name';
+            name.textContent = String(check.name || '');
+            row.appendChild(status);
+            row.appendChild(name);
+            if (check.info) {
+              const info = document.createElement('span');
+              info.className = 'self-checks-info';
+              info.textContent = String(check.info);
+              row.appendChild(info);
+            }
+            list.appendChild(row);
+          });
+        }
       } catch {}
     };
 
@@ -1365,13 +1411,79 @@ function initSelfChecksChip() {
         } else {
           renderResult(runLocalChecks());
         }
-      } catch { txt.textContent = '0/0 â€¢'; }
+      } catch { txt.textContent = '0/0'; }
+    };
+
+    const positionPopover = (popover: HTMLElement) => {
+      try {
+        const rect = chip.getBoundingClientRect();
+        const pad = 8;
+        const width = popover.offsetWidth || 260;
+        const height = popover.offsetHeight || 160;
+        const maxLeft = Math.max(pad, window.innerWidth - width - pad);
+        const maxTop = Math.max(pad, window.innerHeight - height - pad);
+        const left = Math.min(Math.max(rect.left, pad), maxLeft);
+        const top = Math.min(Math.max(rect.bottom + 6, pad), maxTop);
+        popover.style.left = `${Math.round(left)}px`;
+        popover.style.top = `${Math.round(top)}px`;
+      } catch {}
+    };
+
+    const openPopover = () => {
+      const popover = ensurePopover();
+      popover.classList.remove('hidden');
+      popover.setAttribute('aria-hidden', 'false');
+      chip.setAttribute('aria-expanded', 'true');
+      requestAnimationFrame(() => positionPopover(popover));
+    };
+
+    const closePopover = () => {
+      const popover = ensurePopover();
+      popover.classList.add('hidden');
+      popover.setAttribute('aria-hidden', 'true');
+      chip.setAttribute('aria-expanded', 'false');
+    };
+
+    const togglePopover = () => {
+      const popover = ensurePopover();
+      const isOpen = !popover.classList.contains('hidden');
+      if (isOpen) closePopover();
+      else openPopover();
     };
 
     // Initial quick pass after hydration
     setTimeout(runChecks, 0);
     // On click, re-run and show console table
-    chip.addEventListener('click', runChecks);
+    chip.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      runChecks();
+      togglePopover();
+    });
+    chip.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      runChecks();
+      togglePopover();
+    });
+    document.addEventListener(
+      'click',
+      (event) => {
+        const popover = document.getElementById('selfChecksPopover');
+        if (!popover || popover.classList.contains('hidden')) return;
+        const target = event.target as Node | null;
+        if (target && (chip.contains(target) || popover.contains(target))) return;
+        closePopover();
+      },
+      true,
+    );
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closePopover();
+    });
+    window.addEventListener('resize', () => {
+      const popover = document.getElementById('selfChecksPopover');
+      if (popover && !popover.classList.contains('hidden')) positionPopover(popover);
+    });
   } catch {}
 }
 
