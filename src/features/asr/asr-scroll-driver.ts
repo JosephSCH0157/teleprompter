@@ -2502,8 +2502,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const currentIndexRaw = lastLineIndex >= 0 ? lastLineIndex : Number(w?.currentIndex ?? 0);
     const currentIndex = Number.isFinite(currentIndexRaw) ? Math.floor(currentIndexRaw) : 0;
 
+    const useFullTokens = isFinal && currentIndex === 0;
     const shim = w?.__tpSpeech?.matchBatch;
-    if (typeof shim === 'function') {
+    if (!useFullTokens && typeof shim === 'function') {
       try {
         const res = shim(text, isFinal, { currentIndex, windowBack, windowAhead }) as MatchResult | null;
         if (res) {
@@ -2524,7 +2525,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!scriptWords.length || !paraIndex.length) return null;
     const tokens = normTokens(text || '');
     if (!tokens.length) return null;
-    const matchTokens = tokens.slice(-DEFAULT_MATCH_TOKEN_WINDOW);
+    const matchTokens = useFullTokens ? tokens : tokens.slice(-DEFAULT_MATCH_TOKEN_WINDOW);
     const cfg = {
       MATCH_WINDOW_AHEAD: windowAhead,
       MATCH_WINDOW_BACK: windowBack,
