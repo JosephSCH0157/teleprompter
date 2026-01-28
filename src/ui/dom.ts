@@ -1360,28 +1360,39 @@ function initSelfChecksChip() {
 
       try {
         // Legend hydration (prefer display window if present)
-        const resolveLegendDoc = () => {
+        const resolveLegendSurface = () => {
           const winCandidates = [
             (window as any).__tpDisplayWindow,
             (window as any).__tpDisplayPipWindow,
           ];
+          let displayOpen = false;
           for (const candidate of winCandidates) {
             try {
               if (!candidate || candidate.closed) continue;
+              displayOpen = true;
               const doc = candidate.document;
-              if (doc && doc.getElementById('legend')) return doc;
+              if (doc && doc.getElementById('legend')) {
+                return { doc, surface: 'display', displayOpen };
+              }
+              if (doc) return { doc, surface: 'display', displayOpen };
             } catch {
-              // ignore cross-window access errors
+              displayOpen = true;
             }
           }
-          return document;
+          return { doc: document, surface: 'main', displayOpen };
         };
-        const legendDoc = resolveLegendDoc();
+        const { doc: legendDoc, surface, displayOpen } = resolveLegendSurface();
         const legend = legendDoc.getElementById('legend');
         const count = legend ? legend.querySelectorAll('.tag').length : 0;
-        const good = count >= 4;
-        const surface = legendDoc === document ? 'main' : 'display';
-        checks.push({ name: 'Legend hydrated', pass: good, info: `${surface}(${count})` });
+        if (surface === 'display') {
+          const good = count >= 4;
+          checks.push({ name: 'Legend hydrated', pass: good, info: `display(${count})` });
+        } else if (!displayOpen) {
+          checks.push({ name: 'Legend hydrated', pass: true, info: 'display closed' });
+        } else {
+          const good = count >= 4;
+          checks.push({ name: 'Legend hydrated', pass: good, info: `main(${count})` });
+        }
       } catch { checks.push({ name: 'Legend hydrated', pass: false, info: 'error' }); }
 
       return checks;
