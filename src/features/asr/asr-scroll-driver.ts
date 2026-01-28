@@ -118,6 +118,12 @@ const DEFAULT_INTERIM_SCALE = 1.15;
 const DEFAULT_MATCH_BACKTRACK_LINES = 2;
 const DEFAULT_MATCH_LOOKAHEAD_LINES = 50;
 const DEFAULT_MATCH_LOOKAHEAD_STEPS = [DEFAULT_MATCH_LOOKAHEAD_LINES, 120, 200, 400];
+const DEFAULT_NO_MATCH_STREAK_FOR_EXPAND = 2;
+const DEFAULT_NO_MATCH_LOOKAHEAD_STEPS = [DEFAULT_MATCH_LOOKAHEAD_LINES, 100, 200, 300];
+const DEFAULT_NO_MATCH_LOOKAHEAD_CAP = 300;
+const DEFAULT_NO_MATCH_DIAG_THROTTLE_MS = 500;
+const DEFAULT_FINAL_BUFFER_MAX_WORDS = 16;
+const DEFAULT_FINAL_BUFFER_MAX_FINALS = 2;
 const DEFAULT_MATCH_TOKEN_WINDOW = 18;
 const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
 const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
@@ -891,52 +897,65 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindHitWindowStart = 0;
   let lagRelockHits = 0;
   let lagRelockWindowStart = 0;
-    let pendingMatch: PendingMatch | null = null;
-    let pendingSeq = 0;
+  let pendingMatch: PendingMatch | null = null;
+  let pendingSeq = 0;
 
-    const adoptPendingMatch = (next: PendingMatch) => {
-      pendingMatch = next;
-      pendingSeq += 1;
-      return pendingMatch;
-    };
-    let pendingRaf = 0;
-    let bootLogged = false;
-    let forcedCooldownUntil = 0;
-    const forcedCommitTimes: number[] = [];
-    let jumpHistory: number[] = [];
-    const LINE_MISSING_RETRY_LIMIT = 2;
-    let lineMissingRetryLine: number | null = null;
-    let lineMissingRetryCount = 0;
-    let anchorStreakLine: number | null = null;
-    let anchorStreakCount = 0;
-    let noTargetRetryLine = -1;
-    let noTargetRetryCount = 0;
-    let noTargetRetryAt = 0;
-    let noTargetRetryMatchId: string | null = null;
-    let noMatchWindowStart = 0;
-    let noMatchHits = 0;
-    let lastNoMatchAt = 0;
-    let lastStuckDumpAt = 0;
-    let lastMatchId: string | undefined;
-    let lastScriptHash = '';
-    let lastScriptChangeAt = 0;
-    let lastScriptChangeHash = '';
-    let scriptChangeHandler: ((event: Event) => void) | null = null;
-    let missingMatchIdKeysLogged = false;
-    let fallbackMatchIdSeq = 0;
-    const armPostCatchupGrace = (reason: string) => {
-      const now = Date.now();
-      postCatchupUntil = now + POST_CATCHUP_MS;
-      postCatchupSamplesLeft = POST_CATCHUP_SAMPLES;
-      logDev('[ASR] post catchup armed', { reason, until: postCatchupUntil });
-    };
-    const isPostCatchupActive = (now: number) =>
-      now < postCatchupUntil && postCatchupSamplesLeft > 0;
+  const adoptPendingMatch = (next: PendingMatch) => {
+    pendingMatch = next;
+    pendingSeq += 1;
+    return pendingMatch;
+  };
+  let pendingRaf = 0;
+  let bootLogged = false;
+  let forcedCooldownUntil = 0;
+  const forcedCommitTimes: number[] = [];
+  let jumpHistory: number[] = [];
+  const LINE_MISSING_RETRY_LIMIT = 2;
+  let lineMissingRetryLine: number | null = null;
+  let lineMissingRetryCount = 0;
+  let anchorStreakLine: number | null = null;
+  let anchorStreakCount = 0;
+  let noTargetRetryLine = -1;
+  let noTargetRetryCount = 0;
+  let noTargetRetryAt = 0;
+  let noTargetRetryMatchId: string | null = null;
+  let noMatchWindowStart = 0;
+  let noMatchHits = 0;
+  let lastNoMatchAt = 0;
+  let lastStuckDumpAt = 0;
+  let lastMatchId: string | undefined;
+  let lastScriptHash = '';
+  let lastScriptChangeAt = 0;
+  let lastScriptChangeHash = '';
+  let scriptChangeHandler: ((event: Event) => void) | null = null;
+  let missingMatchIdKeysLogged = false;
+  let fallbackMatchIdSeq = 0;
+  let finalNoMatchStreak = 0;
+  let dynamicNoMatchAhead = 0;
+  let lastNoMatchDiagAt = 0;
+  let finalBufferWords: string[] = [];
+  let finalBufferFinals: string[] = [];
+  const armPostCatchupGrace = (reason: string) => {
+    const now = Date.now();
+    postCatchupUntil = now + POST_CATCHUP_MS;
+    postCatchupSamplesLeft = POST_CATCHUP_SAMPLES;
+    logDev('[ASR] post catchup armed', { reason, until: postCatchupUntil });
+  };
+  const isPostCatchupActive = (now: number) =>
+    now < postCatchupUntil && postCatchupSamplesLeft > 0;
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
   const matchLookaheadSteps =
     DEFAULT_MATCH_LOOKAHEAD_STEPS.length > 0 ? DEFAULT_MATCH_LOOKAHEAD_STEPS : [matchLookaheadLines];
+  const noMatchStreakForExpand = DEFAULT_NO_MATCH_STREAK_FOR_EXPAND;
+  const noMatchLookaheadSteps = DEFAULT_NO_MATCH_LOOKAHEAD_STEPS.length > 0
+    ? DEFAULT_NO_MATCH_LOOKAHEAD_STEPS
+    : [matchLookaheadLines, 100, 200, 300];
+  const noMatchLookaheadCap = DEFAULT_NO_MATCH_LOOKAHEAD_CAP;
+  const noMatchDiagThrottleMs = DEFAULT_NO_MATCH_DIAG_THROTTLE_MS;
+  const finalBufferMaxWords = DEFAULT_FINAL_BUFFER_MAX_WORDS;
+  const finalBufferMaxFinals = DEFAULT_FINAL_BUFFER_MAX_FINALS;
   const lookaheadBumpCooldownMs = DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS;
   const lookaheadBehindHits = DEFAULT_LOOKAHEAD_BEHIND_HITS;
   const lookaheadBehindWindowMs = DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS;
@@ -1504,6 +1523,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
+    resetFinalNoMatch('commit');
+    clearFinalBuffer('commit');
     commitCount += 1;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
       firstCommitIndex = Math.max(0, Math.floor(prevIndex));
@@ -1693,7 +1714,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const base = matchLookaheadSteps[Math.min(lookaheadStepIndex, matchLookaheadSteps.length - 1)] || matchLookaheadLines;
     const bonus = resyncActive ? resyncLookaheadBonus : 0;
     const boosted = resyncActive ? base + bonus : base;
-    return clamp(boosted, matchLookaheadLines, matchLookaheadMax + bonus);
+    const withDynamic = dynamicNoMatchAhead > 0 ? Math.max(boosted, dynamicNoMatchAhead) : boosted;
+    return clamp(withDynamic, matchLookaheadLines, matchLookaheadMax + bonus);
   };
 
   const bumpLookahead = (reason: string, now: number) => {
@@ -1712,6 +1734,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     behindHitCount = 0;
     behindHitWindowStart = 0;
     logDev('lookahead reset', { reason, windowAhead: resolveLookahead(false) });
+  };
+
+  const resetFinalNoMatch = (reason?: string) => {
+    if (finalNoMatchStreak === 0 && dynamicNoMatchAhead === 0) return;
+    finalNoMatchStreak = 0;
+    dynamicNoMatchAhead = 0;
+    if (reason) {
+      logDev('no_match_streak reset', { reason });
+    }
+  };
+
+  const noteFinalNoMatch = (now: number, reason: string) => {
+    finalNoMatchStreak += 1;
+    if (finalNoMatchStreak < noMatchStreakForExpand) return;
+    const stepIndex = Math.min(
+      noMatchLookaheadSteps.length - 1,
+      finalNoMatchStreak - noMatchStreakForExpand + 1,
+    );
+    const target = Math.min(
+      noMatchLookaheadSteps[stepIndex] || matchLookaheadLines,
+      noMatchLookaheadCap,
+    );
+    if (target > dynamicNoMatchAhead) {
+      dynamicNoMatchAhead = target;
+      logDev('no_match lookahead', {
+        reason,
+        streak: finalNoMatchStreak,
+        windowAhead: resolveLookahead(false),
+        dynamicAhead: dynamicNoMatchAhead,
+      });
+    }
   };
 
   const resetResyncOverrides = () => {
@@ -1785,6 +1838,110 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       noMatchWindowStart = now;
     }
     logDev('no_match_gap', { reason, hits: noMatchHits, gapMs, snippet });
+  };
+
+  const clearFinalBuffer = (reason?: string) => {
+    if (!finalBufferWords.length && !finalBufferFinals.length) return;
+    finalBufferWords = [];
+    finalBufferFinals = [];
+    if (reason) {
+      logDev('final_buffer reset', { reason });
+    }
+  };
+
+  const updateFinalBuffer = (text: string) => {
+    const normalized = String(text || '').trim();
+    if (!normalized) return;
+    const tokens = normTokens(normalized);
+    if (!tokens.length) return;
+    const last = finalBufferFinals[finalBufferFinals.length - 1];
+    if (last === normalized) return;
+    finalBufferFinals.push(normalized);
+    if (finalBufferFinals.length > finalBufferMaxFinals) {
+      finalBufferFinals.shift();
+    }
+    const combined = finalBufferFinals.join(' ');
+    const combinedTokens = normTokens(combined);
+    finalBufferWords = combinedTokens.slice(-finalBufferMaxWords);
+  };
+
+  const getFinalBufferText = () => finalBufferWords.join(' ');
+
+  const getLineSnippetByIndex = (idx: number) => {
+    if (!Number.isFinite(idx) || idx < 0) return '';
+    try {
+      const w: any = window as any;
+      const vParaIndex = Array.isArray(w?.__vParaIndex) ? w.__vParaIndex : null;
+      if (vParaIndex && typeof vParaIndex[idx] === 'string') {
+        return formatLogSnippet(vParaIndex[idx], 80);
+      }
+      const root = getScriptRoot() || getPrimaryScroller() || document;
+      const line =
+        root?.querySelector<HTMLElement>(`.line[data-index="${idx}"]`) ||
+        root?.querySelector<HTMLElement>(`.line[data-line="${idx}"]`) ||
+        root?.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
+        document.getElementById(`tp-line-${idx}`);
+      if (line) return formatLogSnippet(String(line.textContent || ''), 80);
+    } catch {}
+    return '';
+  };
+
+  const logNoMatchDiagnostics = (
+    now: number,
+    reason: string,
+    match: MatchResult | null,
+    cursorLine: number,
+    windowBack: number,
+    windowAhead: number,
+    snippet: string,
+  ) => {
+    if (!isDevMode()) return;
+    if (now - lastNoMatchDiagAt < noMatchDiagThrottleMs) return;
+    lastNoMatchDiagAt = now;
+    const rawBestIdx = Number((match as any)?.bestIdx);
+    const rawBestSim = Number((match as any)?.bestSim);
+    const bestIdx = Number.isFinite(rawBestIdx) ? Math.floor(rawBestIdx) : -1;
+    const bestSim = Number.isFinite(rawBestSim) ? Number(rawBestSim.toFixed(3)) : rawBestSim;
+    const reject: string[] = [];
+    if (!Number.isFinite(rawBestIdx) || bestIdx < 0) reject.push('bestIdx<0');
+    if (!Number.isFinite(rawBestSim) || rawBestSim <= 0) reject.push('sim<=0');
+    if (bestIdx >= 0) {
+      if (bestIdx < cursorLine) reject.push('behind');
+      if (bestIdx < cursorLine - windowBack || bestIdx > cursorLine + windowAhead) {
+        reject.push('outside_window');
+      }
+    }
+    const rawTopScores = Array.isArray((match as any)?.topScores) ? (match as any).topScores : [];
+    const candidates = rawTopScores
+      .map((entry: any) => {
+        const idx = Number(entry?.idx);
+        const score = Number(entry?.score);
+        if (!Number.isFinite(idx) || !Number.isFinite(score)) return null;
+        const fixedIdx = Math.max(0, Math.floor(idx));
+        const dir = fixedIdx < cursorLine ? 'behind' : fixedIdx > cursorLine ? 'ahead' : 'on';
+        return {
+          idx: fixedIdx,
+          score: Number(score.toFixed(3)),
+          dir,
+          snippet: getLineSnippetByIndex(fixedIdx),
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => (b?.score ?? 0) - (a?.score ?? 0))
+      .slice(0, 5);
+    try {
+      console.debug('[ASR_NO_MATCH]', {
+        reason,
+        cursor: cursorLine,
+        windowBack,
+        windowAhead,
+        bestIdx,
+        bestSim,
+        reject: reject.join(',') || 'unknown',
+        snippet,
+        candidates,
+      });
+    } catch {}
   };
 
   const noteBehindBlocked = (now: number) => {
@@ -2584,12 +2741,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   };
 
+  const isValidFallbackMatch = (
+    candidate: MatchResult | null | undefined,
+  ): candidate is MatchResult => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const idx = Number((candidate as any).bestIdx);
+    const sim = Number((candidate as any).bestSim);
+    const noMatchFlag =
+      (candidate as any).noMatch === 1 || (candidate as any).noMatch === true;
+    return Number.isFinite(idx) && idx >= 0 && Number.isFinite(sim) && sim > 0 && !noMatchFlag;
+  };
+
   const ingest = (text: string, isFinal: boolean, detail?: TranscriptDetail) => {
     if (disposed) return;
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    let finalBufferText = '';
+    if (isFinal) {
+      updateFinalBuffer(compacted);
+      finalBufferText = getFinalBufferText();
+    }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     const detailObj: TranscriptDetail =
       detail && typeof detail === 'object' ? { ...(detail as TranscriptDetail) } : {};
@@ -2597,6 +2770,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let noMatch = detailObj.noMatch === true;
     let hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
     let explicitNoMatch = rawMatchId === null && noMatch;
+    let fallbackMatch: MatchResult | null = null;
     if (!hasMatchId && !explicitNoMatch) {
       if (isDevMode() && !missingMatchIdKeysLogged) {
         missingMatchIdKeysLogged = true;
@@ -2605,26 +2779,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           console.debug('[ASR_PIPELINE] missing matchId; fallback matcher engaged keys=[' + keys.join(',') + ']');
         } catch {}
       }
-      const fallbackMatch = detailObj.match ?? computeFallbackMatch(compacted, isFinal, now);
-      const fallbackBestIdx = Number((fallbackMatch as any)?.bestIdx);
-      const fallbackBestSim = Number((fallbackMatch as any)?.bestSim);
-      const fallbackNoMatch =
-        (fallbackMatch as any)?.noMatch === 1 || (fallbackMatch as any)?.noMatch === true;
-      const fallbackValid =
-        !!fallbackMatch &&
-        Number.isFinite(fallbackBestIdx) &&
-        fallbackBestIdx >= 0 &&
-        Number.isFinite(fallbackBestSim) &&
-        fallbackBestSim > 0 &&
-        !fallbackNoMatch;
-      if (fallbackValid) {
+      fallbackMatch = detailObj.match ?? computeFallbackMatch(compacted, isFinal, now);
+      if (isValidFallbackMatch(fallbackMatch)) {
         detailObj.match = fallbackMatch;
         detailObj.matchId = nextFallbackMatchId();
         detailObj.noMatch = false;
         logFallbackMatch(fallbackMatch, detailObj);
       } else {
-        detailObj.matchId = null;
-        detailObj.noMatch = true;
+        let bufferMatch: MatchResult | null = null;
+        if (isFinal && finalBufferText && finalBufferText !== compacted) {
+          bufferMatch = computeFallbackMatch(finalBufferText, true, now);
+        }
+        if (isValidFallbackMatch(bufferMatch)) {
+          (bufferMatch as any).matchSource = 'buffer';
+          detailObj.match = bufferMatch;
+          detailObj.matchId = nextFallbackMatchId();
+          detailObj.noMatch = false;
+          logFallbackMatch(bufferMatch, detailObj);
+        } else {
+          detailObj.matchId = null;
+          detailObj.noMatch = true;
+        }
       }
       rawMatchId = detailObj.matchId;
       noMatch = detailObj.noMatch === true;
@@ -2644,6 +2819,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     if (explicitNoMatch) {
       const snippet = formatLogSnippet(compacted, 60);
+      if (isFinal) {
+        const cursorLine = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
+        const matchWindowBack = matchBacktrackLines;
+        const matchWindowAhead = resolveLookahead(false);
+        noteFinalNoMatch(now, 'explicit_no_match');
+        logNoMatchDiagnostics(now, 'explicit_no_match', fallbackMatch, cursorLine, matchWindowBack, matchWindowAhead, snippet);
+      }
       emitHudStatus('no_match', 'No match');
       noteNoMatchGap(now, 'explicit_no_match', snippet);
       return;
