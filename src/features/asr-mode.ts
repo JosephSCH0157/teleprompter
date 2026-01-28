@@ -173,6 +173,15 @@ export class AsrMode {
 
     if (e.type === 'partial' || e.type === 'final') {
       if (this.state !== 'running') this.setState('running');
+      const hasExternalDriver = (() => {
+        try { return !!(window as any).__tpAsrScrollDriver; } catch { return false; }
+      })();
+      if (hasExternalDriver) {
+        const idxRaw = Number((window as any)?.currentIndex ?? NaN);
+        if (Number.isFinite(idxRaw)) {
+          this.currentIdx = Math.max(0, Math.floor(idxRaw));
+        }
+      }
       const text = this.prepareText(e.text);
       const isFinal = e.type === 'final';
       const confidence = e.confidence ?? (isFinal ? 1 : 0.5);
@@ -185,6 +194,11 @@ export class AsrMode {
         final: isFinal,
         lineIndex: isFinal ? this.currentIdx : undefined,
       });
+      if (hasExternalDriver) {
+        // Let the scroll driver own match/commit decisions; keep watchdog alive.
+        this.markAdvance();
+        return;
+      }
       
       // Feed-forward: track token rate on partials
       if (e.type === 'partial') {
