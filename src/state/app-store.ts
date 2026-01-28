@@ -1,6 +1,6 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
-import { loadScrollPrefs, saveScrollPrefs } from '../features/scroll/scroll-prefs';
+import { readScrollMode, writeScrollMode } from '../persist/scrollModePersist';
 
 const IS_TEST = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test';
 
@@ -29,7 +29,6 @@ const ASR_TUNING_ACTIVE_PROFILE_KEY = 'tp_asr_tuning_active_profile_v1';
 const RECORD_AUDIO_ONLY_KEY = 'tp_record_audio_only';
 
 // Scroll router keys
-const SCROLL_MODE_KEY = 'scrollMode';
 const TIMED_SPEED_KEY = 'tp_scroll_timed_speed_v1';
 const WPM_TARGET_KEY = 'tp_scroll_wpm_target_v1';
 const WPM_BASEPX_KEY = 'tp_scroll_wpm_basepx_v1';
@@ -68,7 +67,6 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   cameraEnabled: CAMERA_KEY,
   recordAudioOnly: RECORD_AUDIO_ONLY_KEY,
   // Scroll router persistence
-  scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
   wpmTarget: WPM_TARGET_KEY,
   wpmBasePx: WPM_BASEPX_KEY,
@@ -221,51 +219,13 @@ function migrateAutoRecordFlag() {
 
 migrateAutoRecordFlag();
 
-function normalizeScrollMode(mode: string | null | undefined): string {
-  const v = String(mode || '').trim().toLowerCase();
-  if (!v) return 'hybrid';
-  if (v === 'manual') return 'step';
-  return v;
-}
-
-function readAndMigrateScrollMode(): string {
-  const legacyKeys = ['tp_scroll_mode', 'tp_scroll_mode_v1', 'tp_scroll_mode_v2', 'tp_scroll_mode_backup'];
+function resolveInitialScrollMode(): string {
   try {
-    // Prefer canonical if present
-    const canonical = localStorage.getItem(SCROLL_MODE_KEY);
-    if (canonical) {
-      const norm = normalizeScrollMode(canonical);
-      if (norm === 'asr') {
-        localStorage.setItem(SCROLL_MODE_KEY, 'hybrid');
-        try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch {}
-        legacyKeys.forEach((k) => { try { localStorage.removeItem(k); } catch {} });
-        return 'hybrid';
-      }
-      if (norm !== canonical) localStorage.setItem(SCROLL_MODE_KEY, norm);
-      // Clear legacy keys if canonical exists
-      legacyKeys.forEach((k) => { try { localStorage.removeItem(k); } catch {} });
-      return norm;
-    }
-    // Otherwise migrate from any legacy key once
-    for (const k of legacyKeys) {
-      const legacy = localStorage.getItem(k);
-      if (legacy) {
-        const norm = normalizeScrollMode(legacy);
-        if (norm === 'asr') {
-          localStorage.setItem(SCROLL_MODE_KEY, 'hybrid');
-          try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch {}
-          try { localStorage.removeItem(k); } catch {}
-          return 'hybrid';
-        }
-        localStorage.setItem(SCROLL_MODE_KEY, norm);
-        try { localStorage.removeItem(k); } catch {}
-        return norm;
-      }
-    }
+    const persisted = readScrollMode();
+    return persisted ? String(persisted) : 'hybrid';
   } catch {
-    // ignore
+    return 'hybrid';
   }
-  return 'hybrid';
 }
 
 function buildInitialState(): AppStoreState {
@@ -491,22 +451,7 @@ function buildInitialState(): AppStoreState {
     })(),
 
     // Scroll router (persisted)
-    scrollMode: (() => {
-      const fromPrefs = (() => {
-        try {
-          const prefs = loadScrollPrefs();
-          if (prefs?.mode) return normalizeScrollMode(prefs.mode);
-        } catch {}
-        return null;
-      })();
-      if (fromPrefs === 'asr') {
-        try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch {}
-      }
-      const migrated = readAndMigrateScrollMode();
-      const chosen = normalizeScrollMode((fromPrefs === 'asr' ? null : fromPrefs) || migrated);
-      try { localStorage.setItem(SCROLL_MODE_KEY, chosen); } catch {}
-      return chosen;
-    })(),
+    scrollMode: resolveInitialScrollMode(),
     timedSpeed: (() => {
       try {
         const v = parseFloat(localStorage.getItem(TIMED_SPEED_KEY) || '');
@@ -711,6 +656,10 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
       if (key === 'overlay') {
         value = (ALLOWED_OVERLAYS.has(value as AppStoreState['overlay']) ? value : 'none') as AppStoreState[K];
       }
+      if (key === 'scrollMode') {
+        const normalized = writeScrollMode(value as unknown as string);
+        value = (normalized || 'hybrid') as AppStoreState[K];
+      }
       const prev = state[key];
       if (prev === value) return value;
       state[key] = value;
@@ -734,9 +683,6 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
             try {
               localStorage.removeItem(LEGACY_AUTO_RECORD_KEY);
             } catch {}
-          }
-          if (key === 'scrollMode') {
-            saveScrollPrefs({ mode: String(value) as any });
           }
         }
       } catch {}

@@ -324,6 +324,25 @@ async function main() {
     if (legacy) throw new Error('Legacy #scriptSlots found');
     console.log('[e2e] ui-invariants: PASS');
   } catch (e) {
+    try {
+      const debug = await page.evaluate(() => {
+        const store = (window).__tpStore;
+        const read = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+        const select = document.querySelector('#scrollMode');
+        return {
+          uiValue: select ? select.value : null,
+          storeMode: store && typeof store.get === 'function' ? store.get('scrollMode') : null,
+          sessionPhase: store && typeof store.get === 'function' ? store.get('session.phase') : null,
+          storage: {
+            tp_scroll_mode_v1: read('tp_scroll_mode_v1'),
+            scrollMode: read('scrollMode'),
+            tp_scroll_mode: read('tp_scroll_mode'),
+            tp_scroll_prefs_v1: read('tp_scroll_prefs_v1'),
+          },
+        };
+      });
+      console.warn('[e2e] ui-invariants: DEBUG', debug);
+    } catch {}
     console.warn('[e2e] ui-invariants: WARN', String(e && e.message || e));
   }
 

@@ -1185,10 +1185,6 @@ function initScrollModeUiSync(): void {
       }
       applyUiScrollMode(mode, { source: 'user', allowToast: true });
       try {
-        const persisted = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
-        if (persisted) localStorage.setItem('scrollMode', persisted);
-      } catch {}
-      try {
         console.log('[mode] user selection', { mode, store: appStore.get?.('scrollMode') });
       } catch {}
     }, { capture: true });

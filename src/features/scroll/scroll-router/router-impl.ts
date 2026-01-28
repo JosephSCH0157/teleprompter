@@ -1495,8 +1495,8 @@ var getUiPrefs = () => state;
 var onUiPrefs = (fn) => (subs.add(fn), () => subs.delete(fn));
 
 // src/features/scroll-router.ts
-var LS_KEY = "scrollMode";
-var LEGACY_LS_KEYS = ["tp_scroll_mode_v1", "tp_scroll_mode"];
+var LS_KEY = "tp_scroll_mode_v1";
+var LEGACY_LS_KEYS = ["scrollMode", "tp_scroll_mode", "tp_scroll_mode_v2", "tp_scroll_mode_backup", "tp_scroll_prefs_v1"];
 var DEFAULTS = {
   mode: "hybrid",
   step: { holdCreep: 8 },
