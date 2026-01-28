@@ -1359,11 +1359,30 @@ function initSelfChecksChip() {
       } catch { checks.push({ name: 'dB meter updates', pass: false }); }
 
       try {
-        // Legend hydration (4 tags)
-        const legend = document.getElementById('legend');
-        const good = !!(legend && legend.querySelectorAll('.tag').length >= 4);
-        checks.push({ name: 'Legend hydrated', pass: good });
-      } catch { checks.push({ name: 'Legend hydrated', pass: false }); }
+        // Legend hydration (prefer display window if present)
+        const resolveLegendDoc = () => {
+          const winCandidates = [
+            (window as any).__tpDisplayWindow,
+            (window as any).__tpDisplayPipWindow,
+          ];
+          for (const candidate of winCandidates) {
+            try {
+              if (!candidate || candidate.closed) continue;
+              const doc = candidate.document;
+              if (doc && doc.getElementById('legend')) return doc;
+            } catch {
+              // ignore cross-window access errors
+            }
+          }
+          return document;
+        };
+        const legendDoc = resolveLegendDoc();
+        const legend = legendDoc.getElementById('legend');
+        const count = legend ? legend.querySelectorAll('.tag').length : 0;
+        const good = count >= 4;
+        const surface = legendDoc === document ? 'main' : 'display';
+        checks.push({ name: 'Legend hydrated', pass: good, info: `${surface}(${count})` });
+      } catch { checks.push({ name: 'Legend hydrated', pass: false, info: 'error' }); }
 
       return checks;
     };
