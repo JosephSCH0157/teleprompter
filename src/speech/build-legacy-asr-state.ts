@@ -23,10 +23,13 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
     .filter(Boolean);
 
   const paraIndex: Array<{ start: number; end: number; key: string }> = new Array(scriptWords.length);
+  const vParaIndex: string[] = [];
   {
     let wordIdx = 0;
     let lineIdx = 0;
     for (const line of t.split('\n')) {
+      const trimmed = String(line || '').trim();
+      vParaIndex.push(trimmed);
       const tokens = line
         .split(/\s+/)
         .map((x) => x.trim())
@@ -47,6 +50,15 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
 
   w.scriptWords = scriptWords;
   w.paraIndex = paraIndex;
+  w.__vParaIndex = vParaIndex;
+  w.__tpScriptIndex = {
+    scriptWords,
+    paraIndex,
+    vParaIndex,
+    lineCount: vParaIndex.length,
+    wordCount: scriptWords.length,
+  };
+  w.__tpScriptIndexReady = true;
   if (typeof w.currentIndex !== 'number' || Number.isNaN(w.currentIndex)) {
     w.currentIndex = 0;
   }
@@ -55,6 +67,7 @@ export function buildLegacyAsrStateFromStandardScript(canon: string) {
     console.log('[ASR] legacy state built', {
       scriptWords: w.scriptWords?.length ?? 0,
       paraIndexEntries: w.paraIndex?.length ?? 0,
+      vParaIndex: w.__vParaIndex?.length ?? 0,
       currentIndex: w.currentIndex,
     });
   } catch {}

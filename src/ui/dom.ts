@@ -1355,7 +1355,7 @@ function initSelfChecksChip() {
         window.dispatchEvent(new CustomEvent('tp:db', { detail: { db: 0 } }));
         const t2 = hostTop?.dataset?.dbPct ?? '';
         const changed = !!(hostTop && (t1 !== t0 || t2 !== t1));
-        const info = hostTop ? `pct=${t0 || '?'}→${t1 || '?'}→${t2 || '?'}` : 'missing';
+        const info = hostTop ? `pct=${t0 || '?'}->${t1 || '?'}->${t2 || '?'}` : 'missing';
         checks.push({ name: 'dB meter updates', pass: changed, info });
       } catch { checks.push({ name: 'dB meter updates', pass: false, info: 'error' }); }
 
