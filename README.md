@@ -20,6 +20,7 @@ Browser-based teleprompter with mirrored display, speech/scroll helpers, recordi
 Authoritative reference:
 This section is mirrored from `MANIFEST.md`, which is the canonical source for repository structure and migration rules.
 Update `MANIFEST.md` first; `README.md` is a mirror.
+Also see `manifest.md` (SSOT map) and `scroll-mode-ssot.md` (scroll mode SSOT).
 
 ## Root layout
 Source + build: `src/` is the main TypeScript source; `dist/` is built output.
