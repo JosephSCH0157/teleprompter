@@ -80,6 +80,7 @@ import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
 import { triggerWireAutoIntentListener, __AUTO_INTENT_WIRE_SENTINEL, ROUTER_STAMP } from './features/scroll/scroll-router';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
+import { recordWindowSetterCall, withScrollModeWriter } from './scroll/audit';
 import './dev/ci-mocks';
 import './dev/asr-thresholds-panel';
 import './hud/loader';
@@ -788,6 +789,11 @@ function applyUiScrollMode(
       document.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
     } catch {}
   };
+  const setScrollModeFromUi = (next: UiScrollMode) => {
+    withScrollModeWriter('ui/applyUiScrollMode', () => {
+      try { appStore.set?.('scrollMode', next as any); } catch {}
+    }, { source: 'ui' });
+  };
   let micPermissionCheckPending = false;
   const isPermissionRetry = opts.__permissionRetry === true;
   function handleAsrBlock(reason: GateReason) {
@@ -812,7 +818,7 @@ function applyUiScrollMode(
     try {
       console.debug('[Scroll Mode] ASR rejected', { reason, fallback });
     } catch {}
-    try { appStore.set?.('scrollMode', fallback as any); } catch {}
+    setScrollModeFromUi(fallback);
     try { requestAsrStop(); } catch {}
   }
   const ensureMicPermissionThenRetry = () => {
@@ -883,7 +889,7 @@ function applyUiScrollMode(
   (window as any).__tpUiScrollMode = normalized;
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
   if (!opts.skipStore) {
-    try { appStore.set?.('scrollMode', normalized); } catch {}
+    setScrollModeFromUi(normalized);
   }
 
   try { applyScrollModeUI(normalized as any); } catch {}
@@ -1161,7 +1167,10 @@ initScrollModeUiSync();
 try { (window as any).__tpAppStore = appStore; } catch {}
 (window as any).setScrollMode = (mode: UiScrollMode) => {
 	const normalized = normalizeUiScrollMode(mode);
-	try { appStore.set?.('scrollMode', normalized as any); } catch {}
+	recordWindowSetterCall('window.setScrollMode', { mode: normalized }, true);
+	withScrollModeWriter('window/setScrollMode', () => {
+		try { appStore.set?.('scrollMode', normalized as any); } catch {}
+	}, { source: 'window', stack: true });
 	try { applyUiScrollMode(normalized, { skipStore: true, source: 'legacy' }); } catch {}
 	try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
 };
@@ -2037,7 +2046,12 @@ try {
 
   // Expose minimal setter for dev/diagnostics
   (window as any).__tpScrollMode = {
-    setMode: (m: RouterMode) => { try { store?.set?.('scrollMode', m); } catch {} },
+    setMode: (m: RouterMode) => {
+      recordWindowSetterCall('window.__tpScrollMode.setMode', { mode: m }, true);
+      withScrollModeWriter('window/setScrollMode', () => {
+        try { store?.set?.('scrollMode', m); } catch {}
+      }, { source: 'window', stack: true });
+    },
     getMode: () => scrollModeSource.get(),
   };
 

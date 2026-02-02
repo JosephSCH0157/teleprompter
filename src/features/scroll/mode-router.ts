@@ -1,5 +1,6 @@
 // src/features/scroll/mode-router.ts
 // Central router that turns engines on/off based on scrollMode + session state.
+import { withScrollModeWriter } from '../../scroll/audit';
 
 export type ScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'auto' | 'off';
 
@@ -216,7 +217,9 @@ export function createScrollModeRouter(deps: LegacyDeps): ScrollModeRouter {
 
   return {
     setMode(next: ScrollMode) {
-      try { store?.set?.(key, next); } catch {}
+      withScrollModeWriter('features/scroll/mode-router', () => {
+        try { store?.set?.(key, next); } catch {}
+      }, { source: 'router' });
     },
     getMode() {
       return currentMode;

@@ -22,6 +22,8 @@
  * No DOM, no UI, no persistence.
  */
 
+import { recordModeTransition } from './audit';
+
 export interface ModeRouterDeps {
   scrollBrain: any;
   timedEngine: any;
@@ -43,6 +45,17 @@ export function createModeRouter(deps: ModeRouterDeps) {
 
   let currentMode: string = 'manual';
 
+  function getSessionPhase(): string {
+    try {
+      if (typeof window === 'undefined') return '';
+      const store = (window as any).__tpStore;
+      const phase = store?.get?.('session.phase');
+      return String(phase || '');
+    } catch {
+      return '';
+    }
+  }
+
   function disableAllEngines() {
     try { timedEngine.disable(); } catch {}
     try { wpmEngine.disable(); } catch {}
@@ -56,7 +69,15 @@ export function createModeRouter(deps: ModeRouterDeps) {
     if (!mode) return;
     if (mode === currentMode) return;
 
+    const prevMode = currentMode;
     currentMode = mode;
+    recordModeTransition({
+      writer: 'scroll/mode-router',
+      from: prevMode,
+      to: mode,
+      phase: getSessionPhase(),
+      source: 'router',
+    });
     disableAllEngines();
 
     switch (mode) {

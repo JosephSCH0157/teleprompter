@@ -1,6 +1,7 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
 import { loadScrollPrefs, saveScrollPrefs } from '../features/scroll/scroll-prefs';
+import { getScrollModeAuditContext, recordScrollModeWrite } from '../scroll/audit';
 
 const IS_TEST = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test';
 
@@ -701,6 +702,20 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
       const prev = state[key];
       if (prev === value) return value;
       state[key] = value;
+      if (key === 'scrollMode') {
+        try {
+          const ctx = getScrollModeAuditContext();
+          recordScrollModeWrite({
+            writer: ctx?.writer || 'unknown',
+            from: prev as any,
+            to: value as any,
+            phase: (state as any)['session.phase'],
+            source: ctx?.meta?.source,
+            via: ctx?.meta?.via,
+            stack: !!ctx?.meta?.stack,
+          });
+        } catch {}
+      }
       try {
         const storageKey = persistMap[key];
       if (storageKey) {

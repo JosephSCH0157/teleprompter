@@ -2,6 +2,7 @@ import { initScrollModeRouter, type ScrollMode, type SessionState } from './scro
 import { getAutoScrollApi } from './scroll/auto-adapter';
 import { stepEngine } from './scroll/step-engine';
 import { appStore } from '../state/app-store';
+import { recordWindowSetterCall, withScrollModeWriter } from '../scroll/audit';
 function bindAutoControls() {
   // Intentionally left empty; auto controls are owned by autoscroll.ts bindings.
 }
@@ -41,7 +42,15 @@ function bindRouterControls() {
       session: sessionSource,
       scrollMode: scrollModeSource,
     });
-    (window as any).__tpScrollMode = { setMode: (m: ScrollMode) => appStore.set?.('scrollMode', m), getMode: () => appStore.get?.('scrollMode') };
+    (window as any).__tpScrollMode = {
+      setMode: (m: ScrollMode) => {
+        recordWindowSetterCall('window.__tpScrollMode.setMode', { mode: m }, true);
+        withScrollModeWriter('window/setScrollMode', () => {
+          try { appStore.set?.('scrollMode', m); } catch {}
+        }, { source: 'window', stack: true });
+      },
+      getMode: () => appStore.get?.('scrollMode'),
+    };
   } catch {}
 }
 
