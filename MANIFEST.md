@@ -1,203 +1,207 @@
+# Anvil Manifest (SSOT Map)
+
+This is the canonical manifest for Anvil's runtime architecture.
+Purpose: **one map, one truth** -- where state lives, who owns it, and which modules are allowed to publish globals.
+
+If a behavior is confusing, start here before editing code.
+
 ---
-build: anvil-1.8
-commit: main
-date: 2026-01-21
+
+## 0) Golden Rules
+
+1. **SSOT beats convenience.** "UI mode" and "engine mode" are not the same thing.
+2. **One owner per truth.** If two modules can "own" the same state, we will eventually get split-brain.
+3. **Globals are views.** `window.*` exports are allowed only as thin wrappers around SSOT.
+4. **Dialects must translate.** Any subsystem with its own mode vocabulary must map into canonical types.
+
 ---
 
-# ANVIL Manifest
+## 1) Canonical SSOT Definitions
 
-**Entry points**
-- App shell: `teleprompter_pro.html`
-- Main bundle: `dist/index.js` (from `src/index.ts`)
-- Styles: `teleprompter_pro.css`
-- Display shell: `display.html` (mirror-only; no TS bundle)
-- Recorder bridge (compat): `recorders.js` (from TS build:compat)
-- ASR hook bundle: `dist/index-hooks/asr.js`
-- Forge login: `login.html` + `dist/forge/login.js`
-- Forge account: `account.html` + `dist/forge/account.js`
-- Forge config injector: `forge-config.js`
+### 1.1 EngineScrollMode (CANON)
 
-**Authoritative root layout (source of truth)**
-- This section is authoritative. Update here first and mirror README to match.
-- Source + build: `src/` is the main TypeScript source; `dist/` is built output.
-- Runtime / transitional modules at root: `asr/`, `speech/`, `hud/`, `settings/`, `controllers/`, `hotkeys/`, `wiring/`, `adapters/`, `boot/`, `legacy/`, `vendor/`.
-- Shared types (migration anchor): **types.ts** (`src/state/types.ts`) contains shared TypeScript types exported for use across legacy and new TS modules during the migration.
-- App entrypoints + static assets: HTML (`teleprompter_pro.html`, `display.html`, `index.html`), CSS (`teleprompter_pro.css`), plus `assets/` and `favicon2.png`.
-- Tooling / scripts: `tools/`, `scripts/`, `.husky/`, plus helper scripts (`dev-start.ps1`, `dev-stop.ps1`, `ps_static_server.ps1`, `start_server.bat`).
-- Tests / docs: `tests/`, `fixtures/`, `docs/`, plus `README.md`, `CHANGELOG.md`, `MANIFEST.md`.
-- Project config + generated listings: `package.json`, `tsconfig.json`, ESLint configs, `netlify.toml`, `.github/`, `.vscode/`, `.netlify/`, `node_modules/`, and generated trees (`filetree.txt`, `project_tree.txt`).
+These are the only real engine modes:
 
-**Where new code goes**
-- New features & logic -> `src/` (TypeScript only). If it is net-new or being actively evolved, it starts life here.
-- Bridges / shims only -> root runtime folders (e.g. `asr/`, `speech/`, `hud/`) only when adapting legacy code to TS or wiring into `src/`. No greenfield logic outside `src/`.
+- `timed`
+- `wpm`
+- `hybrid`
+- `asr`
+- `step`
+- `rehearsal`
 
-**Migration legend**
-- TS-native (target state): `src/`, `dist/`, `src/state/types.ts`
-- Transitional (runtime-critical, migrating or wrapping legacy behavior): `asr/`, `speech/`, `hud/`, `settings/`, `controllers/`, `hotkeys/`, `wiring/`, `adapters/`, `boot/`
-- Legacy / frozen (no new logic): `legacy/`, `vendor/`
+Everything else (`auto`, `off`, `manual`) is a UI/legacy convenience state, not an engine mode.
 
-**AI & API Usage Principles**
-Purpose:
-Podcaster's Forge uses AI selectively and transparently. AI exists to assist, not to obscure, automate without consent, or create hidden cost exposure for users.
+### 1.2 Runtime SSOT Owner
 
-Core principles:
-1) No hidden AI usage
-- AI is never invoked implicitly.
-- Any action that uses an external API is clearly labeled before execution and clear about what is being sent and why.
-- If an operation does not require AI, it must not use AI.
+- **Owner:** `appStore`
+- **Canonical key:** `scrollMode`
+- **Type:** `EngineScrollMode`
 
-2) Bring Your Own API Key (BYOK)
-- Forge supports BYOK. When BYOK is enabled:
-  - Forge does not proxy, hide, or re-package provider usage.
-  - API limits, billing, quotas, and exhaustion are controlled by the provider.
-  - Forge does not block usage for credit reasons.
-  - If the API refuses a request, the refusal comes from the provider, not Forge.
-- Design intent: avoid artificial throttling, surprise limits, and hidden metering.
+Read:
+- `appStore.get('scrollMode')`
 
-3) Forge-managed API (where applicable)
-- Usage is explicitly marked.
-- Scope is clearly defined.
-- Behavior is deterministic and limited to the documented feature.
-- Forge must not silently expand API usage beyond the documented scope.
+Write:
+- `appStore.set('scrollMode', nextMode)`
 
-4) API failure behavior
-If an API request fails due to exhausted credits/quota, invalid key, provider outage, or permission/policy refusal, Forge will:
-- Surface the provider's failure clearly (verbatim where possible).
-- Explain what happened in plain language.
-- Link to documentation for resolving the issue.
-- Forge will not present failures as "you are out of credits" unless Forge itself is enforcing a limit (avoided by design where possible).
+---
 
-5) Help & documentation
-Forge includes a dedicated help section that explains:
-- Which tools use AI.
-- Which actions invoke API calls.
-- Where users can obtain API keys.
-- How to enter and rotate keys.
-- Where to find provider billing and usage dashboards.
-For all billing or quota questions, users are directed to the API provider, not Forge.
+## 2) Folder Map and Responsibilities
 
-6) Tool-level AI usage transparency
-Each Forge tool must declare:
-- Whether it uses AI.
-- Which features use AI.
-- Whether AI usage is optional.
-- Whether BYOK is supported.
+### `src/state/`
+**App-wide SSOT state and persistence.**
+- `src/state/app-store.ts`
+  - defines storage keys for scroll prefs (timed speed, WPM target, hybrid attack/release/idle, step px, rehearsal prefs)
+  - performs migration/normalization of stored modes
+- `src/state/session.ts`
+  - session-phase & ASR readiness/arming flags used to gate runtime behavior
 
-Example declarations:
-- Anvil: AI optional; ASR may use AI depending on mode.
-- Hammer: AI used for transcription, segmentation, optional content generation.
-- Hearth: AI required for script generation.
-- Quench: AI optional for metadata and thumbnails.
-No tool may use AI without declaring it here.
+**Rule:** state belongs here; other folders read/write via appStore only.
 
-7) Trust & ethics
-Forge prioritizes user trust over monetization tricks, transparency over convenience, and explicit consent over automation.
-Users should never feel tricked, surprised by billing, coerced into AI usage, or confused about where costs originate.
-If a user must choose between a blocked request from an API provider or a silent restriction imposed by Forge, Forge chooses provider transparency.
+---
 
-Non-goals:
-- Forge is not an AI credit marketplace.
-- Forge does not resell AI usage in opaque bundles.
-- Forge does not meter AI usage secretly.
-- Forge does not optimize revenue by obscuring cost sources.
+### `src/scroll/`
+**Scroll engines and the engine routing layer.**
+- `src/scroll/scroll-brain.ts`
+  - canonical engine-mode union (currently the best "truth" location for mode vocabulary)
+  - coordination logic for hybrid/timed/asr behavior (PLL/catchup, silence gating, etc.)
+- `src/scroll/mode-router.ts`
+  - maps engineMode -> which engines enable/disable
+- `src/scroll/asr-mode.ts`, `src/scroll/asr-bridge.ts`
+  - ASR-driven scrolling engine + event bridge (`tp:asr:*`)
+- `src/scroll/wpm.ts`, `src/scroll/wpmSpeed.ts`, `src/scroll/wpm-bridge.ts`
+  - WPM -> px/sec conversion and sidebar plumbing (`tp:wpm:change`)
+- `src/scroll/step-scroll.ts`
+  - discrete step scrolling; respects rehearsal clamp
+- `src/scroll/rehearsal.ts`
+  - clamp/guard behavior for rehearsal mode
+- `src/scroll/scroll-control.ts`
+  - core tick/RAF controller for continuous movement
 
-Status:
-- This policy is active.
-- Applies to all current and future Forge tools.
-- Enforced at the MANIFEST and implementation level.
+**Rule:** This folder controls engines. It should not invent new mode unions outside canon.
 
-Implementation requirement (optional but useful):
-Any AI/API-triggering UI control must show an "AI" badge and a one-line "will call provider X" disclosure. Provider name must be visible (OpenAI, Anthropic, etc.) and must match the configured key/provider.
+---
 
-**Pricing & Subscription Model**
-Purpose:
-Podcaster's Forge pricing is designed to be affordable for independent creators, sustainable for long-term development, transparent and non-manipulative, and aligned with real value delivered. Pricing must never rely on dark patterns, surprise billing, or artificial friction.
+### `src/features/scroll/`
+**UI-to-engine glue layer (mode chips, router helpers, UI state).**
+- `src/features/scroll/mode-router.ts`
+  - currently defines a broader dialect including `auto` and `off`
+- `src/features/scroll/mode-chip.ts`
+  - UI control surface for selecting mode
 
-Core pricing principles:
-1) Trust first
-- No user should ever feel tricked, rushed, or gamed.
-- Pricing is explicit, predictable, and clearly explained.
-- Trial behavior is disclosed before billing begins.
-- Email reminders are sent before any trial converts to paid.
-- Design rule: if a user leaves because they understood the pricing, that is acceptable. If a user stays because they were confused, that is not.
+**Rule:** Allowed to speak UI dialect, but must translate to canonical engine modes before touching SSOT.
 
-2) Free trials
-- Tools may offer a time-limited free trial (e.g., 15 days).
-- Trials clearly explain what is included, what is not included, and when billing begins.
-- Users are notified via email before trial expiration.
-- Free trials exist for evaluation, not lock-in.
+---
 
-3) Modular tool pricing
-- Forge tools are priced individually, allowing users to adopt only what they need.
-- Current pricing targets (subject to adjustment prior to release):
-  - Anvil: $15/month
-  - Hammer: $15/month
-  - Hearth: $15/month
-  - Quench: $10/month
-- Included at no additional cost: Calendar, Bar Stock, Tongs (storage and coordination layer).
-- This modular approach avoids bloated all-or-nothing plans, respects different creator workflows, and allows Forge to grow without forcing upgrades.
+### `src/ui/`
+**UI rendering and user interactions.**
+- `src/ui/scrollMode.ts`
+  - UI-level ScrollMode union currently missing `auto/off`
+- `src/ui/dom.ts`
+  - UI utilities and (currently) some `getScrollMode` hooks
 
-4) Full Forge bundle
-- When all tools are combined, the effective total is approximately $55/month for the complete Forge.
-- Bundling exists for convenience, not coercion.
-- Users are never penalized for choosing individual tools.
-- Individual subscriptions remain first-class options.
+**Rule:** UI should not own SSOT. It asks SSOT what is true.
 
-5) Existing subscriber benefits
-- Users subscribed to a Forge tool receive a new free trial for each newly released tool.
-- The trial for a new tool begins only when the user activates it.
-- No automatic opt-in to paid plans for newly released tools.
-- Existing users are rewarded for trust and longevity, not punished for inertia.
+---
 
-6) No usage-based pricing
-- Forge does not meter usage by minutes, edits, exports, AI credits, or artificial caps.
-- Where AI usage exists, API behavior is governed by BYOK (preferred) or clearly documented Forge-managed limits.
-- Forge pricing is based on tool access, not hidden consumption.
+### `src/hud/`
+**HUD / indicators and display widgets.**
+- `src/hud/scroll-strip.ts`
+  - ScrollMode union used for display strip
 
-7) Annual plans
-- Annual plans may be offered at a discount (e.g., about 2 months free).
-- Annual billing exists to reward commitment and reduce monthly overhead for users.
-- Annual plans are always optional.
+**Rule:** HUD reads state; it should not define "truth unions" that drift.
 
-Non-goals:
-- Forge is not priced to compete feature-for-feature with incumbents.
-- Forge does not chase enterprise pricing models.
-- Forge does not optimize revenue via confusion or friction.
-- Forge does not bundle AI costs invisibly into subscriptions.
+---
 
-Status:
-- Pricing model is conceptually locked.
-- Final dollar amounts may be adjusted prior to public launch.
-- These principles are not subject to change.
+### `src/settings/`
+**UI prefs not strictly "engine state."**
+- `src/settings/uiPrefs.ts`
+  - UI preference schema (ex: `hybridGate`)
 
-Optional enforcement note:
-Any pricing-related UI must pass a plain-English test: a first-time creator should be able to explain Forge pricing accurately after reading it once.
+---
 
-Trust contract:
-See `docs/Trust-Contract.md` for the user-facing trust contract that mirrors these principles.
+### `src/speech/`
+**Speech subsystems (ASR loader, speech hooks).**
+- (varies)
+- `src/features/speech-loader.ts`
+  - tracks last scroll mode as observed and may react to mode changes
 
-**Runtime modules (TS source of truth)**
-- HUD: `src/hud/*` (loader/controller/toggle)
-- Rendering + ingest: `src/render-script.ts`, `src/features/script-ingest.ts`
-- Display sync: `src/features/display-sync.ts`
-- Scroll brain/router: `src/scroll/*`
-- Recorder registry/backends: `src/recording/*`
-- Forge auth/profile: `src/forge/*`
-- Easter eggs (TS): `src/ui/eggs.ts`
+---
 
-**Legacy kept for compatibility (quarantined)**
-- Legacy HUD/debug and ASR stub: `legacy/debug-tools.legacy.js`, `legacy/debug-seed.legacy.js`, `legacy/asr-bridge-speech.legacy.js`
-- Legacy eggs: `legacy/eggs.legacy.js`
-- Archived pre-TS scroll/rehearsal helpers: `legacy/features/*.js`, `legacy/scroll/scroll-brain.js`
-- Other JS stubs still shipped for back-compat: `obs.js`, `hotkey.js`, `bridge.js`, `events.js`, `help.js`, `ui-sanitize.js`, `asr-types.js`
-- Generated logic helpers: `src/build-logic/*.js` (output of `npm run build:logic`)
+### `src/profile/`
+**User profile schema and persistence for cross-device settings.**
+- `src/profile/profile-schema.ts`
+  - profile scroll mode dialect: `timed | wpm | asr | hybrid | off`
 
-**Generated modules**
-- `src/build-logic/**` — compiled from `src/logic/**` via `npm run build:logic` (do not edit)
+**Rule:** profile is a dialect; must map into canonical engine modes.
 
-**Notes**
-- `ui-sanitize.js` is intentionally commented out in `teleprompter_pro.html`.
-- Display window no longer loads the main TS bundle; it hydrates via `tp_display` snapshots.
-- Forge config is injected via `forge-config.js` (sets `window.__forgeSupabaseUrl/__forgeSupabaseAnonKey`).
-- Dev/QA: HUD/diagnostics temporarily disabled (no `#hud-root`; HUD boot gated; hudLog is console-only) while HUD v2 is redesigned.
-- Settings invariants: single overlay (`#settingsBody`), `mountSettings` rebuilds + wires once, `wireSettingsDynamic` guarded by `data-tpSettingsWired`, every card stores a `data-wired` flag, mic/cam selects use the helpers added in `src/ui/settings/wire.ts`, closing Settings is purely visual, and `npm run gate` (which rewrites `tools/ui_crawl_report.json`) must pass before landing.
+---
+
+### `src/index-app.ts`
+**Primary runtime assembly + global bindings.**
+- Defines `UiScrollMode`
+- exports globals:
+  - `window.setScrollMode(mode)`
+  - `window.getScrollMode()`
+  - `window.__tpUiScrollMode`
+  - `window.__tpScrollMode = { setMode, getMode }`
+
+**Rule:** This is the only approved publisher of the above window globals.
+
+---
+
+### `src/index-hooks/*`
+**Legacy hooks and compatibility shims.**
+- `asr.ts`, `asr-legacy.ts` (+ compiled js copy)
+  - contain their own `getScrollMode()` logic
+
+**Rule:** Hooks must not become owners of truth. They may query via published globals.
+
+---
+
+## 3) Canonical Mode Translation Table
+
+### UI dialect (`off | auto | timed | wpm | hybrid | asr | step | rehearsal`)
+-> Canon engineMode:
+
+- timed     -> timed
+- wpm       -> wpm
+- hybrid    -> hybrid
+- asr       -> asr
+- step      -> step
+- rehearsal -> rehearsal
+- auto      -> lastEngineMode (fallback hybrid) + enabled=true
+- off       -> keep engineMode + enabled=false
+
+### Profile dialect (`timed | wpm | asr | hybrid | off`)
+-> Canon engineMode:
+
+- timed  -> timed
+- wpm    -> wpm
+- asr    -> asr
+- hybrid -> hybrid
+- off    -> keep engineMode + enabled=false
+
+---
+
+## 4) Known Drift Risks (Current Reality)
+
+These modules define different ScrollMode unions today:
+
+- `src/scroll/scroll-brain.ts` (canon-like)
+- `src/features/scroll/mode-router.ts` (includes `auto/off`)
+- `src/ui/scrollMode.ts` (missing `auto/off`)
+- `src/hud/scroll-strip.ts` (UI display union)
+- `src/profile/profile-schema.ts` (profile dialect; missing step/rehearsal)
+
+**Policy:** SSOT doc wins. Code must converge toward a single canonical union + adapters.
+
+---
+
+## 5) Work Plan Pointer
+
+Primary modernization objective:
+- Centralize mode types + adapters into one module (SSOT)
+- Replace local unions with imported canonical types
+- Ensure only `index-app.ts` publishes scroll-related window globals
+
+See `scroll-mode-ssot.md` for detailed Phase 1A tasks.
