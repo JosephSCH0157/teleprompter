@@ -77,7 +77,17 @@ export function initHud(opts: HudLoaderOptions = { store: (window as any).__tpSt
   if (didInit && cachedHud) return cachedHud;
   const { store } = opts;
   const bus = opts.bus ?? createHudBus();
-  const root = opts.root ?? document.getElementById('hud-root') ?? document.body;
+  const hudRoot = document.getElementById('hud-root');
+  if (!hudRoot) {
+    try { console.warn('[HUD] root missing — HUD disabled'); } catch {}
+    return {
+      destroy() {
+        // no-op: HUD disabled
+      },
+      bus,
+    };
+  }
+  const root = opts.root ?? hudRoot;
 
   try {
     if ((window as any).__TP_DEV) console.debug('[HUD] initHud() called');

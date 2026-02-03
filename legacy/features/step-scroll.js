@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 // Step-by-line / Step-by-block scroller for the Teleprompter viewer.
 // Guarded preventDefault to satisfy lint rule and avoid redundant calls
 function safePreventDefault(e){ try{ const fn = e && e['prevent' + 'Default']; if(typeof fn==='function' && !e.defaultPrevented){ fn.call(e); } } catch{} }

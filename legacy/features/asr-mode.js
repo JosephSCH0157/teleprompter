@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 import { emit } from '../events';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';

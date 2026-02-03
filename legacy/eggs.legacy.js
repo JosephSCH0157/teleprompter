@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 // Easter eggs and related lightweight UX add-ons
 // This module is safe to import in the browser. It references globals defensively.
 

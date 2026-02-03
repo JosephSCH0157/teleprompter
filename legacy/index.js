@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 /* eslint-disable */
 // Legacy entrypoint — superseded by TypeScript under src/.
 // Kept for reference only; not used by current runtime.

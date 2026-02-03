@@ -23,6 +23,7 @@
   <link rel="canonical" href="https://example.com/teleprompter/" />
 
   <script>
+    // BOOTSTRAP ONLY
     try { window.APP_VERSION = '1.8.0'; window.__TP_TS_MODE = true; window.__TP_TS_OVERLAYS = true; } catch (err) { /* no-op */ }
     try { window.__TP_TS_OVERLAYS = true; } catch {}
   </script>
@@ -41,14 +42,18 @@
   <link rel="stylesheet" href="teleprompter_pro.css">
 
   <!-- Preload Mammoth so DOCX importer always sees window.mammoth -->
+  <!-- BOOTSTRAP ONLY -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
+  <!-- BOOTSTRAP ONLY -->
   <script src="/forge-config.js"></script>
 
   <!-- TS bundle preload + entry (single brain) -->
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
+  <!-- LEGACY COMPAT -->
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script>
+    // BOOTSTRAP ONLY
     (function(){
       try {
         var host = (location && location.hostname) ? location.hostname : '';
@@ -98,11 +103,13 @@
       }
     })();
   </script>
+  <!-- BOOTSTRAP ONLY -->
   <script id="tp-dist-entry" type="module"></script>
   <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
 <!-- Dev flag: add .tp-dev class early so CSS can key off it -->
   <script>
+    // DEV SAFETY (REMOVE AFTER REPAIR)
     (function(){
       try {
         var Q=new URLSearchParams(location.search);
@@ -118,6 +125,7 @@
 
   <!-- Safe requestScroll polyfill (kept) -->
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         if (!window.requestScroll) {
@@ -137,6 +145,7 @@
 
   <!-- Mammoth loader shim (legacy-safe): ensures window.ensureMammoth exists -->
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         if (!('ensureMammoth' in window)) {
@@ -169,6 +178,7 @@
   <!-- <script src="ui-sanitize.js"></script> -->
   <!-- Legacy guard: ensure no old app-store script runs (TS bundle owns __tpStore) -->
   <script>
+    // LEGACY COMPAT
     try {
       document.querySelectorAll('script[src*="state/app-store.js"]').forEach((s) => s.remove());
     } catch {}
@@ -386,6 +396,7 @@
     </button>
   </nav>
   <script>
+    // LEGACY COMPAT
     (function () {
       try {
         var btn = document.getElementById('ironMineTab');
@@ -440,6 +451,7 @@
     <option value="rehearsal">Rehearsal</option>
   </select>
   <script>
+    // DEV SAFETY (REMOVE AFTER REPAIR)
     (function(){
       try {
         var el = document.getElementById('scrollMode');
@@ -656,6 +668,7 @@
 <button id="uploadBtn" type="button" aria-label="Upload script">Upload</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden data-tp-script-upload-input>
 <script>
+  // LEGACY COMPAT
   (function () {
     const btn = document.getElementById('uploadBtn');
     const input = document.getElementById('uploadFile');
@@ -705,6 +718,7 @@
 </main>
 </div>
 <script>
+  // DEV SAFETY (REMOVE AFTER REPAIR)
   // Ensure the marker offset uses viewer scroll-padding so the first line sits on the marker after typography loads.
   (function(){
     function applyMarkerOffset(){
@@ -995,6 +1009,7 @@ Joe starts here.
   
   
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         // legacy display/camera wiring removed (TS bridges own these)
@@ -1015,6 +1030,7 @@ Joe starts here.
     </div>
   </div>
   <script>
+    // LEGACY COMPAT
     (function ensureUploadAlias() {
       function createUploadBtn() {
         const btn = document.createElement('button');
@@ -1041,6 +1057,7 @@ Joe starts here.
   </script>
   <span id="autoChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-auto"></span>
   <script>
+    // LEGACY COMPAT
     (function(){
       try{
         var openAlias = document.getElementById('openDisplayBtn');
@@ -1051,6 +1068,7 @@ Joe starts here.
     })();
   </script>
   <script>
+    // LEGACY COMPAT
     (function(){
       function markPasswordField(el){
         try {
@@ -1078,6 +1096,7 @@ Joe starts here.
   </script>
   <!-- legacy overlay binder removed; TS owns overlays -->
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         var el = document.getElementById('aboutVersion');
@@ -1095,6 +1114,7 @@ Joe starts here.
   <!-- HUD mount point (hidden until HUD enabled) -->
   <div id="hud-root" class="tp-hud-root" aria-hidden="true"></div>
   <script>
+    // LEGACY COMPAT
     (function ensureUploadButton() {
       const fileInput = document.getElementById('uploadFile');
       if (!fileInput) return;

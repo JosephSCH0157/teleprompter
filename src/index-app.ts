@@ -1760,6 +1760,22 @@ function __maybePopulateMockFolder() {
 // Unified TS boot function — consolidates prior scattered DOMContentLoaded wiring
 export async function boot() {
 		try {
+			try {
+				if ((window as any).__tpBooted) {
+					throw new Error('Anvil booted twice — aborting');
+				}
+				(window as any).__tpBooted = true;
+			} catch (err) {
+				throw err;
+			}
+
+			try {
+				console.assert(
+					document.querySelectorAll('script[src*="scroll"]').length === 0,
+					'Legacy scroll scripts detected',
+				);
+			} catch {}
+
 			// Count boot attempts (used by smoke to assert single boot)
 			try { (window as any).__tpBootsSeen = ((window as any).__tpBootsSeen || 0) + 1; } catch {}
 			// Single-owner guard: boot orchestration belongs to ts/index only
