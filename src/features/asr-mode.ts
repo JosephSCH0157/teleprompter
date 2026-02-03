@@ -314,6 +314,8 @@ export class AsrMode {
         this.markAdvance();
         const blockIdx = this.resolveBlockIdxFromLine(newIdx);
         if (blockIdx != null) {
+          // NOTE: ASR emits evidence only. Forward motion is authorized by the router.
+          // Block completion semantics are enforced centrally (see router TODO).
           emitScrollIntent({
             source: 'asr',
             kind: 'seek_block',

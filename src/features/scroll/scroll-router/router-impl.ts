@@ -2644,6 +2644,12 @@ function installScrollRouter(opts) {
   }
   if (!scrollIntentListenerWired) {
     scrollIntentListenerWired = true;
+    // TODO (ARCHITECTURE):
+    // Forward ASR block commits must be gated on *block completion*, not mere detection.
+    // “Completion” is a semantic invariant (e.g. last-line confirmation, coverage threshold,
+    // boundary crossing, or post-line silence), not a heuristic.
+    // Until this is implemented, first ASR commits may feel eager but remain truthful.
+    // Do NOT implement completion logic in ASR; router is the commit authority (SSOT).
     onScrollIntent((intent) => {
       try {
         if (!intent || intent.source !== 'asr') return;
