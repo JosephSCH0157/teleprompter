@@ -76,6 +76,22 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="bigroom">Big Room</button>
           </div>
         </div>
+
+        <div class="settings-card anim-in" id="uiScaleCard">
+          <h4>UI Scale</h4>
+          <div class="settings-inline-row">
+            <label class="tp-field">
+              <span>Scale</span>
+              <input id="uiScaleRange" type="range" min="0.55" max="1.10" step="0.01" />
+            </label>
+            <label class="tp-field">
+              <span>Value</span>
+              <input id="uiScaleNumber" type="number" min="0.55" max="1.10" step="0.01" />
+            </label>
+            <span id="uiScaleValue" class="settings-small">0.67</span>
+          </div>
+          <div class="settings-small">Applies to UI chrome only. Script text stays on --tp-font-size.</div>
+        </div>
       </div>
       <div class="settings-small">Changes apply live to the selected display and are persisted.</div>
       </section>

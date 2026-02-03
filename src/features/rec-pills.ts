@@ -24,16 +24,16 @@ let displayWired = false;
 let bc: BroadcastChannel | null = null;
 const DISPLAY_STYLE_ID = 'rec-pill-display-style';
 const REC_PILL_BASE_CSS = `
-.rec-pill{display:none;align-items:center;justify-content:center;height:22px;padding:0 12px;border-radius:999px;font-size:0.82rem;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 500ms ease,transform 500ms ease,color 320ms ease,background-color 320ms ease;pointer-events:none;user-select:none}
+.rec-pill{display:none;align-items:center;justify-content:center;height:calc(22px * var(--tp-ui-scale));padding:0 calc(12px * var(--tp-ui-scale));border-radius:calc(999px * var(--tp-ui-scale));font-size:var(--tp-ui-font-sm);font-weight:600;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 500ms ease,transform 500ms ease,color 320ms ease,background-color 320ms ease;pointer-events:none;user-select:none}
 .rec-pill.is-visible{opacity:1;transform:scale(1)}
 .rec-pill.rec-pill--armed{background:#ffd54f;color:#1a1f27}
 .rec-pill.rec-pill--recording{background:#ef5350;color:#fff;animation:recPulse 2.5s ease-in-out infinite}
-.rec-pill--main{height:24px;padding:0 12px;font-size:0.84rem}
-.rec-pill--display{position:fixed;top:10px;right:14px;height:18px;padding:0 10px;font-size:0.7rem;z-index:1200;opacity:0.75}
+.rec-pill--main{height:calc(24px * var(--tp-ui-scale));padding:0 calc(12px * var(--tp-ui-scale));font-size:var(--tp-ui-font-sm)}
+.rec-pill--display{position:fixed;top:calc(10px * var(--tp-ui-scale));right:calc(14px * var(--tp-ui-scale));height:calc(18px * var(--tp-ui-scale));padding:0 calc(10px * var(--tp-ui-scale));font-size:var(--tp-ui-font-xs);z-index:1200;opacity:0.75}
 .rec-pill--display.is-visible{opacity:0.75}
 .rec-pill--display.rec-pill--recording.is-visible{opacity:0.85}
 .rec-pill--display.rec-pill--recording{opacity:0.85}
-.rec-pill-host{display:inline-flex;align-items:center;margin-left:10px;margin-right:8px}
+.rec-pill-host{display:inline-flex;align-items:center;margin-left:calc(10px * var(--tp-ui-scale));margin-right:calc(8px * var(--tp-ui-scale))}
 .rec-pill-live{min-width:1px;min-height:1px}
 @keyframes recPulse{0%{transform:scale(1);opacity:1}50%{transform:scale(1.03);opacity:.95}100%{transform:scale(1);opacity:1}}
 `;

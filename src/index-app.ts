@@ -68,6 +68,7 @@ import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
 import { initObsToggle } from './ui/obs-toggle';
 import { installAutoMaxCh } from './ui/autoMaxCh';
+import { initUiScale } from './ui/ui-scale';
 import { wireRecordButtons } from './ui/recordButtons';
 import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
@@ -1773,6 +1774,8 @@ export async function boot() {
 			(window as any).__tpTsBooted = 1;
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
+
+			try { initUiScale(); } catch {}
 
 			const devFlag = !!((window as any).__TP_DEV || (window as any).__TP_DEV1);
 			if (devFlag) {

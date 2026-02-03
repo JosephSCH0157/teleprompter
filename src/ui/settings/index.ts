@@ -12,6 +12,7 @@ import {
 import { createAppStore, type AppStore } from '../../state/app-store';
 import { speechStore } from '../../state/speech-store';
 import { wireTypographyPresets } from './typography-presets';
+import { wireUiScaleControls } from '../ui-scale';
 
 function setSettingsHydrating(value: boolean) {
   try {
@@ -106,6 +107,7 @@ export function mountSettings(rootEl: HTMLElement | null, store?: AppStore | nul
     try { bindTypographyPanel('main'); } catch {}
     try { bindTypographyPanel('display'); } catch {}
     try { wireTypographyPresets(); } catch {}
+    try { wireUiScaleControls(rootEl); } catch {}
     // Add ASR wizard card under Media tab and initialize it
     try { addAsrWizardCard(rootEl); } catch {}
     try { initAsrSettingsUI(); } catch {}

@@ -77,13 +77,13 @@ function installModeChip(): void {
   wrap.setAttribute('data-role', 'scroll-mode-chip');
   wrap.style.display = 'inline-flex';
   wrap.style.alignItems = 'center';
-  wrap.style.gap = '0.25rem';
-  wrap.style.marginLeft = '0.75rem';
+  wrap.style.gap = 'calc(4px * var(--tp-ui-scale))';
+  wrap.style.marginLeft = 'calc(12px * var(--tp-ui-scale))';
 
   const label = document.createElement('span');
   label.textContent = 'Mode:';
   label.style.opacity = '0.8';
-  label.style.fontSize = '0.8rem';
+  label.style.fontSize = 'var(--tp-ui-font-sm)';
 
   const pill = document.createElement('span');
   pill.setAttribute('data-scroll-mode-label', '1');

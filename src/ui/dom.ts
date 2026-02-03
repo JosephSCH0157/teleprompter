@@ -611,7 +611,7 @@ function installDbMeter() {
       if (hostTop && !hostTop.dataset.wired) {
         hostTop.dataset.wired = '1';
         const barMini = document.createElement('div');
-        barMini.style.cssText = 'height:6px;border-radius:999px;overflow:hidden;background:rgba(255,255,255,.1);width:90px';
+        barMini.style.cssText = 'height:calc(6px * var(--tp-ui-scale));border-radius:999px;overflow:hidden;background:rgba(255,255,255,.1);width:calc(90px * var(--tp-ui-scale))';
         const fill = document.createElement('i');
         fill.style.cssText = 'display:block;height:100%;transform-origin:left center;transform:scaleX(0);background:linear-gradient(90deg,#4caf50,#ffc107 60%,#e53935)';
         barMini.appendChild(fill);
