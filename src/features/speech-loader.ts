@@ -821,7 +821,7 @@ function attachAsrScrollDriver(): void {
     const detail = (event as CustomEvent)?.detail || {};
     const detectedMode = typeof detail.mode === 'string' ? detail.mode.toLowerCase() : '';
     const effectiveMode = detectedMode || getScrollMode();
-    if (effectiveMode !== 'asr' && effectiveMode !== 'hybrid') return;
+    if (effectiveMode !== 'hybrid') return;
     const text = typeof detail.text === 'string' ? detail.text : '';
     if (!text) return;
     const isFinal = Boolean(detail.isFinal ?? detail.final);

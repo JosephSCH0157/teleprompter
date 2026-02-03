@@ -114,6 +114,16 @@ let autoIntentProcessor: ((detail: any) => void) | null = null;
 let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
 let scrollIntentListenerWired = false;
+const ASR_INTENT_DEBOUNCE_MS = 450;
+const ASR_INTENT_STABLE_MS = 250;
+const ASR_INTENT_FIRST_STABLE_MS = 600;
+const ASR_INTENT_WARMUP_MS = 1400;
+const ASR_INTENT_MIN_CONF = 0.5;
+let asrIntentLiveSince = 0;
+let committedBlockIdx = -1;
+let lastCommitAt = 0;
+let lastCandidate = -1;
+let stableSince = 0;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
@@ -132,6 +142,16 @@ const HYBRID_TRUTH_THROTTLE_MS = 350;
 let lastHybridTruthAt = 0;
 function setHybridSilence2(v: number) {
   hybridSilence2 = Number.isFinite(v) ? v : 0;
+}
+
+function resetAsrIntentState(reason?: string) {
+  committedBlockIdx = -1;
+  lastCommitAt = 0;
+  lastCandidate = -1;
+  stableSince = 0;
+  if (reason) {
+    try { console.debug('[ASR_INTENT] reset', { reason }); } catch {}
+  }
 }
 
 const profileStore = hasSupabaseConfig ? new ProfileStore(supabase) : null;
@@ -189,7 +209,29 @@ function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
   return candidate;
 }
 
+function resolveCurrentBlockIdx(): number | null {
+  try {
+    const anchorIdx = computeAnchorLineIndex(scrollerEl || undefined);
+    if (!Number.isFinite(anchorIdx as number)) return null;
+    const idx = Math.max(0, Math.floor(anchorIdx as number));
+    const selector = `.line[data-i="${idx}"], .line[data-index="${idx}"], .line[data-line="${idx}"], .line[data-line-idx="${idx}"]`;
+    const lineEl =
+      (document.getElementById(`tp-line-${idx}`) as HTMLElement | null) ||
+      (document.querySelector<HTMLElement>(selector) as HTMLElement | null);
+    const blockEl = lineEl?.closest?.('.tp-asr-block') as HTMLElement | null;
+    const raw = blockEl?.dataset?.tpBlock;
+    const blockIdx = Number(raw);
+    return Number.isFinite(blockIdx) ? blockIdx : null;
+  } catch {
+    return null;
+  }
+}
+
 function runHybridVelocity(silence = hybridSilence) {
+  if (state2.mode !== 'hybrid') {
+    assertHybridStoppedIfNotHybrid('runHybridVelocity');
+    return;
+  }
   const target = typeof window !== 'undefined' ? window : globalThis;
   const fn = (target as any).__tpApplyHybridVelocity;
   if (typeof fn === 'function') {
@@ -2255,6 +2297,25 @@ function holdCreepStop() {
 }
 var speaking = false;
 var gateTimer;
+function stopHybridMotor(reason?: string) {
+  const wasHybridRunning = hybridMotor.isRunning();
+  hybridMotor.stop();
+  cancelHybridVelocityRefresh();
+  hybridGraceUntil = 0;
+  hybridSilence.pausedBySilence = false;
+  hybridSilence.offScriptActive = false;
+  hybridSilence.lastSpeechAtMs = nowMs();
+  pauseAssistTailBoost = 0;
+  pauseAssistTailUntil = 0;
+  clearHybridSilenceTimer();
+  speechActive = false;
+  if (wasHybridRunning) {
+    emitMotorState("hybridWpm", false);
+    try {
+      if (reason) console.debug("[HYBRID] forced stop", { reason });
+    } catch {}
+  }
+}
 function stopAllMotors(reason: string) {
   try {
     if (reason) {
@@ -2269,20 +2330,22 @@ function stopAllMotors(reason: string) {
     enabledNow = false;
     emitMotorState("auto", false);
   }
-  const wasHybridRunning = hybridMotor.isRunning();
-  hybridMotor.stop();
-  cancelHybridVelocityRefresh();
-  hybridGraceUntil = 0;
-  hybridSilence.pausedBySilence = false;
-  hybridSilence.offScriptActive = false;
-  hybridSilence.lastSpeechAtMs = nowMs();
-  pauseAssistTailBoost = 0;
-  pauseAssistTailUntil = 0;
-  clearHybridSilenceTimer();
-  speechActive = false;
-  if (wasHybridRunning) {
-    emitMotorState("hybridWpm", false);
-  }
+  stopHybridMotor(reason);
+}
+function stopAllMotorsExcept(mode: string, reason: string) {
+  // For now, we stop all motors on mode change; motors re-arm based on mode.
+  stopAllMotors(reason);
+}
+function assertHybridStoppedIfNotHybrid(reason: string) {
+  if (state2.mode === 'hybrid') return;
+  if (!hybridMotor.isRunning()) return;
+  try {
+    console.error('[HYBRID_ASSERT] motor running outside hybrid mode', {
+      reason,
+      mode: state2.mode,
+    });
+  } catch {}
+  stopHybridMotor(`assert:${reason}`);
 }
 function setSpeaking(on, auto) {
   if (on === speaking) return;
@@ -2298,33 +2361,30 @@ function hybridHandleDb(db, auto) {
   else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
 function applyMode(m) {
-  const currentAutoEnabled = (() => {
-    try {
-      return !!opts.auto.getState?.().enabled;
-    } catch {
-      return false;
-    }
-  })();
   try {
     try { console.debug("[ScrollRouter] stopAllMotors", `mode switch to ${m}`); } catch {}
   } catch {}
-  if (currentAutoEnabled) {
-    try {
-      auto.setEnabled?.(false);
-      auto.stop?.();
-    } catch {}
-    enabledNow = false;
-    emitMotorState("auto", false);
-  }
-  const wasHybridRunning = hybridMotor.isRunning();
-  hybridMotor.stop();
-  if (wasHybridRunning) {
-    emitMotorState("hybridWpm", false);
-  }
+  stopAllMotorsExcept(m, `mode switch to ${m}`);
   if (m !== 'auto') {
     persistStoredAutoEnabled(false);
   }
   state2.mode = m;
+  if (m === 'asr') {
+    try { (window as any).__tpScrollWriteActive = false; } catch {}
+    resetAsrIntentState('mode-enter');
+    try {
+      const phase = String(appStore.get?.('session.phase') || '');
+      if (phase === 'live') {
+        asrIntentLiveSince = Date.now();
+      } else {
+        asrIntentLiveSince = 0;
+      }
+    } catch {}
+  } else {
+    asrIntentLiveSince = 0;
+    resetAsrIntentState('mode-exit');
+  }
+  assertHybridStoppedIfNotHybrid('mode-change');
   persistMode();
   viewer = document.getElementById("viewer");
   refreshHybridWriter();
@@ -2582,13 +2642,6 @@ function installScrollRouter(opts) {
   } catch {
     // ignore
   }
-  const ASR_INTENT_DEBOUNCE_MS = 450;
-  const ASR_INTENT_STABLE_MS = 250;
-  const ASR_INTENT_MIN_CONF = 0.5;
-  let committedBlockIdx = -1;
-  let lastCommitAt = 0;
-  let lastCandidate = -1;
-  let stableSince = 0;
   if (!scrollIntentListenerWired) {
     scrollIntentListenerWired = true;
     onScrollIntent((intent) => {
@@ -2598,20 +2651,38 @@ function installScrollRouter(opts) {
         if (state2.mode !== 'asr') return;
         if (sessionPhase !== 'live') return;
 
-        const blockIdx = Number(intent?.target?.blockIdx);
-        if (!Number.isFinite(blockIdx) || blockIdx < 0) return;
-        if (blockIdx <= committedBlockIdx) return;
-
         const now = Date.now();
+        if (committedBlockIdx < 0) {
+          const seed = resolveCurrentBlockIdx();
+          if (seed != null) {
+            committedBlockIdx = seed;
+          }
+        }
+        if (asrIntentLiveSince && now - asrIntentLiveSince < ASR_INTENT_WARMUP_MS) return;
+        const rawBlockIdx = Number(intent?.target?.blockIdx);
+        if (!Number.isFinite(rawBlockIdx) || rawBlockIdx < 0) return;
+        const blockIdx = Math.min(rawBlockIdx, committedBlockIdx + 1);
+        if (blockIdx <= committedBlockIdx) return;
         if (now - lastCommitAt < ASR_INTENT_DEBOUNCE_MS) return;
         if (Number.isFinite(intent.confidence) && intent.confidence < ASR_INTENT_MIN_CONF) return;
 
+        const reason = typeof intent.reason === 'string' ? intent.reason : '';
+        const isFinal = reason.includes('final');
+        const isInterim = reason.includes('interim') && !isFinal;
+        if (isInterim) {
+          if (blockIdx !== lastCandidate) {
+            lastCandidate = blockIdx;
+            stableSince = now;
+          }
+          return;
+        }
         if (blockIdx !== lastCandidate) {
           lastCandidate = blockIdx;
           stableSince = now;
           return;
         }
-        if (now - stableSince < ASR_INTENT_STABLE_MS) return;
+        const requiredStable = committedBlockIdx < 0 ? ASR_INTENT_FIRST_STABLE_MS : ASR_INTENT_STABLE_MS;
+        if (now - stableSince < requiredStable) return;
 
         seekToBlock(blockIdx, 'asr_commit');
         committedBlockIdx = blockIdx;
@@ -2989,6 +3060,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     ts?: number,
     opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
   ) {
+    if (state2.mode !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(ts, perfNow);
     if (typeof opts?.noMatch === "boolean") {
@@ -3024,7 +3096,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (wasPausedBySilence) {
       emitHybridSafety();
     }
-      if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+      if (!hybridWantedRunning) return;
     ensureHybridMotorRunningForSpeech();
     armHybridSilenceTimer();
     try { applyGate(); } catch {}
@@ -3080,6 +3152,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
   }
   function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
+    if (state2.mode !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(detail.timestamp, perfNow);
     const isNoMatch = detail.noMatch === true;
@@ -4183,6 +4256,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
   function applyGate() {
     try {
     if (state2.mode !== "hybrid") {
+      assertHybridStoppedIfNotHybrid('applyGate');
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
@@ -4479,11 +4553,18 @@ function applyHybridVelocityCore(silence = hybridSilence) {
           const prevPhase = sessionPhase;
           sessionPhase = String(phase || "idle");
           hybridSessionPhase = sessionPhase;
+        if (sessionPhase === "live" && state2.mode === "asr") {
+          asrIntentLiveSince = Date.now();
+          resetAsrIntentState("session-live");
+          try { (window as any).__tpScrollWriteActive = false; } catch {}
+        }
         if (sessionPhase !== "live") {
           stopAllMotors("phase change");
           liveSessionWpmLocked = false;
           wpmSliderUserTouched = false;
           userWpmLocked = false;
+          asrIntentLiveSince = 0;
+          resetAsrIntentState("session-exit");
         } else if (prevPhase !== "live") {
           liveSessionWpmLocked = true;
           syncSliderWpmBeforeLiveStart();

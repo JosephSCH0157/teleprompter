@@ -308,6 +308,7 @@ const guardLastAt = new Map<string, number>();
 const logLastAt = new Map<string, number>();
 const guardStatusLastAt = new Map<string, number>();
 let activeGuardCounts: Map<string, number> | null = null;
+const guardEvents: Array<{ ts: number; reason: string }> = [];
 const LOG_THROTTLE_MS = 500;
 const HUD_STATUS_THROTTLE_MS = 500;
 const HUD_PURSUE_THROTTLE_MS = 200;
@@ -326,6 +327,14 @@ function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: str
 }
 
 function warnGuard(reason: string, parts: Array<string | number | null | undefined>) {
+  const now = Date.now();
+  try {
+    guardEvents.push({ ts: now, reason });
+    const cutoff = now - DEFAULT_STALL_COMMIT_MS;
+    while (guardEvents.length && guardEvents[0].ts < cutoff) guardEvents.shift();
+  } catch {
+    // ignore
+  }
   try {
     if (activeGuardCounts) {
       activeGuardCounts.set(reason, (activeGuardCounts.get(reason) || 0) + 1);
@@ -333,7 +342,6 @@ function warnGuard(reason: string, parts: Array<string | number | null | undefin
   } catch {
     // ignore
   }
-  const now = Date.now();
   const last = guardLastAt.get(reason) ?? 0;
   if (now - last < GUARD_THROTTLE_MS) return;
   guardLastAt.set(reason, now);
@@ -736,6 +744,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let summaryEmitted = false;
   let lastStallLogAt = 0;
   let lastForwardCommitAt = Date.now();
+  let stallRescueRequested = false;
+  let stallHudEmitted = false;
   let disposed = false;
   let desyncWarned = false;
   let lowSimStreak = 0;
@@ -1457,12 +1467,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const resetHandler = () => {
     clearEvidenceBuffer('script-reset');
   };
+  const rescueHandler = () => {
+    stallRescueRequested = true;
+  };
 
   try { window.addEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
   try { window.addEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
+  try { window.addEventListener('tp:asr:rescue', rescueHandler as EventListener); } catch {}
+  try { (window as any).__tpAsrRequestRescue = rescueHandler; } catch {}
 
   const summarizeGuardCounts = (limit = Number.POSITIVE_INFINITY) => {
     const entries = Array.from(guardCounts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+    return entries.slice(0, limit);
+  };
+  const summarizeRecentGuardCounts = (limit = Number.POSITIVE_INFINITY) => {
+    const now = Date.now();
+    const cutoff = now - DEFAULT_STALL_COMMIT_MS;
+    const counts = new Map<string, number>();
+    for (let i = guardEvents.length - 1; i >= 0; i -= 1) {
+      const entry = guardEvents[i];
+      if (entry.ts < cutoff) break;
+      counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
+    }
+    const entries = Array.from(counts.entries())
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count);
     return entries.slice(0, limit);
@@ -1481,6 +1510,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     commitCount += 1;
+    stallHudEmitted = false;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
       firstCommitIndex = Math.max(0, Math.floor(prevIndex));
     }
@@ -1556,7 +1586,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const summarizeGuardText = () => {
-    const top = summarizeGuardCounts(4);
+    const top = summarizeRecentGuardCounts(4);
     if (!top.length) return 'none';
     return top.map((entry) => `${entry.reason}:${entry.count}`).join(', ');
   };
@@ -1574,6 +1604,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         reasonSummary,
       });
     } catch {}
+    if (!stallHudEmitted) {
+      emitHudStatus('stall', `Stalled: ${reasonSummary}`, {
+        sinceMs: Math.round(now - lastCommitAt),
+        reasonSummary,
+      });
+      stallHudEmitted = true;
+    }
   };
 
   const resetLowSimStreak = () => {
@@ -2517,17 +2554,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     maybeBumpForStall(now);
     if (now - lastForwardCommitAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS && now - lastStuckDumpAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS) {
       lastStuckDumpAt = now;
-      clearEvidenceBuffer('stuck');
-      const anchorForStuck =
-        lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
-      activateStuckResync(anchorForStuck, now);
-      emitHudStatus('resync', 'Resyncing...');
-      dumpRecentEvents('stuck');
-      logThrottled('ASR_GUARD:stuck', 'warn', 'ASR_GUARD', {
-        reason: 'stuck',
-        lastLineIndex,
-        lastForwardCommitAt,
-      });
+      if (stallRescueRequested) {
+        stallRescueRequested = false;
+        clearEvidenceBuffer('stuck');
+        const anchorForStuck =
+          lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
+        activateStuckResync(anchorForStuck, now);
+        emitHudStatus('resync', 'Resyncing...');
+        dumpRecentEvents('stuck');
+        logThrottled('ASR_GUARD:stuck', 'warn', 'ASR_GUARD', {
+          reason: 'stuck',
+          lastLineIndex,
+          lastForwardCommitAt,
+        });
+      }
     }
 
     const anchorIdx = matchAnchorIdx >= 0
@@ -3664,6 +3704,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     try { window.removeEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
     try { window.removeEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
+    try { window.removeEventListener('tp:asr:rescue', rescueHandler as EventListener); } catch {}
     detachManualScrollWatcher();
     manualAnchorPending = null;
     updateManualAnchorGlobalState();
@@ -3681,6 +3722,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastIngestAt = 0;
     lastCommitAt = Date.now();
     lastStallLogAt = 0;
+    stallHudEmitted = false;
+    stallRescueRequested = false;
     matchAnchorIdx = lastLineIndex;
     pursuitTargetTop = null;
     pursuitVel = 0;

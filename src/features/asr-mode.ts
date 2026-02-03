@@ -320,7 +320,7 @@ export class AsrMode {
             target: { blockIdx },
             confidence: bestScore,
             ts: Date.now(),
-            reason: 'asr_match',
+            reason: isFinal ? 'asr_match_final' : 'asr_match_interim',
           });
         }
         this.dispatch('asr:advance', { index: newIdx, score: bestScore, lead: leadLines });
