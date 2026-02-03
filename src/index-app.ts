@@ -69,6 +69,7 @@ import { bindObsStatusPills } from './ui/obs-status-bind';
 import { initObsToggle } from './ui/obs-toggle';
 import { installAutoMaxCh } from './ui/autoMaxCh';
 import { initUiScale } from './ui/ui-scale';
+import { DEFAULT_SCRIPT_FONT_PX } from './ui/typography-ssot';
 import { wireRecordButtons } from './ui/recordButtons';
 import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
@@ -2104,7 +2105,7 @@ try {
 							try {
 								const root = document.documentElement;
 								const cs = getComputedStyle(root);
-								const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+								const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX;
 								const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
 								const pxPerLine = fs * lh;
 								const stepPx = Math.round(pxPerLine * 7);

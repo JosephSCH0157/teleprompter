@@ -5,6 +5,7 @@
 import { computeAnchorLineIndex } from '../../scroll/scroll-helpers';
 import { getScrollWriter } from '../../scroll/scroll-writer';
 import { getFallbackScroller, getPrimaryScroller, isWindowScroller } from '../../scroll/scroller';
+import { DEFAULT_SCRIPT_FONT_PX } from '../../ui/typography-ssot';
 
 export interface StepScrollConfig {
   stepLines?: number;
@@ -231,7 +232,7 @@ function getPxPerLine(): number {
     readComputedFontSize(viewer) ||
     readComputedFontSize(root);
 
-  if (!fontSize || fontSize <= 0) fontSize = 56;
+  if (!fontSize || fontSize <= 0) fontSize = DEFAULT_SCRIPT_FONT_PX;
 
   let lineHeightMult =
     readPxValue(rootStyle?.getPropertyValue('--tp-line-height')) || null;

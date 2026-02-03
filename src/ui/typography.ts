@@ -7,10 +7,12 @@
 // - Handles Shift + Wheel over viewer/wrap for local zoom
 // - Bridges Settings via window.applyTypography for legacy callers
 
+import { DEFAULT_SCRIPT_FONT_PX } from './typography-ssot';
+
 const STORAGE_KEY = 'tp_typography_v1';
 const MIN_SIZE = 18;
 const MAX_SIZE = 120;
-const DEFAULT_SIZE = 40;
+const DEFAULT_SIZE = DEFAULT_SCRIPT_FONT_PX;
 const DEFAULT_LINE_HEIGHT = 1.4;
 
 // main vs display window

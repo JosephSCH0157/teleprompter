@@ -15,6 +15,7 @@ import { supabase, hasSupabaseConfig } from '../../../forge/supabaseClient';
 import { hasActiveAsrProfile } from '../../../asr/store';
 import { focusSidebarCalibrationSelect } from '../../../media/calibration-sidebar';
 import { showToast } from '../../../ui/toasts';
+import { DEFAULT_SCRIPT_FONT_PX } from '../../../ui/typography-ssot';
 
 const isDevMode = (() => {
   let cache: boolean | null = null;
@@ -1247,7 +1248,7 @@ function convertWpmToPxPerSec(targetWpm: number) {
   try {
     const doc = document.documentElement;
     const cs = getComputedStyle(doc);
-    const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+    const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || DEFAULT_SCRIPT_FONT_PX;
     const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
     const lineHeightPx = fsPx * lhScale;
     const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
@@ -1294,14 +1295,14 @@ function createPaceEngine() {
   function mapWpmToPxPerSec(wpm, doc) {
     try {
       const cs = getComputedStyle(doc.documentElement);
-      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || DEFAULT_SCRIPT_FONT_PX;
       const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
       const lineHeightPx = fsPx * lhScale;
       const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
       const linesPerSec = wpm / 60 / wpl;
       return linesPerSec * lineHeightPx;
     } catch {
-      return wpm / 60 / 8 * (56 * 1.4);
+      return wpm / 60 / 8 * (DEFAULT_SCRIPT_FONT_PX * 1.4);
     }
   }
   function setMode(m) {
