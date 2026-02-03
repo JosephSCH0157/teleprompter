@@ -1586,7 +1586,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const summarizeGuardText = () => {
-    const top = summarizeRecentGuardCounts(4);
+    const top = summarizeRecentGuardCounts(3);
     if (!top.length) return 'none';
     return top.map((entry) => `${entry.reason}:${entry.count}`).join(', ');
   };
@@ -1605,7 +1605,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     } catch {}
     if (!stallHudEmitted) {
-      emitHudStatus('stall', `Stalled: ${reasonSummary}`, {
+      emitHudStatus('stall', `ASR stalled • ${reasonSummary}`, {
+        key: 'stall',
         sinceMs: Math.round(now - lastCommitAt),
         reasonSummary,
       });
