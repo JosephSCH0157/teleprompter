@@ -1,6 +1,9 @@
 // Central scroll writer shim.
 // All code that moves the main script viewport should route through this helper.
 
+import { getAsrBlockElements } from './asr-block-store';
+import { getViewerElement } from './scroller';
+
 export interface ScrollWriter {
   /** Absolute scroll in CSS px from top of script viewport. */
   scrollTo(top: number, opts?: { behavior?: ScrollBehavior }): void;
@@ -24,6 +27,56 @@ function withScrollWriteActive<T>(fn: () => T): T | undefined {
       (window as any).__tpScrollWriteActive = false;
     } catch {}
   }
+}
+
+function findScroller(el: HTMLElement): HTMLElement {
+  let node = el?.parentElement as HTMLElement | null;
+  while (node) {
+    try {
+      const st = getComputedStyle(node);
+      if (/(auto|scroll)/.test(st.overflowY || '')) return node;
+    } catch {
+      // ignore
+    }
+    node = node.parentElement as HTMLElement | null;
+  }
+  return (
+    (document.scrollingElement as HTMLElement | null) ||
+    (document.documentElement as HTMLElement | null) ||
+    (document.body as HTMLElement | null) ||
+    el
+  );
+}
+
+function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
+  try {
+    const isWin =
+      scroller === document.scrollingElement ||
+      scroller === document.documentElement ||
+      scroller === document.body;
+    if (isWin) {
+      const rect = el.getBoundingClientRect();
+      const scrollTop =
+        window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
+      return rect.top + scrollTop;
+    }
+    const rect = el.getBoundingClientRect();
+    const scRect = scroller.getBoundingClientRect();
+    return rect.top - scRect.top + scroller.scrollTop;
+  } catch {
+    return el.offsetTop || 0;
+  }
+}
+
+function markerOffsetPx(fallbackScroller: HTMLElement): number {
+  const markerPct =
+    typeof (window as any).__TP_MARKER_PCT === 'number'
+      ? (window as any).__TP_MARKER_PCT
+      : 0.4;
+  const viewer = getViewerElement();
+  const host = viewer || fallbackScroller;
+  const h = host?.clientHeight || window.innerHeight || 0;
+  return Math.max(0, Math.round(h * markerPct));
 }
 
 export function getScrollWriter(): ScrollWriter {
@@ -96,4 +149,27 @@ export function getScrollWriter(): ScrollWriter {
     ensureVisible() { /* no-op: writer missing */ },
   };
   return cached;
+}
+
+export function seekToBlock(blockIdx: number, reason: string) {
+  const blocks = getAsrBlockElements();
+  const el = blocks[blockIdx];
+  if (!el) return;
+
+  const scroller = findScroller(el);
+  const top = elementTopRelativeTo(el, scroller) - markerOffsetPx(scroller);
+
+  (window as any).__tpScrollWriteActive = true;
+  try {
+    scroller === document.scrollingElement || scroller === document.body
+      ? window.scrollTo({ top, behavior: 'auto' })
+      : (scroller as HTMLElement).scrollTo({ top, behavior: 'auto' });
+    try {
+      if (reason && typeof console !== 'undefined') {
+        (console as any).debug?.('[scroll-writer] seekToBlock', { blockIdx, reason });
+      }
+    } catch {}
+  } finally {
+    (window as any).__tpScrollWriteActive = false;
+  }
 }

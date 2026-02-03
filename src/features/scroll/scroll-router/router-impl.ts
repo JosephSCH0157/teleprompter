@@ -1,7 +1,8 @@
 // @ts-nocheck
 export {};
 
-import { getScrollWriter } from '../../../scroll/scroll-writer';
+import { getScrollWriter, seekToBlock } from '../../../scroll/scroll-writer';
+import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
@@ -112,6 +113,7 @@ let autoIntentListenerWired = false;
 let autoIntentProcessor: ((detail: any) => void) | null = null;
 let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
+let scrollIntentListenerWired = false;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
@@ -2579,6 +2581,44 @@ function installScrollRouter(opts) {
     }
   } catch {
     // ignore
+  }
+  const ASR_INTENT_DEBOUNCE_MS = 450;
+  const ASR_INTENT_STABLE_MS = 250;
+  const ASR_INTENT_MIN_CONF = 0.5;
+  let committedBlockIdx = -1;
+  let lastCommitAt = 0;
+  let lastCandidate = -1;
+  let stableSince = 0;
+  if (!scrollIntentListenerWired) {
+    scrollIntentListenerWired = true;
+    onScrollIntent((intent) => {
+      try {
+        if (!intent || intent.source !== 'asr') return;
+        if (intent.kind !== 'seek_block') return;
+        if (state2.mode !== 'asr') return;
+        if (sessionPhase !== 'live') return;
+
+        const blockIdx = Number(intent?.target?.blockIdx);
+        if (!Number.isFinite(blockIdx) || blockIdx < 0) return;
+        if (blockIdx <= committedBlockIdx) return;
+
+        const now = Date.now();
+        if (now - lastCommitAt < ASR_INTENT_DEBOUNCE_MS) return;
+        if (Number.isFinite(intent.confidence) && intent.confidence < ASR_INTENT_MIN_CONF) return;
+
+        if (blockIdx !== lastCandidate) {
+          lastCandidate = blockIdx;
+          stableSince = now;
+          return;
+        }
+        if (now - stableSince < ASR_INTENT_STABLE_MS) return;
+
+        seekToBlock(blockIdx, 'asr_commit');
+        committedBlockIdx = blockIdx;
+        lastCommitAt = now;
+      } catch {}
+    });
+    try { console.info('[scroll-router] tp:scroll:intent listener installed'); } catch {}
   }
   type AutoIntentDecision = 'motor-start-request' | 'motor-stop-request';
   interface AutoIntentPayload {

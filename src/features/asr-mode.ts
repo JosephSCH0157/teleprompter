@@ -7,6 +7,7 @@ import type { AsrEngine, AsrEngineName, AsrEvent } from '../speech/asr-engine';
 import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { getSpeechStore, type SpeechState } from './speech/speech-store';
+import { emitScrollIntent } from '../scroll/scroll-intent-bus';
 
 // How many lines the viewport is allowed to jump per ASR advance
 const ASR_MAX_VISUAL_LEAP = 3;
@@ -311,7 +312,17 @@ export class AsrMode {
       if (newIdx >= this.currentIdx) {
         this.currentIdx = newIdx;
         this.markAdvance();
-        this.scrollWithClamp(newIdx);
+        const blockIdx = this.resolveBlockIdxFromLine(newIdx);
+        if (blockIdx != null) {
+          emitScrollIntent({
+            source: 'asr',
+            kind: 'seek_block',
+            target: { blockIdx },
+            confidence: bestScore,
+            ts: Date.now(),
+            reason: 'asr_match',
+          });
+        }
         this.dispatch('asr:advance', { index: newIdx, score: bestScore, lead: leadLines });
       }
     } else if (isFinal) {
@@ -323,7 +334,17 @@ export class AsrMode {
         if (RESCUE_JUMPS_ENABLED) {
           this.currentIdx = rescueIdx;
           this.markAdvance();
-          this.scrollWithClamp(this.currentIdx);
+          const blockIdx = this.resolveBlockIdxFromLine(this.currentIdx);
+          if (blockIdx != null) {
+            emitScrollIntent({
+              source: 'asr',
+              kind: 'seek_block',
+              target: { blockIdx },
+              confidence: 0,
+              ts: Date.now(),
+              reason: 'asr_rescue',
+            });
+          }
         }
       }
     }
@@ -398,6 +419,16 @@ export class AsrMode {
     asrDisplayIndex += clampedDiff;
 
     this.scrollToLine(Math.round(asrDisplayIndex));
+  }
+
+  private resolveBlockIdxFromLine(lineIdx: number): number | null {
+    const els = this.getAllLineEls();
+    const target = els[lineIdx];
+    if (!target) return null;
+    const blockEl = target.closest('.tp-asr-block') as HTMLElement | null;
+    const raw = blockEl?.dataset?.tpBlock;
+    const idx = Number(raw);
+    return Number.isFinite(idx) ? idx : null;
   }
 
   private startProgressWatchdog() {
