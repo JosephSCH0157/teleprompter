@@ -2300,22 +2300,29 @@ function holdCreepStop() {
 var speaking = false;
 var gateTimer;
 function stopHybridMotor(reason?: string) {
-  const wasHybridRunning = hybridMotor.isRunning();
-  hybridMotor.stop();
-  cancelHybridVelocityRefresh();
-  hybridGraceUntil = 0;
-  hybridSilence.pausedBySilence = false;
-  hybridSilence.offScriptActive = false;
-  hybridSilence.lastSpeechAtMs = nowMs();
-  pauseAssistTailBoost = 0;
-  pauseAssistTailUntil = 0;
-  clearHybridSilenceTimer();
-  speechActive = false;
-  if (wasHybridRunning) {
-    emitMotorState("hybridWpm", false);
-    try {
-      if (reason) console.debug("[HYBRID] forced stop", { reason });
-    } catch {}
+  try {
+    const wasHybridRunning = hybridMotor.isRunning();
+    hybridMotor.stop();
+    cancelHybridVelocityRefresh();
+    hybridGraceUntil = 0;
+    hybridSilence.pausedBySilence = false;
+    hybridSilence.offScriptActive = false;
+    hybridSilence.lastSpeechAtMs = nowMs();
+    pauseAssistTailBoost = 0;
+    pauseAssistTailUntil = 0;
+    clearHybridSilenceTimer();
+    if (wasHybridRunning) {
+      emitMotorState("hybridWpm", false);
+      try {
+        if (reason) console.debug("[HYBRID] forced stop", { reason });
+      } catch {}
+    }
+  } catch (err) {
+    if (isDevMode()) {
+      try {
+        console.warn("[HYBRID] stop failed", { reason, err });
+      } catch {}
+    }
   }
 }
 function stopAllMotors(reason: string) {
