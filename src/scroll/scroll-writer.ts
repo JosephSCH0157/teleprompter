@@ -79,6 +79,39 @@ function markerOffsetPx(fallbackScroller: HTMLElement): number {
   return Math.max(0, Math.round(h * markerPct));
 }
 
+function getScrollMode(): string {
+  try {
+    const store = (window as any).__tpStore;
+    if (store && typeof store.get === 'function') {
+      const scrollMode = store.get('scrollMode');
+      if (scrollMode != null) return String(scrollMode).toLowerCase();
+      const legacyMode = store.get('mode');
+      if (legacyMode != null) return String(legacyMode).toLowerCase();
+    }
+    const router: any = (window as any).__tpScrollMode;
+    if (router && typeof router.getMode === 'function') {
+      const mode = router.getMode();
+      if (mode != null) return String(mode).toLowerCase();
+    }
+    if (typeof router === 'string') return router.toLowerCase();
+  } catch {}
+  return '';
+}
+
+function asrLandingBiasPx(fallbackScroller: HTMLElement): number {
+  const viewer = getViewerElement();
+  const host = viewer || fallbackScroller;
+  const h = host?.clientHeight || window.innerHeight || 0;
+  const overridePx = (window as any).__TP_ASR_LANDING_BIAS_PX;
+  if (typeof overridePx === 'number' && Number.isFinite(overridePx)) {
+    return Math.max(0, Math.round(overridePx));
+  }
+  const overridePct = (window as any).__TP_ASR_LANDING_BIAS_PCT;
+  const pctRaw = typeof overridePct === 'number' ? overridePct : 0.12;
+  const pct = Math.max(0, Math.min(0.5, pctRaw));
+  return Math.max(0, Math.round(h * pct));
+}
+
 export function getScrollWriter(): ScrollWriter {
   if (cached) return cached;
 
@@ -157,7 +190,10 @@ export function seekToBlock(blockIdx: number, reason: string) {
   if (!el) return;
 
   const scroller = findScroller(el);
-  const top = elementTopRelativeTo(el, scroller) - markerOffsetPx(scroller);
+  const baseOffset = markerOffsetPx(scroller);
+  const mode = getScrollMode();
+  const bias = mode === 'asr' ? asrLandingBiasPx(scroller) : 0;
+  const top = elementTopRelativeTo(el, scroller) - (baseOffset + bias);
 
   (window as any).__tpScrollWriteActive = true;
   try {
