@@ -169,6 +169,7 @@ function chunkAsrUnits(units: AsrBlockUnit[]) {
 }
 
 export function renderScript(text: string, container?: HTMLElement | null): void {
+  console.log("[LIVE SCRIPT RENDERER] executing", { ts: Date.now() });
   const raw = String(text ?? '');
   try { (window as any).__tpRawScript = raw; } catch {}
 
