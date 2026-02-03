@@ -124,6 +124,7 @@ let committedBlockIdx = -1;
 let lastCommitAt = 0;
 let lastCandidate = -1;
 let stableSince = 0;
+let asrMotorConflictLogged = false;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
@@ -149,6 +150,7 @@ function resetAsrIntentState(reason?: string) {
   lastCommitAt = 0;
   lastCandidate = -1;
   stableSince = 0;
+  asrMotorConflictLogged = false;
   if (reason) {
     try { console.debug('[ASR_INTENT] reset', { reason }); } catch {}
   }
@@ -2656,6 +2658,26 @@ function installScrollRouter(opts) {
         if (intent.kind !== 'seek_block') return;
         if (state2.mode !== 'asr') return;
         if (sessionPhase !== 'live') return;
+        if (isDevMode()) {
+          const autoEnabled = !!(auto?.getState?.().enabled || enabledNow);
+          const autoRunning = !!auto?.isRunning?.();
+          const hybridRunning = !!hybridMotor?.isRunning?.();
+          if (autoEnabled || autoRunning || hybridRunning) {
+            if (!asrMotorConflictLogged) {
+              asrMotorConflictLogged = true;
+              try {
+                console.error('[ASR_ASSERT] motor running in ASR mode', {
+                  autoEnabled,
+                  autoRunning,
+                  hybridRunning,
+                  mode: state2.mode,
+                  phase: sessionPhase,
+                });
+              } catch {}
+            }
+            stopAllMotors('asr-assert-motor-running');
+          }
+        }
 
         const now = Date.now();
         if (committedBlockIdx < 0) {
