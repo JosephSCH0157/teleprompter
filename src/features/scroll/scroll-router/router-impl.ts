@@ -1,7 +1,7 @@
 // @ts-nocheck
 export {};
 
-import { getScrollWriter, seekToBlock } from '../../../scroll/scroll-writer';
+import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-writer';
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { createTimedEngine } from '../../../scroll/autoscroll';
@@ -2712,7 +2712,7 @@ function installScrollRouter(opts) {
         const requiredStable = committedBlockIdx < 0 ? ASR_INTENT_FIRST_STABLE_MS : ASR_INTENT_STABLE_MS;
         if (now - stableSince < requiredStable) return;
 
-        seekToBlock(blockIdx, 'asr_commit');
+        seekToBlockAnimated(blockIdx, 'asr_commit');
         committedBlockIdx = blockIdx;
         lastCommitAt = now;
       } catch {}

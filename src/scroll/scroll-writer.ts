@@ -15,6 +15,7 @@ export interface ScrollWriter {
 
 let cached: ScrollWriter | null = null;
 let warned = false;
+let activeSeekAnim: { cancel: () => void } | null = null;
 
 function withScrollWriteActive<T>(fn: () => T): T | undefined {
   try {
@@ -27,6 +28,14 @@ function withScrollWriteActive<T>(fn: () => T): T | undefined {
       (window as any).__tpScrollWriteActive = false;
     } catch {}
   }
+}
+
+function isWindowScroller(scroller: HTMLElement): boolean {
+  return (
+    scroller === document.scrollingElement ||
+    scroller === document.documentElement ||
+    scroller === document.body
+  );
 }
 
 function findScroller(el: HTMLElement): HTMLElement {
@@ -112,6 +121,49 @@ function asrLandingBiasPx(fallbackScroller: HTMLElement): number {
   return Math.max(0, Math.round(h * pct));
 }
 
+function prefersReducedMotion(): boolean {
+  try {
+    return !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+  } catch {
+    return false;
+  }
+}
+
+function cancelSeekAnimation(): void {
+  if (!activeSeekAnim) return;
+  try { activeSeekAnim.cancel(); } catch {}
+  activeSeekAnim = null;
+}
+
+function readScrollTop(scroller: HTMLElement): number {
+  if (isWindowScroller(scroller)) {
+    return window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
+  }
+  return scroller.scrollTop || 0;
+}
+
+function writeScrollTop(scroller: HTMLElement, top: number): void {
+  withScrollWriteActive(() => {
+    if (isWindowScroller(scroller)) {
+      window.scrollTo({ top, behavior: 'auto' });
+    } else {
+      scroller.scrollTo({ top, behavior: 'auto' });
+    }
+  });
+}
+
+function resolveSeekTarget(blockIdx: number): { scroller: HTMLElement; top: number } | null {
+  const blocks = getAsrBlockElements();
+  const el = blocks[blockIdx];
+  if (!el) return null;
+  const scroller = findScroller(el);
+  const baseOffset = markerOffsetPx(scroller);
+  const mode = getScrollMode();
+  const bias = mode === 'asr' ? asrLandingBiasPx(scroller) : 0;
+  const top = elementTopRelativeTo(el, scroller) - (baseOffset + bias);
+  return { scroller, top };
+}
+
 export function getScrollWriter(): ScrollWriter {
   if (cached) return cached;
 
@@ -185,27 +237,59 @@ export function getScrollWriter(): ScrollWriter {
 }
 
 export function seekToBlock(blockIdx: number, reason: string) {
-  const blocks = getAsrBlockElements();
-  const el = blocks[blockIdx];
-  if (!el) return;
+  cancelSeekAnimation();
+  const target = resolveSeekTarget(blockIdx);
+  if (!target) return;
+  const { scroller, top } = target;
 
-  const scroller = findScroller(el);
-  const baseOffset = markerOffsetPx(scroller);
-  const mode = getScrollMode();
-  const bias = mode === 'asr' ? asrLandingBiasPx(scroller) : 0;
-  const top = elementTopRelativeTo(el, scroller) - (baseOffset + bias);
-
-  (window as any).__tpScrollWriteActive = true;
   try {
-    scroller === document.scrollingElement || scroller === document.body
-      ? window.scrollTo({ top, behavior: 'auto' })
-      : (scroller as HTMLElement).scrollTo({ top, behavior: 'auto' });
+    writeScrollTop(scroller, top);
     try {
       if (reason && typeof console !== 'undefined') {
         (console as any).debug?.('[scroll-writer] seekToBlock', { blockIdx, reason });
       }
     } catch {}
-  } finally {
-    (window as any).__tpScrollWriteActive = false;
+  } catch {
+    // ignore
   }
+}
+
+export function seekToBlockAnimated(blockIdx: number, reason: string) {
+  cancelSeekAnimation();
+  const mode = getScrollMode();
+  if (mode !== 'asr' || prefersReducedMotion()) {
+    seekToBlock(blockIdx, reason);
+    return;
+  }
+  const target = resolveSeekTarget(blockIdx);
+  if (!target) return;
+  const { scroller, top: targetTop } = target;
+  const startTop = readScrollTop(scroller);
+  if (!Number.isFinite(targetTop) || Math.abs(targetTop - startTop) < 0.5) {
+    writeScrollTop(scroller, targetTop);
+    return;
+  }
+  const durationMs = 200;
+  const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  let cancelled = false;
+  activeSeekAnim = {
+    cancel() {
+      cancelled = true;
+      activeSeekAnim = null;
+    },
+  };
+  const tick = (now: number) => {
+    if (cancelled) return;
+    const elapsed = now - start;
+    const t = Math.max(0, Math.min(1, elapsed / durationMs));
+    const eased = 1 - Math.pow(1 - t, 3);
+    const next = startTop + (targetTop - startTop) * eased;
+    writeScrollTop(scroller, next);
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      activeSeekAnim = null;
+    }
+  };
+  requestAnimationFrame(tick);
 }
