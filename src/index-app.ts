@@ -1463,6 +1463,7 @@ import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from 
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
 import { triggerSettingsDownload } from './features/settings/exportSettings';
 import { triggerSettingsImport } from './features/settings/importSettings';
+import { installScrollWriteGuard } from './dev/scroll-write-guard';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
@@ -1515,6 +1516,17 @@ function onDomReady(fn: () => void): void {
 		} catch (err) {
 			try { console.warn('[scheduler] install failed', err); } catch {}
 		}
+
+		// Dev-only guard: log direct scroll writes on the main scroller.
+		try {
+			const scroller =
+				(document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+				(document.getElementById('viewer') as HTMLElement | null) ||
+				(document.scrollingElement as HTMLElement | null) ||
+				(document.documentElement as HTMLElement | null) ||
+				(document.body as HTMLElement | null);
+			installScrollWriteGuard(scroller);
+		} catch {}
 
 		// LEGACY AUTO-SPEED HOOK – intentionally disabled.
 		// Autoscroll now owns #autoSpeed via src/features/autoscroll.ts.

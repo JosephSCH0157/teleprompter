@@ -5,6 +5,19 @@ let writeQueue: Job[] = [];
 let readQueue: Job[] = [];
 let rafId = 0 as number;
 
+function withScrollWriteActive<T>(fn: () => T): T | undefined {
+  try {
+    (window as any).__tpScrollWriteActive = true;
+  } catch {}
+  try {
+    return fn();
+  } finally {
+    try {
+      (window as any).__tpScrollWriteActive = false;
+    } catch {}
+  }
+}
+
 function flush() {
   rafId = 0 as number;
 
@@ -67,7 +80,11 @@ export function installScrollScheduler(): void {
           const sc: any = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
           if (!sc) return;
           requestWrite(() => {
-            try { sc.scrollTo ? sc.scrollTo({ top: y, behavior: 'auto' }) : (sc.scrollTop = y); } catch {}
+            try {
+              withScrollWriteActive(() => {
+                sc.scrollTo ? sc.scrollTo({ top: y, behavior: 'auto' }) : (sc.scrollTop = y);
+              });
+            } catch {}
           });
         } catch {}
       },
@@ -77,7 +94,11 @@ export function installScrollScheduler(): void {
           if (!sc) return;
           const next = (sc.scrollTop || 0) + (Number(dy) || 0);
           requestWrite(() => {
-            try { sc.scrollTo ? sc.scrollTo({ top: next, behavior: 'auto' }) : (sc.scrollTop = next); } catch {}
+            try {
+              withScrollWriteActive(() => {
+                sc.scrollTo ? sc.scrollTo({ top: next, behavior: 'auto' }) : (sc.scrollTop = next);
+              });
+            } catch {}
           });
         } catch {}
       },

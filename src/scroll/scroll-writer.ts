@@ -13,6 +13,19 @@ export interface ScrollWriter {
 let cached: ScrollWriter | null = null;
 let warned = false;
 
+function withScrollWriteActive<T>(fn: () => T): T | undefined {
+  try {
+    (window as any).__tpScrollWriteActive = true;
+  } catch {}
+  try {
+    return fn();
+  } finally {
+    try {
+      (window as any).__tpScrollWriteActive = false;
+    } catch {}
+  }
+}
+
 export function getScrollWriter(): ScrollWriter {
   if (cached) return cached;
 
@@ -28,13 +41,13 @@ export function getScrollWriter(): ScrollWriter {
         (document.body as HTMLElement | null);
       cached = {
         scrollTo(top: number) {
-          try { fn(top); } catch {}
+          try { withScrollWriteActive(() => fn(top)); } catch {}
         },
         scrollBy(delta: number) {
           try {
             const sc = getScroller();
             const cur = sc ? (sc.scrollTop || 0) : 0;
-            fn(cur + (Number(delta) || 0));
+            withScrollWriteActive(() => fn(cur + (Number(delta) || 0)));
           } catch {}
         },
         ensureVisible(_top: number, _paddingPx?: number) {
@@ -49,17 +62,17 @@ export function getScrollWriter(): ScrollWriter {
         const writerImpl = w as { scrollTo: (_top: number, _opts?: any) => void; scrollBy: (_delta: number, _opts?: any) => void; ensureVisible?: (_top: number, _pad?: number) => void };
         cached = {
           scrollTo(top: number, opts?: { behavior?: ScrollBehavior }) {
-            try { writerImpl.scrollTo(top, opts); } catch {}
+            try { withScrollWriteActive(() => writerImpl.scrollTo(top, opts)); } catch {}
           },
           scrollBy(delta: number, opts?: { behavior?: ScrollBehavior }) {
-            try { writerImpl.scrollBy(delta, opts); } catch {}
+            try { withScrollWriteActive(() => writerImpl.scrollBy(delta, opts)); } catch {}
           },
           ensureVisible(top: number, paddingPx = 80) {
             try {
               if (typeof writerImpl.ensureVisible === 'function') {
-                writerImpl.ensureVisible(top, paddingPx);
+                withScrollWriteActive(() => writerImpl.ensureVisible!(top, paddingPx));
               } else {
-                writerImpl.scrollTo(Math.max(0, top - paddingPx), { behavior: 'auto' });
+                withScrollWriteActive(() => writerImpl.scrollTo(Math.max(0, top - paddingPx), { behavior: 'auto' }));
               }
             } catch {}
           },
