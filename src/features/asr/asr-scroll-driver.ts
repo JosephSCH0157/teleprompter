@@ -1591,11 +1591,33 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return top.map((entry) => `${entry.reason}:${entry.count}`).join(', ');
   };
 
+  const formatCompletionTelemetry = () => {
+    try {
+      const telemetry = (window as any).__tpAsrTelemetry;
+      if (!telemetry || typeof telemetry !== 'object') return '';
+      const accept = Number(telemetry.commitAccepted) || 0;
+      const reject = Number(telemetry.commitRejected) || 0;
+      const top = Array.isArray(telemetry.last15sRejectTop3)
+        ? telemetry.last15sRejectTop3
+        : [];
+      const topText = top
+        .slice(0, 3)
+        .map((entry: any) => `${entry.reason}(${entry.count})`)
+        .join(', ');
+      if (!topText && accept === 0 && reject === 0) return '';
+      const base = `accept ${accept} / rej ${reject}`;
+      return topText ? `${base} • top: ${topText}` : base;
+    } catch {
+      return '';
+    }
+  };
+
   const maybeLogStall = (now: number) => {
     if (now - lastCommitAt < DEFAULT_STALL_COMMIT_MS) return;
     if (now - lastStallLogAt < DEFAULT_STALL_LOG_COOLDOWN_MS) return;
     lastStallLogAt = now;
     const reasonSummary = summarizeGuardText();
+    const telemetrySummary = formatCompletionTelemetry();
     try {
       console.warn('[ASR_STALLED] no commits in 15s', {
         sinceMs: Math.round(now - lastCommitAt),
@@ -1605,7 +1627,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     } catch {}
     if (!stallHudEmitted) {
-      emitHudStatus('stall', `ASR stalled • ${reasonSummary}`, {
+      const stallText = telemetrySummary
+        ? `ASR stalled • ${reasonSummary} • ${telemetrySummary}`
+        : `ASR stalled • ${reasonSummary}`;
+      emitHudStatus('stall', stallText, {
         key: 'stall',
         sinceMs: Math.round(now - lastCommitAt),
         reasonSummary,

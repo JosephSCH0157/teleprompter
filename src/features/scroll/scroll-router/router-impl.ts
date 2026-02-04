@@ -119,6 +119,8 @@ const ASR_INTENT_STABLE_MS = 250;
 const ASR_INTENT_FIRST_STABLE_MS = 600;
 const ASR_INTENT_WARMUP_MS = 1400;
 const ASR_INTENT_MIN_CONF = 0.5;
+const ASR_TELEMETRY_MAX_REJECTS = 200;
+const ASR_TELEMETRY_WINDOW_MS = 15000;
 let asrIntentLiveSince = 0;
 let committedBlockIdx = -1;
 let lastCommitAt = 0;
@@ -129,6 +131,138 @@ let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
+
+type AsrTelemetryDecision = 'accept' | 'reject';
+type AsrRejectEvent = { ts: number; reason: string };
+type AsrTelemetryLast = {
+  ts: number;
+  mode: string;
+  phase: string;
+  currentBlockIdx: number;
+  candidateBlockIdx: number;
+  decision: AsrTelemetryDecision;
+  rejectReason?: string;
+};
+type AsrTelemetry = {
+  intentsSeen: number;
+  finalSeen: number;
+  interimSeen: number;
+  commitAccepted: number;
+  commitRejected: number;
+  rejectReasons: Record<string, number>;
+  last: AsrTelemetryLast;
+  last15sRejectTop3: Array<{ reason: string; count: number }>;
+  _rejectEvents: AsrRejectEvent[];
+};
+
+function getAsrTelemetry(): AsrTelemetry | null {
+  if (!isDevMode()) return null;
+  if (typeof window === 'undefined') return null;
+  const w = window as any;
+  if (!w.__tpAsrTelemetry) {
+    w.__tpAsrTelemetry = {
+      intentsSeen: 0,
+      finalSeen: 0,
+      interimSeen: 0,
+      commitAccepted: 0,
+      commitRejected: 0,
+      rejectReasons: {},
+      last: {
+        ts: 0,
+        mode: 'unknown',
+        phase: 'unknown',
+        currentBlockIdx: -1,
+        candidateBlockIdx: -1,
+        decision: 'reject',
+        rejectReason: 'init',
+      },
+      last15sRejectTop3: [],
+      _rejectEvents: [],
+    } as AsrTelemetry;
+  }
+  return w.__tpAsrTelemetry as AsrTelemetry;
+}
+
+function resolveAsrIntentCandidateBlockIdx(intent: any): number {
+  const raw = Number(intent?.target?.blockIdx);
+  if (!Number.isFinite(raw)) return -1;
+  return Math.max(0, Math.floor(raw));
+}
+
+function updateAsrTelemetryTopRejects(telemetry: AsrTelemetry, now: number) {
+  const cutoff = now - ASR_TELEMETRY_WINDOW_MS;
+  const events = telemetry._rejectEvents;
+  let pruneCount = 0;
+  while (pruneCount < events.length && events[pruneCount].ts < cutoff) {
+    pruneCount += 1;
+  }
+  if (pruneCount) {
+    events.splice(0, pruneCount);
+  }
+  const counts = new Map<string, number>();
+  for (const entry of events) {
+    counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
+  }
+  telemetry.last15sRejectTop3 = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([reason, count]) => ({ reason, count }));
+}
+
+function recordAsrIntentTelemetry(telemetry: AsrTelemetry | null, intentReason: string) {
+  if (!telemetry) return;
+  telemetry.intentsSeen += 1;
+  if (intentReason.includes('final')) telemetry.finalSeen += 1;
+  else if (intentReason.includes('interim')) telemetry.interimSeen += 1;
+}
+
+function recordAsrReject(
+  telemetry: AsrTelemetry | null,
+  now: number,
+  reasonKey: string,
+  mode: string,
+  phase: string,
+  currentBlockIdx: number,
+  candidateBlockIdx: number,
+) {
+  if (!telemetry) return;
+  telemetry.commitRejected += 1;
+  telemetry.rejectReasons[reasonKey] = (telemetry.rejectReasons[reasonKey] || 0) + 1;
+  telemetry._rejectEvents.push({ ts: now, reason: reasonKey });
+  if (telemetry._rejectEvents.length > ASR_TELEMETRY_MAX_REJECTS) {
+    telemetry._rejectEvents.splice(0, telemetry._rejectEvents.length - ASR_TELEMETRY_MAX_REJECTS);
+  }
+  updateAsrTelemetryTopRejects(telemetry, now);
+  telemetry.last = {
+    ts: now,
+    mode,
+    phase,
+    currentBlockIdx,
+    candidateBlockIdx,
+    decision: 'reject',
+    rejectReason: reasonKey,
+  };
+}
+
+function recordAsrAccept(
+  telemetry: AsrTelemetry | null,
+  now: number,
+  mode: string,
+  phase: string,
+  currentBlockIdx: number,
+  candidateBlockIdx: number,
+) {
+  if (!telemetry) return;
+  telemetry.commitAccepted += 1;
+  telemetry.last = {
+    ts: now,
+    mode,
+    phase,
+    currentBlockIdx,
+    candidateBlockIdx,
+    decision: 'accept',
+  };
+}
 const hybridSilence = {
   lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
   pausedBySilence: false,
@@ -2662,9 +2796,46 @@ function installScrollRouter(opts) {
     onScrollIntent((intent) => {
       try {
         if (!intent || intent.source !== 'asr') return;
-        if (intent.kind !== 'seek_block') return;
-        if (state2.mode !== 'asr') return;
-        if (sessionPhase !== 'live') return;
+        const telemetry = getAsrTelemetry();
+        const intentReason = typeof intent.reason === 'string' ? intent.reason : '';
+        recordAsrIntentTelemetry(telemetry, intentReason);
+        const now = Date.now();
+        if (intent.kind !== 'seek_block') {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_kind',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+          );
+          return;
+        }
+        if (state2.mode !== 'asr') {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_mode',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+          );
+          return;
+        }
+        if (sessionPhase !== 'live') {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_phase',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+          );
+          return;
+        }
         if (isDevMode()) {
           const autoEnabled = !!(auto?.getState?.().enabled || enabledNow);
           const autoRunning = !!auto?.isRunning?.();
@@ -2686,42 +2857,133 @@ function installScrollRouter(opts) {
           }
         }
 
-        const now = Date.now();
         if (committedBlockIdx < 0) {
           const seed = resolveCurrentBlockIdx();
           if (seed != null) {
             committedBlockIdx = seed;
           }
         }
-        if (asrIntentLiveSince && now - asrIntentLiveSince < ASR_INTENT_WARMUP_MS) return;
+        if (asrIntentLiveSince && now - asrIntentLiveSince < ASR_INTENT_WARMUP_MS) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_warmup',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+          );
+          return;
+        }
         const rawBlockIdx = Number(intent?.target?.blockIdx);
-        if (!Number.isFinite(rawBlockIdx) || rawBlockIdx < 0) return;
+        if (!Number.isFinite(rawBlockIdx) || rawBlockIdx < 0) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_invalid_target',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+          );
+          return;
+        }
         const blockIdx = Math.min(rawBlockIdx, committedBlockIdx + 1);
-        if (blockIdx <= committedBlockIdx) return;
-        if (now - lastCommitAt < ASR_INTENT_DEBOUNCE_MS) return;
-        if (Number.isFinite(intent.confidence) && intent.confidence < ASR_INTENT_MIN_CONF) return;
+        if (blockIdx <= committedBlockIdx) {
+          const reasonKey = rawBlockIdx === committedBlockIdx ? 'reject_same_block' : 'reject_backward';
+          recordAsrReject(
+            telemetry,
+            now,
+            reasonKey,
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+          );
+          return;
+        }
+        if (now - lastCommitAt < ASR_INTENT_DEBOUNCE_MS) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_debounce',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+          );
+          return;
+        }
+        if (Number.isFinite(intent.confidence) && intent.confidence < ASR_INTENT_MIN_CONF) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_low_confidence',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+          );
+          return;
+        }
 
-        const reason = typeof intent.reason === 'string' ? intent.reason : '';
-        const isFinal = reason.includes('final');
-        const isInterim = reason.includes('interim') && !isFinal;
+        const isFinal = intentReason.includes('final');
+        const isInterim = intentReason.includes('interim') && !isFinal;
         if (isInterim) {
           if (blockIdx !== lastCandidate) {
             lastCandidate = blockIdx;
             stableSince = now;
           }
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_not_final',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+          );
           return;
         }
         if (blockIdx !== lastCandidate) {
           lastCandidate = blockIdx;
           stableSince = now;
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_stability',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+          );
           return;
         }
         const requiredStable = committedBlockIdx < 0 ? ASR_INTENT_FIRST_STABLE_MS : ASR_INTENT_STABLE_MS;
-        if (now - stableSince < requiredStable) return;
+        if (now - stableSince < requiredStable) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_stability',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+          );
+          return;
+        }
 
         seekToBlockAnimated(blockIdx, 'asr_commit');
         committedBlockIdx = blockIdx;
         lastCommitAt = now;
+        recordAsrAccept(
+          telemetry,
+          now,
+          state2.mode,
+          sessionPhase,
+          committedBlockIdx,
+          blockIdx,
+        );
       } catch {}
     });
     try { console.info('[scroll-router] tp:scroll:intent listener installed'); } catch {}
