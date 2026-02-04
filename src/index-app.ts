@@ -96,8 +96,6 @@ import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
 
-try { (window as any).__tpScrollWriter = scrollWriter; } catch {}
-
 function showFatalFallback(): void {
   try {
     const w = window as any;
@@ -189,6 +187,17 @@ function shouldGateAuth(): boolean {
 	return true;
 }
 
+function attachScrollWriterOnce(): void {
+	try {
+		const w = window as any;
+		if (w.__tpScrollWriter) return;
+		w.__tpScrollWriter = scrollWriter;
+		if (import.meta.env.DEV) {
+			try { console.info('[DEV] __tpScrollWriter attached'); } catch {}
+		}
+	} catch {}
+}
+
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
@@ -214,10 +223,6 @@ try { ensurePageTabs(appStore); } catch {}
 bootstrap().catch(() => {
 	// HUD/debug paths are optional; never block boot
 });
-
-if (import.meta.env.DEV && !(window as any).__tpScrollWriter) {
-  console.error('[BOOT] Scroll writer missing');
-}
 
 try {
 	initRecorderBackends();
@@ -2234,6 +2239,14 @@ try {
 						const ensureScripts = () => { try { applyPagePanel('scripts'); } catch {} };
 						ensureScripts();
 						setTimeout(ensureScripts, 50);
+					} catch {}
+
+					// Attach scroll writer only once after auth + router + UI are live
+					try {
+						attachScrollWriterOnce();
+						if (import.meta.env.DEV && !(window as any).__tpScrollWriter) {
+							console.error('[BOOT] Scroll writer missing');
+						}
 					} catch {}
 
 					// Signal init completion so harness/tests can proceed
