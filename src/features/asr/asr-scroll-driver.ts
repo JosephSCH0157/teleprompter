@@ -1604,9 +1604,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         .slice(0, 3)
         .map((entry: any) => `${entry.reason}(${entry.count})`)
         .join(', ');
-      if (!topText && accept === 0 && reject === 0) return '';
+      const evidenceSummary =
+        typeof telemetry.completionEvidenceSummary === 'string'
+          ? telemetry.completionEvidenceSummary
+          : '';
+      if (!topText && accept === 0 && reject === 0 && !evidenceSummary) return '';
       const base = `accept ${accept} / rej ${reject}`;
-      return topText ? `${base} • top: ${topText}` : base;
+      const parts = [base];
+      if (topText) parts.push(`top: ${topText}`);
+      if (evidenceSummary) parts.push(evidenceSummary);
+      return parts.join(' • ');
     } catch {
       return '';
     }

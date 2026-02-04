@@ -4,6 +4,8 @@ export {};
 import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-writer';
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
+import { getAsrBlockElements } from '../../../scroll/asr-block-store';
+import { DEFAULT_COMPLETION_POLICY, type CompletionEvidence } from '../../../scroll/asr-block-completion';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -121,6 +123,8 @@ const ASR_INTENT_WARMUP_MS = 1400;
 const ASR_INTENT_MIN_CONF = 0.5;
 const ASR_TELEMETRY_MAX_REJECTS = 200;
 const ASR_TELEMETRY_WINDOW_MS = 15000;
+const ASR_MATCH_WINDOW_MS = 3000;
+const ASR_MATCH_MAX = 120;
 let asrIntentLiveSince = 0;
 let committedBlockIdx = -1;
 let lastCommitAt = 0;
@@ -131,6 +135,15 @@ let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
+let recentAsrMatches: Array<{
+  ts: number;
+  blockIdx: number;
+  lineIdx: number | null;
+  isFinal: boolean;
+  confidence: number | null;
+}> = [];
+let asrBlockLineCacheRef: HTMLElement[] | null = null;
+const asrBlockLineCache = new Map<number, number[]>();
 
 type AsrTelemetryDecision = 'accept' | 'reject';
 type AsrRejectEvent = { ts: number; reason: string };
@@ -142,6 +155,7 @@ type AsrTelemetryLast = {
   candidateBlockIdx: number;
   decision: AsrTelemetryDecision;
   rejectReason?: string;
+  completionEvidenceSummary?: string;
 };
 type AsrTelemetry = {
   intentsSeen: number;
@@ -152,6 +166,8 @@ type AsrTelemetry = {
   rejectReasons: Record<string, number>;
   last: AsrTelemetryLast;
   last15sRejectTop3: Array<{ reason: string; count: number }>;
+  completionEvidence: CompletionEvidence | null;
+  completionEvidenceSummary: string;
   _rejectEvents: AsrRejectEvent[];
 };
 
@@ -175,8 +191,11 @@ function getAsrTelemetry(): AsrTelemetry | null {
         candidateBlockIdx: -1,
         decision: 'reject',
         rejectReason: 'init',
+        completionEvidenceSummary: '',
       },
       last15sRejectTop3: [],
+      completionEvidence: null,
+      completionEvidenceSummary: '',
       _rejectEvents: [],
     } as AsrTelemetry;
   }
@@ -216,6 +235,136 @@ function recordAsrIntentTelemetry(telemetry: AsrTelemetry | null, intentReason: 
   else if (intentReason.includes('interim')) telemetry.interimSeen += 1;
 }
 
+function recordAsrMatchEvent(now: number, intent: any, intentReason: string) {
+  const rawBlockIdx = Number(intent?.target?.blockIdx);
+  if (!Number.isFinite(rawBlockIdx) || rawBlockIdx < 0) return;
+  const rawLineIdx = Number(intent?.target?.lineIdx);
+  const lineIdx = Number.isFinite(rawLineIdx) ? Math.max(0, Math.floor(rawLineIdx)) : null;
+  const confidence = Number.isFinite(intent?.confidence) ? Number(intent.confidence) : null;
+  const isFinal = intentReason.includes('final');
+  recentAsrMatches.push({
+    ts: now,
+    blockIdx: Math.max(0, Math.floor(rawBlockIdx)),
+    lineIdx,
+    isFinal,
+    confidence,
+  });
+  const cutoff = now - ASR_MATCH_WINDOW_MS;
+  let pruneCount = 0;
+  while (pruneCount < recentAsrMatches.length && recentAsrMatches[pruneCount].ts < cutoff) {
+    pruneCount += 1;
+  }
+  if (pruneCount) {
+    recentAsrMatches.splice(0, pruneCount);
+  }
+  if (recentAsrMatches.length > ASR_MATCH_MAX) {
+    recentAsrMatches.splice(0, recentAsrMatches.length - ASR_MATCH_MAX);
+  }
+}
+
+function parseLineIndexFromEl(el: HTMLElement): number | null {
+  if (!el) return null;
+  const raw =
+    el.dataset.i ||
+    el.dataset.index ||
+    el.dataset.line ||
+    el.dataset.lineIdx ||
+    el.getAttribute('data-line') ||
+    el.getAttribute('data-line-idx');
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
+}
+
+function getBlockLineIndices(blockIdx: number): number[] | null {
+  const blockEls = getAsrBlockElements();
+  if (!blockEls || !blockEls.length) return null;
+  if (asrBlockLineCacheRef !== blockEls) {
+    asrBlockLineCacheRef = blockEls;
+    asrBlockLineCache.clear();
+  }
+  const cached = asrBlockLineCache.get(blockIdx);
+  if (cached) return cached;
+  const blockEl = blockEls[blockIdx];
+  if (!blockEl) return null;
+  const lineEls = Array.from(blockEl.querySelectorAll<HTMLElement>('.line, .tp-line'));
+  if (!lineEls.length) return null;
+  const indices: number[] = [];
+  for (const lineEl of lineEls) {
+    const idx = parseLineIndexFromEl(lineEl);
+    if (idx == null) continue;
+    indices.push(idx);
+  }
+  if (!indices.length) return null;
+  indices.sort((a, b) => a - b);
+  asrBlockLineCache.set(blockIdx, indices);
+  return indices;
+}
+
+function buildCompletionEvidence(
+  currentBlockIdx: number,
+  candidateBlockIdx: number,
+  now = Date.now(),
+): CompletionEvidence | null {
+  if (!Number.isFinite(candidateBlockIdx) || candidateBlockIdx < 0) return null;
+  const blockLineIndices = getBlockLineIndices(currentBlockIdx);
+  if (!blockLineIndices || !blockLineIndices.length) return null;
+  const totalLinesInBlock = blockLineIndices.length;
+  if (totalLinesInBlock <= 0) return null;
+  const lastLineIdx = blockLineIndices[blockLineIndices.length - 1];
+  if (!Number.isFinite(lastLineIdx)) return null;
+  const cutoff = now - ASR_MATCH_WINDOW_MS;
+  const windowMatches = recentAsrMatches.filter((entry) => entry.ts >= cutoff);
+  const hasFinal = windowMatches.some((entry) => entry.isFinal);
+  const blockLineSet = new Set(blockLineIndices);
+  const matchedLineSet = new Set<number>();
+  for (const entry of windowMatches) {
+    if (entry.lineIdx == null) continue;
+    if (blockLineSet.has(entry.lineIdx)) {
+      matchedLineSet.add(entry.lineIdx);
+    }
+  }
+  const matchedLineIds = Array.from(matchedLineSet).sort((a, b) => a - b);
+  const coverageRatio =
+    totalLinesInBlock > 0 ? Math.min(1, matchedLineIds.length / totalLinesInBlock) : 0;
+  const matchedLastLine = matchedLineSet.has(lastLineIdx);
+  const trailingWindow = Math.max(1, DEFAULT_COMPLETION_POLICY.trailingLinesWindow);
+  const trailingStart = Math.max(0, blockLineIndices.length - trailingWindow);
+  const trailingLineSet = new Set(blockLineIndices.slice(trailingStart));
+  let matchedTrailingLines = 0;
+  for (const idx of matchedLineSet) {
+    if (trailingLineSet.has(idx)) matchedTrailingLines += 1;
+  }
+  const boundaryCrossed = windowMatches.some((entry) => {
+    if (entry.blockIdx < candidateBlockIdx) return false;
+    if (entry.isFinal) return true;
+    if (Number.isFinite(entry.confidence) && (entry.confidence as number) >= 0.6) return true;
+    return false;
+  });
+
+  return {
+    currentBlockIdx,
+    candidateBlockIdx,
+    matchedLineIds,
+    totalLinesInBlock,
+    matchedLastLine,
+    matchedTrailingLines,
+    coverageRatio: Math.min(1, Math.max(0, coverageRatio)),
+    boundaryCrossed,
+    hasFinal,
+  };
+}
+
+function formatCompletionEvidenceSummary(evidence: CompletionEvidence | null): string {
+  if (!evidence) return 'evidence_missing_block_index';
+  const cov = Number.isFinite(evidence.coverageRatio) ? evidence.coverageRatio : 0;
+  const covText = cov.toFixed(2);
+  const last = evidence.matchedLastLine ? 1 : 0;
+  const trail = Number.isFinite(evidence.matchedTrailingLines) ? evidence.matchedTrailingLines : 0;
+  const finalFlag = evidence.hasFinal ? 1 : 0;
+  const boundary = evidence.boundaryCrossed ? 1 : 0;
+  return `cov=${covText} last=${last} trail=${trail} final=${finalFlag} bndry=${boundary}`;
+}
+
 function recordAsrReject(
   telemetry: AsrTelemetry | null,
   now: number,
@@ -224,6 +373,7 @@ function recordAsrReject(
   phase: string,
   currentBlockIdx: number,
   candidateBlockIdx: number,
+  completionEvidenceSummary?: string,
 ) {
   if (!telemetry) return;
   telemetry.commitRejected += 1;
@@ -241,6 +391,7 @@ function recordAsrReject(
     candidateBlockIdx,
     decision: 'reject',
     rejectReason: reasonKey,
+    completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
   };
 }
 
@@ -251,6 +402,7 @@ function recordAsrAccept(
   phase: string,
   currentBlockIdx: number,
   candidateBlockIdx: number,
+  completionEvidenceSummary?: string,
 ) {
   if (!telemetry) return;
   telemetry.commitAccepted += 1;
@@ -261,6 +413,7 @@ function recordAsrAccept(
     currentBlockIdx,
     candidateBlockIdx,
     decision: 'accept',
+    completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
   };
 }
 const hybridSilence = {
@@ -2800,6 +2953,11 @@ function installScrollRouter(opts) {
         const intentReason = typeof intent.reason === 'string' ? intent.reason : '';
         recordAsrIntentTelemetry(telemetry, intentReason);
         const now = Date.now();
+        recordAsrMatchEvent(now, intent, intentReason);
+        if (telemetry) {
+          telemetry.completionEvidence = null;
+          telemetry.completionEvidenceSummary = 'evidence_missing_block_index';
+        }
         if (intent.kind !== 'seek_block') {
           recordAsrReject(
             telemetry,
@@ -2809,6 +2967,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2821,6 +2980,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2833,6 +2993,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2863,6 +3024,15 @@ function installScrollRouter(opts) {
             committedBlockIdx = seed;
           }
         }
+        if (telemetry && committedBlockIdx >= 0) {
+          const candidateIdx = resolveAsrIntentCandidateBlockIdx(intent);
+          const evidence = buildCompletionEvidence(committedBlockIdx, candidateIdx, now);
+          telemetry.completionEvidence = evidence;
+          telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(evidence);
+        } else if (telemetry) {
+          telemetry.completionEvidence = null;
+          telemetry.completionEvidenceSummary = 'evidence_missing_block_index';
+        }
         if (asrIntentLiveSince && now - asrIntentLiveSince < ASR_INTENT_WARMUP_MS) {
           recordAsrReject(
             telemetry,
@@ -2872,6 +3042,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2885,6 +3056,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2899,6 +3071,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             blockIdx,
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2911,6 +3084,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             blockIdx,
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2923,6 +3097,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             blockIdx,
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2942,6 +3117,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             blockIdx,
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2956,6 +3132,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             blockIdx,
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2969,6 +3146,7 @@ function installScrollRouter(opts) {
             sessionPhase,
             committedBlockIdx,
             blockIdx,
+            telemetry?.completionEvidenceSummary,
           );
           return;
         }
@@ -2983,6 +3161,7 @@ function installScrollRouter(opts) {
           sessionPhase,
           committedBlockIdx,
           blockIdx,
+          telemetry?.completionEvidenceSummary,
         );
       } catch {}
     });

@@ -5,7 +5,7 @@ export interface ScrollIntent {
   source: ScrollIntentSource;
   kind: ScrollIntentKind;
   ts: number;
-  target?: { blockIdx?: number };
+  target?: { blockIdx?: number; lineIdx?: number };
   confidence?: number;
   reason?: string;
 }

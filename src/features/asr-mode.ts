@@ -319,7 +319,7 @@ export class AsrMode {
           emitScrollIntent({
             source: 'asr',
             kind: 'seek_block',
-            target: { blockIdx },
+            target: { blockIdx, lineIdx: newIdx },
             confidence: bestScore,
             ts: Date.now(),
             reason: isFinal ? 'asr_match_final' : 'asr_match_interim',
@@ -341,7 +341,7 @@ export class AsrMode {
             emitScrollIntent({
               source: 'asr',
               kind: 'seek_block',
-              target: { blockIdx },
+              target: { blockIdx, lineIdx: this.currentIdx },
               confidence: 0,
               ts: Date.now(),
               reason: 'asr_rescue',
