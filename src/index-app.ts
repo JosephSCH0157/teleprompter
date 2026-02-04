@@ -57,6 +57,7 @@ import { initObsWiring } from './obs/obs-wiring';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
+import * as scrollWriter from './scroll/scroll-writer';
 import './index-hooks/preroll';
 import { initDevDrawer } from './dev/dev-drawer';
 import { renderScript } from './render-script';
@@ -94,6 +95,8 @@ import { hasActiveAsrProfile, onAsr } from './asr/store';
 import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
+
+try { (window as any).__tpScrollWriter = scrollWriter; } catch {}
 
 function showFatalFallback(): void {
   try {
@@ -211,6 +214,10 @@ try { ensurePageTabs(appStore); } catch {}
 bootstrap().catch(() => {
 	// HUD/debug paths are optional; never block boot
 });
+
+if (import.meta.env.DEV && !(window as any).__tpScrollWriter) {
+  console.error('[BOOT] Scroll writer missing');
+}
 
 try {
 	initRecorderBackends();
