@@ -59,6 +59,19 @@ const isDevMode = (() => {
     return cache;
   };
 })();
+const ASR_COMPLETION_GATE_KEY = 'tp_asr_completion_gate';
+let asrCompletionGateBypassLogged = false;
+function isAsrCompletionGateEnabled(): boolean {
+  if (!isDevMode()) return false;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const devParam = params.has('dev') || params.get('dev') === '1';
+    if (!devParam) return false;
+    return localStorage.getItem(ASR_COMPLETION_GATE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 // --- Hybrid Aggro flag -------------------------------------------------------
 function isHybridAggroEnabled(): boolean {
@@ -3185,57 +3198,89 @@ function installScrollRouter(opts) {
           return;
         }
 
-        const completionEvidence = buildCompletionEvidence(committedBlockIdx, blockIdx, now);
-        if (telemetry) {
-          telemetry.completionEvidence = completionEvidence;
-          telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(completionEvidence);
-        }
-        if (!completionEvidence) {
-          recordAsrReject(
-            telemetry,
-            now,
-            'reject_completion_no_evidence',
-            state2.mode,
-            sessionPhase,
-            committedBlockIdx,
-            blockIdx,
-            telemetry?.completionEvidenceSummary,
-          );
-          return;
-        }
-        let completionDecision;
-        try {
-          completionDecision = decideBlockCompletion(completionEvidence);
-        } catch (err) {
-          if (isDevMode()) {
+        const completionGateEnabled = isAsrCompletionGateEnabled();
+        let completionDecisionConfidence: number | undefined;
+        if (completionGateEnabled) {
+          let completionEvidence = telemetry?.completionEvidence ?? null;
+          if (!completionEvidence) {
             try {
-              console.warn('[ASR_COMPLETION] decision failed', { err });
-            } catch {}
+              completionEvidence = buildCompletionEvidence(committedBlockIdx, blockIdx, now);
+            } catch (err) {
+              if (isDevMode()) {
+                try {
+                  console.warn('[ASR_COMPLETION] evidence build failed', { err });
+                } catch {}
+              }
+              recordAsrReject(
+                telemetry,
+                now,
+                'reject_completion_exception',
+                state2.mode,
+                sessionPhase,
+                committedBlockIdx,
+                blockIdx,
+                telemetry?.completionEvidenceSummary,
+              );
+              return;
+            }
           }
-          recordAsrReject(
-            telemetry,
-            now,
-            'reject_completion_exception',
-            state2.mode,
-            sessionPhase,
-            committedBlockIdx,
-            blockIdx,
-            telemetry?.completionEvidenceSummary,
-          );
-          return;
-        }
-        if (!completionDecision.ok) {
-          recordAsrReject(
-            telemetry,
-            now,
-            `reject_completion_${completionDecision.reason}`,
-            state2.mode,
-            sessionPhase,
-            committedBlockIdx,
-            blockIdx,
-            telemetry?.completionEvidenceSummary,
-          );
-          return;
+          if (telemetry) {
+            telemetry.completionEvidence = completionEvidence;
+            telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(completionEvidence);
+          }
+          if (!completionEvidence) {
+            recordAsrReject(
+              telemetry,
+              now,
+              'reject_completion_no_evidence',
+              state2.mode,
+              sessionPhase,
+              committedBlockIdx,
+              blockIdx,
+              telemetry?.completionEvidenceSummary,
+            );
+            return;
+          }
+          let completionDecision;
+          try {
+            completionDecision = decideBlockCompletion(completionEvidence);
+          } catch (err) {
+            if (isDevMode()) {
+              try {
+                console.warn('[ASR_COMPLETION] decision failed', { err });
+              } catch {}
+            }
+            recordAsrReject(
+              telemetry,
+              now,
+              'reject_completion_exception',
+              state2.mode,
+              sessionPhase,
+              committedBlockIdx,
+              blockIdx,
+              telemetry?.completionEvidenceSummary,
+            );
+            return;
+          }
+          if (!completionDecision.ok) {
+            recordAsrReject(
+              telemetry,
+              now,
+              `reject_completion_${completionDecision.reason}`,
+              state2.mode,
+              sessionPhase,
+              committedBlockIdx,
+              blockIdx,
+              telemetry?.completionEvidenceSummary,
+            );
+            return;
+          }
+          completionDecisionConfidence = completionDecision.confidence;
+        } else if (isDevMode() && !asrCompletionGateBypassLogged) {
+          asrCompletionGateBypassLogged = true;
+          try {
+            console.debug('[ASR_COMPLETION] gate bypassed (flag off)');
+          } catch {}
         }
 
         seekToBlockAnimated(blockIdx, 'asr_commit');
@@ -3249,7 +3294,7 @@ function installScrollRouter(opts) {
           committedBlockIdx,
           blockIdx,
           telemetry?.completionEvidenceSummary,
-          completionDecision.confidence,
+          completionDecisionConfidence,
         );
       } catch {}
     });
