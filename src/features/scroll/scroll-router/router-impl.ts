@@ -132,6 +132,7 @@ let autoIntentListenerWired = false;
 let autoIntentProcessor: ((detail: any) => void) | null = null;
 let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
+let auto: any | null = null;
 let scrollIntentListenerWired = false;
 const ASR_INTENT_DEBOUNCE_MS = 450;
 const ASR_INTENT_STABLE_MS = 250;
@@ -2648,17 +2649,14 @@ var creepRaf = 0;
 var creepLast = 0;
 let enabledNow = false;
 let activeMotorBrain: 'auto' | 'hybrid' | 'asr' | null = null;
-let activeMotorMode: string | null = null;
 
-function setActiveMotor(brain: 'auto' | 'hybrid' | 'asr', mode: string) {
+function setActiveMotor(brain: 'auto' | 'hybrid' | 'asr', _mode: string) {
   activeMotorBrain = brain;
-  activeMotorMode = mode;
 }
 
 function clearActiveMotor(brain?: 'auto' | 'hybrid' | 'asr') {
   if (!brain || activeMotorBrain === brain) {
     activeMotorBrain = null;
-    activeMotorMode = null;
   }
 }
 
@@ -2871,7 +2869,8 @@ function applyMode(m) {
   }
 }
 function installScrollRouter(opts) {
-  const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  const { auto: autoMotor, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  auto = autoMotor || auto || null;
   if (!viewer && hostEl) {
     viewer = hostEl;
   }
