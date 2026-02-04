@@ -41,10 +41,18 @@ function describeEl(el: Element | null | undefined): string {
 
 function shouldAllow(): boolean {
   try {
+    if ((window as any).__tpScrollGuardDevOverride) return true;
     if ((window as any).__tpScrollWriteActive) return true;
     if ((window as any).__tpScrollGuardDisabled) return true;
   } catch {}
   return false;
+}
+
+function shouldLog(): boolean {
+  try {
+    if ((window as any).__tpScrollGuardDevOverride) return true;
+  } catch {}
+  return !shouldAllow();
 }
 
 function shouldLogForTarget(target: Element, scroller: HTMLElement): boolean {
@@ -56,7 +64,7 @@ function shouldLogForTarget(target: Element, scroller: HTMLElement): boolean {
 }
 
 function logWrite(action: string, target: Element, value?: unknown) {
-  if (shouldAllow()) return;
+  if (!shouldLog()) return;
   const ctx = getScrollContext();
   const payload = {
     action,
@@ -82,6 +90,10 @@ function findScrollTopDescriptor(el: HTMLElement): PropertyDescriptor | undefine
 export function installScrollWriteGuard(scroller: HTMLElement | null | undefined): void {
   if (!scroller) return;
   if (!isDevMode()) return;
+  try {
+    (window as any).__tpScrollGuardDevOverride = true;
+    (window as any).__tpScrollWriteActive = true;
+  } catch {}
   const el = scroller as HTMLElement & { __tpScrollGuardInstalled?: boolean; __tpScrollGuardState?: GuardState };
   if (el.__tpScrollGuardInstalled) return;
   el.__tpScrollGuardInstalled = true;
