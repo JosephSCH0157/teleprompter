@@ -238,6 +238,25 @@ const POST_CATCHUP_MS = 2200;
 const POST_CATCHUP_DROP = 0.05;
 const POST_CATCHUP_MAX_DELTA = 24;
 const POST_CATCHUP_REQUIRE_IN_BAND = true;
+const DELTA_SMALL_MAX_LINES = 6;
+const DELTA_MED_MAX_LINES = 30;
+const DELTA_LARGE_MIN_LINES = 31;
+const DELTA_MIN_SIM_SMALL = 0.26;
+const DELTA_MIN_SIM_MED = 0.33;
+const DELTA_MIN_SIM_LARGE = 0.45;
+const LARGE_DELTA_CONFIRM_HITS = 2;
+const LARGE_DELTA_CONFIRM_WINDOW_MS = 1500;
+const LARGE_DELTA_CONFIRM_SPREAD = 6;
+const OVERSHOOT_RISK_DELTA_LINES = 30;
+const OVERSHOOT_RISK_WINDOW_MS = 3500;
+const OVERSHOOT_RISK_MIN_SIM = 0.4;
+const BEHIND_RECOVERY_WINDOW_MS = 2500;
+const BEHIND_RECOVERY_HITS = 3;
+const BEHIND_RECOVERY_CLUSTER_SPREAD = 6;
+const BEHIND_RECOVERY_MIN_DELTA = 6;
+const BEHIND_RECOVERY_MAX_REWIND = 20;
+const BEHIND_RECOVERY_MIN_SIM = 0.3;
+const BEHIND_RECOVERY_COOLDOWN_MS = 2500;
 const POST_CATCHUP_SAMPLES = 6;
 const DEFAULT_BACKJUMP_BLOCK_LINES = 5;
 const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
@@ -855,6 +874,113 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     scheduleAsrWriteCheck(scroller, currentTop, reason, targetTop, source);
     return appliedTop;
   }
+  const computeDeltaMinSim = (deltaLines: number): number => {
+    if (!Number.isFinite(deltaLines) || deltaLines <= 0) return 0;
+    if (deltaLines >= DELTA_LARGE_MIN_LINES) return DELTA_MIN_SIM_LARGE;
+    if (deltaLines >= DELTA_SMALL_MAX_LINES + 1 && deltaLines <= DELTA_MED_MAX_LINES) {
+      return DELTA_MIN_SIM_MED;
+    }
+    return DELTA_MIN_SIM_SMALL;
+  };
+  const confirmLargeDelta = (targetLine: number, now: number): boolean => {
+    if (!Number.isFinite(targetLine)) return false;
+    if (!largeDeltaConfirm) {
+      largeDeltaConfirm = { idx: targetLine, ts: now, hits: 1 };
+      return false;
+    }
+    const withinWindow = now - largeDeltaConfirm.ts <= LARGE_DELTA_CONFIRM_WINDOW_MS;
+    const withinBand = Math.abs(targetLine - largeDeltaConfirm.idx) <= LARGE_DELTA_CONFIRM_SPREAD;
+    if (!withinWindow || !withinBand) {
+      largeDeltaConfirm = { idx: targetLine, ts: now, hits: 1 };
+      return false;
+    }
+    largeDeltaConfirm.hits += 1;
+    largeDeltaConfirm.ts = now;
+    if (largeDeltaConfirm.hits >= LARGE_DELTA_CONFIRM_HITS) {
+      largeDeltaConfirm = null;
+      return true;
+    }
+    return false;
+  };
+  const recordBehindRecoveryHit = (idx: number, sim: number, isFinal: boolean, now: number) => {
+    if (!Number.isFinite(idx) || !Number.isFinite(sim)) return;
+    if (sim < BEHIND_RECOVERY_MIN_SIM) return;
+    behindRecoveryHits.push({ ts: now, idx: Math.max(0, Math.floor(idx)), sim, isFinal });
+    // prune old hits
+    for (let i = behindRecoveryHits.length - 1; i >= 0; i--) {
+      if (now - behindRecoveryHits[i].ts > BEHIND_RECOVERY_WINDOW_MS) {
+        behindRecoveryHits.splice(i, 1);
+      }
+    }
+  };
+  const tryBehindRecovery = (
+    cursorLine: number,
+    now: number,
+    conf: number,
+    rawIdx: number,
+    isFinal: boolean,
+  ): boolean => {
+    if (now - lastBehindRecoveryAt < BEHIND_RECOVERY_COOLDOWN_MS) return false;
+    if (cursorLine - rawIdx < BEHIND_RECOVERY_MIN_DELTA) return false;
+    const activeHits = behindRecoveryHits.filter((h) => now - h.ts <= BEHIND_RECOVERY_WINDOW_MS);
+    if (activeHits.length < BEHIND_RECOVERY_HITS) return false;
+    let minIdx = Infinity;
+    let maxIdx = -Infinity;
+    let finalCount = 0;
+    for (const hit of activeHits) {
+      if (hit.idx < minIdx) minIdx = hit.idx;
+      if (hit.idx > maxIdx) maxIdx = hit.idx;
+      if (hit.isFinal) finalCount += 1;
+    }
+    if (!Number.isFinite(minIdx) || !Number.isFinite(maxIdx)) return false;
+    if (maxIdx - minIdx > BEHIND_RECOVERY_CLUSTER_SPREAD) return false;
+    if (!isFinal && finalCount === 0 && conf < DELTA_MIN_SIM_MED) return false;
+    const targetIdxRaw = Math.min(cursorLine - 1, Math.max(0, Math.floor(maxIdx)));
+    const rewind = Math.max(0, cursorLine - targetIdxRaw);
+    if (rewind <= 0) return false;
+    const targetIdx = rewind > BEHIND_RECOVERY_MAX_REWIND
+      ? Math.max(0, cursorLine - BEHIND_RECOVERY_MAX_REWIND)
+      : targetIdxRaw;
+    const scroller = getScroller();
+    const targetTop = scroller ? resolveTargetTop(scroller, targetIdx) : null;
+    if (scroller && targetTop != null) {
+      const applied = applyScrollWithHybridGuard(targetTop, {
+        scroller,
+        reason: 'asr-behind-recovery',
+      });
+      lastKnownScrollTop = applied;
+      lastMoveAt = Date.now();
+      markProgrammaticScroll();
+    }
+    lastLineIndex = Math.max(0, Math.floor(targetIdx));
+    matchAnchorIdx = lastLineIndex;
+    lastForwardCommitAt = now;
+    lastSeekTs = now;
+    lastEvidenceAt = now;
+    noteCommit(cursorLine, lastLineIndex, now);
+    resetLowSimStreak();
+    behindStrongCount = 0;
+    lastBehindStrongIdx = -1;
+    lastBehindStrongAt = 0;
+    behindStrongSince = 0;
+    setCurrentIndex(lastLineIndex, 'behind-recovery');
+    resetLookahead('behind-recovery');
+    behindRecoveryHits.length = 0;
+    largeDeltaConfirm = null;
+    overshootRiskUntil = Math.max(overshootRiskUntil, now + OVERSHOOT_RISK_WINDOW_MS);
+    lastBehindRecoveryAt = now;
+    logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
+      prevIndex: cursorLine,
+      nextIndex: lastLineIndex,
+      delta: lastLineIndex - cursorLine,
+      sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+      forced: false,
+      mode: getScrollMode() || 'unknown',
+      reason: 'behind-recovery',
+    });
+    updateDebugState('behind-recovery');
+    return true;
+  };
   let lastEvidenceAt = 0;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
@@ -875,6 +1001,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindDebt = 0;
   let behindDebtStreak = 0;
   let lastBehindRecoveryAt = 0;
+  let overshootRiskUntil = 0;
+  let largeDeltaConfirm: { idx: number; ts: number; hits: number } | null = null;
+  const behindRecoveryHits: Array<{ ts: number; idx: number; sim: number; isFinal: boolean }> = [];
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -2020,6 +2149,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const matchThreshold = Number.isFinite(minThresholdValue)
         ? clamp(minThresholdValue, 0, 1)
         : baselineRequired;
+      const deltaLines = Math.max(0, Math.floor(line) - lastLineIndex);
+      const deltaMinSim = computeDeltaMinSim(deltaLines);
+      const overshootActive = now < overshootRiskUntil;
+      let effectiveMatchThreshold = Math.max(matchThreshold, deltaMinSim);
+      if (overshootActive) {
+        effectiveMatchThreshold = Math.max(effectiveMatchThreshold, OVERSHOOT_RISK_MIN_SIM);
+      }
       const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
       const tieMargin = typeof secondScore === 'number' && Number.isFinite(secondScore)
         ? conf - secondScore
@@ -2027,19 +2163,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           ? tieGap
           : undefined;
       const tieOk = tieMargin === undefined || tieMargin >= thresholds.tieDelta;
-      const strongMatch = conf >= matchThreshold && tieOk;
+      const strongMatch = conf >= effectiveMatchThreshold && tieOk;
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
           ? [`tie=${formatLogScore(tieMargin)}`, `tieNeed=${formatLogScore(thresholds.tieDelta)}`]
           : [];
+        const deltaParts = deltaMinSim > matchThreshold
+          ? [`deltaNeed=${formatLogScore(deltaMinSim)}`]
+          : [];
+        const riskParts = overshootActive ? ['overshoot=1'] : [];
         warnGuard('low_sim', [
           matchId ? `matchId=${matchId}` : '',
           `current=${lastLineIndex}`,
           `best=${line}`,
           `delta=${line - lastLineIndex}`,
           `sim=${formatLogScore(conf)}`,
-          `need=${formatLogScore(matchThreshold)}`,
+          `need=${formatLogScore(effectiveMatchThreshold)}`,
           ...tieParts,
+          ...deltaParts,
+          ...riskParts,
           relockOverride ? `relock=1` : '',
           relockReason ? `relockReason=${relockReason}` : '',
           Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
@@ -2051,7 +2193,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ]);
         emitHudStatus(
           'low_sim',
-          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(matchThreshold)})`,
+          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveMatchThreshold)})`,
         );
         noteLowSimFreeze(Date.now(), {
           cursorLine: lastLineIndex,
@@ -2059,8 +2201,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           delta: line - lastLineIndex,
           sim: conf,
           inBand: true,
-          requiredSim: baselineRequired,
-          need: matchThreshold,
+          requiredSim: effectiveMatchThreshold,
+          need: effectiveMatchThreshold,
           repeatCount: relockRepeat || 0,
           bestSpan: relockSpan,
           overlapRatio: relockOverlapRatio,
@@ -2075,6 +2217,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       let targetLine = Math.max(0, Math.floor(line));
+      const confirmDelta = targetLine - lastLineIndex;
+      if (confirmDelta < DELTA_LARGE_MIN_LINES && largeDeltaConfirm) {
+        largeDeltaConfirm = null;
+      }
+      if (confirmDelta >= DELTA_LARGE_MIN_LINES) {
+        const confirmed = confirmLargeDelta(targetLine, now);
+        if (!confirmed) {
+          warnGuard('large_delta_confirm', [
+            `current=${lastLineIndex}`,
+            `best=${targetLine}`,
+            `delta=${confirmDelta}`,
+            `need=${LARGE_DELTA_CONFIRM_HITS}`,
+            `window=${LARGE_DELTA_CONFIRM_WINDOW_MS}`,
+          ]);
+          emitHudStatus(
+            'confirmations',
+            `Waiting: large jump confirm (${confirmDelta} lines)`,
+          );
+          return;
+        }
+      }
       let lineEl = getLineElementByIndex(scroller, targetLine);
       if (!lineEl) {
         lineEl = await findLineElWithRetry(scroller, targetLine);
@@ -2407,6 +2570,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         jumpHistory.push(now);
       }
       noteCommit(prevLineIndex, targetLine, now);
+      if (forwardDelta >= OVERSHOOT_RISK_DELTA_LINES) {
+        overshootRiskUntil = now + OVERSHOOT_RISK_WINDOW_MS;
+        logDev('overshoot risk', { delta: forwardDelta, until: overshootRiskUntil });
+      }
+      behindRecoveryHits.length = 0;
+      largeDeltaConfirm = null;
       if (pending.recoveryDetails && isDevMode()) {
         const { delta: recDelta, sim: recSim, streak, debt } = pending.recoveryDetails;
         const msg = `[ASR_RECOVERY] commit delta=${recDelta} sim=${formatLogScore(recSim)} streak=${streak} debt=${debt}`;
@@ -2421,8 +2590,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
       try {
         const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
+        const fromTop = Number.isFinite(currentTop) ? Math.round(currentTop) : currentTop;
+        const toTop = Number.isFinite(pursuitTargetTop ?? currentTop)
+          ? Math.round((pursuitTargetTop ?? currentTop) as number)
+          : (pursuitTargetTop ?? currentTop);
+        const movedPx =
+          typeof fromTop === 'number' && typeof toTop === 'number' ? Math.round(toTop - fromTop) : 0;
+        const targetElFound = !!lineEl;
         console.log(
-          `[ASR_DRIVER] driveToLine best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=transcript`,
+          `[ASR_DRIVER] driveToLine best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=transcript fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
         );
       } catch {}
       const intendedTargetTop = pursuitTargetTop ?? currentTop;
@@ -3551,6 +3727,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const behindBy = cursorLine - rawIdx;
     if (behindBy > 0) {
+      recordBehindRecoveryHit(rawIdx, conf, isFinal, now);
+      if (tryBehindRecovery(cursorLine, now, conf, rawIdx, isFinal)) {
+        return;
+      }
       if (!isFinal) {
         behindStrongCount = 0;
         lastBehindStrongIdx = -1;
@@ -3814,6 +3994,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     behindStrongSince = 0;
     behindStrongCount = 0;
     lastBehindRecoveryAt = 0;
+    overshootRiskUntil = 0;
+    largeDeltaConfirm = null;
+    behindRecoveryHits.length = 0;
     lagRelockHits = 0;
     lagRelockWindowStart = 0;
     lastForwardCommitAt = Date.now();
