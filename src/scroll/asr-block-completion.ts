@@ -14,15 +14,16 @@ export type CompletionEvidence = {
 };
 
 export type CompletionDecision =
-  | { ok: true; reason: "complete"; confidence: number }
+  | { ok: true; status: "complete"; reason: "complete"; confidence: number }
   | {
       ok: false;
-      reason:
-        | "incomplete_last_line"
-        | "incomplete_coverage"
-        | "no_boundary"
-        | "not_final"
-        | "insufficient_evidence";
+      status: "incomplete";
+      reason: "incomplete_last_line" | "incomplete_coverage" | "no_boundary";
+    }
+  | {
+      ok: false;
+      status: "unknown";
+      reason: "not_final" | "insufficient_evidence";
     };
 
 export type CompletionPolicy = {
@@ -49,9 +50,11 @@ export function decideBlockCompletion(
 ): CompletionDecision {
   const resolved: CompletionPolicy = { ...DEFAULT_COMPLETION_POLICY, ...policy };
   const totalLines = Number.isFinite(e.totalLinesInBlock) ? e.totalLinesInBlock : 0;
-  if (totalLines <= 0) return { ok: false, reason: "insufficient_evidence" };
+  if (totalLines <= 0) {
+    return { ok: false, status: "unknown", reason: "insufficient_evidence" };
+  }
   if (resolved.requireBoundaryCross && !e.boundaryCrossed) {
-    return { ok: false, reason: "no_boundary" };
+    return { ok: false, status: "incomplete", reason: "no_boundary" };
   }
 
   const coverage = clamp01(Number(e.coverageRatio) || 0);
@@ -60,29 +63,29 @@ export function decideBlockCompletion(
   if (!e.hasFinal) {
     if (coverage >= resolved.minCoverageNoFinal) {
       const confidence = clamp01(coverage);
-      return { ok: true, reason: "complete", confidence };
+      return { ok: true, status: "complete", reason: "complete", confidence };
     }
-    return { ok: false, reason: "not_final" };
+    return { ok: false, status: "unknown", reason: "not_final" };
   }
 
   if (e.matchedLastLine) {
     let confidence = clamp01(coverage + 0.2);
     if (trailingMatched >= resolved.minTrailingLinesMatched) confidence = clamp01(confidence + 0.1);
-    return { ok: true, reason: "complete", confidence };
+    return { ok: true, status: "complete", reason: "complete", confidence };
   }
   if (trailingMatched >= resolved.minTrailingLinesMatched) {
     const confidence = clamp01(coverage + 0.1);
-    return { ok: true, reason: "complete", confidence };
+    return { ok: true, status: "complete", reason: "complete", confidence };
   }
   if (coverage >= resolved.minCoverageFinal) {
     const confidence = clamp01(coverage);
-    return { ok: true, reason: "complete", confidence };
+    return { ok: true, status: "complete", reason: "complete", confidence };
   }
 
   if (trailingMatched <= 0) {
-    return { ok: false, reason: "incomplete_last_line" };
+    return { ok: false, status: "incomplete", reason: "incomplete_last_line" };
   }
-  return { ok: false, reason: "incomplete_coverage" };
+  return { ok: false, status: "incomplete", reason: "incomplete_coverage" };
 }
 
 // Dev-only self-check (example):

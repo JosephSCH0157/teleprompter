@@ -428,9 +428,12 @@ function recordAsrAccept(
   candidateBlockIdx: number,
   completionEvidenceSummary?: string,
   completionConfidence?: number,
+  completionStatus?: 'complete' | 'unknown',
+  completionReason?: string,
 ) {
   if (!telemetry) return;
   telemetry.commitAccepted += 1;
+  const resolvedStatus = completionStatus || 'complete';
   telemetry.last = {
     ts: now,
     mode,
@@ -439,8 +442,8 @@ function recordAsrAccept(
     candidateBlockIdx,
     decision: 'accept',
     completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
-    completionOk: true,
-    completionReason: 'complete',
+    completionOk: resolvedStatus === 'complete',
+    completionReason: completionReason || (resolvedStatus === 'complete' ? 'complete' : 'unknown'),
     completionConfidence: Number.isFinite(completionConfidence as number)
       ? (completionConfidence as number)
       : telemetry.last?.completionConfidence,
@@ -3200,6 +3203,8 @@ function installScrollRouter(opts) {
 
         const completionGateEnabled = isAsrCompletionGateEnabled();
         let completionDecisionConfidence: number | undefined;
+        let completionStatus: 'complete' | 'unknown' = 'complete';
+        let completionReason: string | undefined;
         if (completionGateEnabled) {
           let completionEvidence = telemetry?.completionEvidence ?? null;
           if (!completionEvidence) {
@@ -3211,71 +3216,55 @@ function installScrollRouter(opts) {
                   console.warn('[ASR_COMPLETION] evidence build failed', { err });
                 } catch {}
               }
-              recordAsrReject(
-                telemetry,
-                now,
-                'reject_completion_exception',
-                state2.mode,
-                sessionPhase,
-                committedBlockIdx,
-                blockIdx,
-                telemetry?.completionEvidenceSummary,
-              );
-              return;
+              completionStatus = 'unknown';
+              completionReason = 'exception';
             }
           }
           if (telemetry) {
             telemetry.completionEvidence = completionEvidence;
             telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(completionEvidence);
           }
-          if (!completionEvidence) {
-            recordAsrReject(
-              telemetry,
-              now,
-              'reject_completion_no_evidence',
-              state2.mode,
-              sessionPhase,
-              committedBlockIdx,
-              blockIdx,
-              telemetry?.completionEvidenceSummary,
-            );
-            return;
-          }
-          let completionDecision;
-          try {
-            completionDecision = decideBlockCompletion(completionEvidence);
-          } catch (err) {
-            if (isDevMode()) {
-              try {
-                console.warn('[ASR_COMPLETION] decision failed', { err });
-              } catch {}
+          if (completionStatus === 'unknown' && completionReason === 'exception') {
+            // fall through: unknown should not block
+          } else if (!completionEvidence) {
+            completionStatus = 'unknown';
+            completionReason = 'insufficient_evidence';
+          } else {
+            let completionDecision;
+            try {
+              completionDecision = decideBlockCompletion(completionEvidence);
+            } catch (err) {
+              if (isDevMode()) {
+                try {
+                  console.warn('[ASR_COMPLETION] decision failed', { err });
+                } catch {}
+              }
+              completionStatus = 'unknown';
+              completionReason = 'exception';
             }
-            recordAsrReject(
-              telemetry,
-              now,
-              'reject_completion_exception',
-              state2.mode,
-              sessionPhase,
-              committedBlockIdx,
-              blockIdx,
-              telemetry?.completionEvidenceSummary,
-            );
-            return;
+            if (completionDecision) {
+              if (completionDecision.ok) {
+                completionDecisionConfidence = completionDecision.confidence;
+                completionStatus = 'complete';
+                completionReason = completionDecision.reason;
+              } else if (completionDecision.status === 'incomplete') {
+                recordAsrReject(
+                  telemetry,
+                  now,
+                  `reject_completion_${completionDecision.reason}`,
+                  state2.mode,
+                  sessionPhase,
+                  committedBlockIdx,
+                  blockIdx,
+                  telemetry?.completionEvidenceSummary,
+                );
+                return;
+              } else {
+                completionStatus = 'unknown';
+                completionReason = completionDecision.reason;
+              }
+            }
           }
-          if (!completionDecision.ok) {
-            recordAsrReject(
-              telemetry,
-              now,
-              `reject_completion_${completionDecision.reason}`,
-              state2.mode,
-              sessionPhase,
-              committedBlockIdx,
-              blockIdx,
-              telemetry?.completionEvidenceSummary,
-            );
-            return;
-          }
-          completionDecisionConfidence = completionDecision.confidence;
         } else if (isDevMode() && !asrCompletionGateBypassLogged) {
           asrCompletionGateBypassLogged = true;
           try {
@@ -3295,6 +3284,8 @@ function installScrollRouter(opts) {
           blockIdx,
           telemetry?.completionEvidenceSummary,
           completionDecisionConfidence,
+          completionStatus,
+          completionReason,
         );
       } catch {}
     });
