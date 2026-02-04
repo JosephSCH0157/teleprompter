@@ -17,10 +17,24 @@ let cached: ScrollWriter | null = null;
 let warned = false;
 let activeSeekAnim: { cancel: () => void } | null = null;
 
-function withWriteEnabled<T>(fn: () => T): T {
+function shouldTraceWrites(): boolean {
+  try {
+    const w = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1) return true;
+    const qs = new URLSearchParams(String(location.search || ''));
+    if (qs.get('dev') === '1' || qs.has('dev')) return true;
+    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
+  } catch {}
+  return false;
+}
+
+function withWriteEnabled<T>(reason: string, delta: number, fn: () => T): T {
   const w = window as any;
   const prev = w.__tpScrollWriteActive;
   w.__tpScrollWriteActive = true;
+  if (shouldTraceWrites()) {
+    try { console.trace('[scroll-write]', reason, delta); } catch {}
+  }
   try { return fn(); }
   finally { w.__tpScrollWriteActive = prev; }
 }
@@ -137,8 +151,30 @@ function readScrollTop(scroller: HTMLElement): number {
   return scroller.scrollTop || 0;
 }
 
-function writeScrollTop(scroller: HTMLElement, top: number): void {
-  withWriteEnabled(() => {
+function getDeltaScroller(): HTMLElement | null {
+  return (
+    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+    (document.getElementById('viewer') as HTMLElement | null) ||
+    (document.scrollingElement as HTMLElement | null) ||
+    (document.documentElement as HTMLElement | null) ||
+    (document.body as HTMLElement | null)
+  );
+}
+
+function estimateDelta(targetTop: number): number {
+  try {
+    const sc = getDeltaScroller();
+    const cur = sc ? readScrollTop(sc) : 0;
+    return (Number(targetTop) || 0) - (Number(cur) || 0);
+  } catch {
+    return Number(targetTop) || 0;
+  }
+}
+
+function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrollTop'): void {
+  const from = readScrollTop(scroller);
+  const delta = (Number(top) || 0) - (Number(from) || 0);
+  withWriteEnabled(reason, delta, () => {
     if (isWindowScroller(scroller)) {
       window.scrollTo({ top, behavior: 'auto' });
     } else {
@@ -174,13 +210,19 @@ export function getScrollWriter(): ScrollWriter {
         (document.body as HTMLElement | null);
       cached = {
         scrollTo(top: number) {
-          try { withWriteEnabled(() => fn(top)); } catch {}
+          try {
+            const sc = getScroller();
+            const cur = sc ? (sc.scrollTop || 0) : 0;
+            const next = Number(top) || 0;
+            withWriteEnabled('scrollTo', next - cur, () => fn(next));
+          } catch {}
         },
         scrollBy(delta: number) {
           try {
             const sc = getScroller();
             const cur = sc ? (sc.scrollTop || 0) : 0;
-            withWriteEnabled(() => fn(cur + (Number(delta) || 0)));
+            const d = Number(delta) || 0;
+            withWriteEnabled('scrollBy', d, () => fn(cur + d));
           } catch {}
         },
         ensureVisible(_top: number, _paddingPx?: number) {
@@ -194,18 +236,19 @@ export function getScrollWriter(): ScrollWriter {
       if (typeof w.scrollTo === 'function' && typeof w.scrollBy === 'function') {
         const writerImpl = w as { scrollTo: (_top: number, _opts?: any) => void; scrollBy: (_delta: number, _opts?: any) => void; ensureVisible?: (_top: number, _pad?: number) => void };
         cached = {
-        scrollTo(top: number, opts?: { behavior?: ScrollBehavior }) {
-            try { withWriteEnabled(() => writerImpl.scrollTo(top, opts)); } catch {}
+          scrollTo(top: number, opts?: { behavior?: ScrollBehavior }) {
+            try { withWriteEnabled('scrollTo', estimateDelta(top), () => writerImpl.scrollTo(top, opts)); } catch {}
           },
           scrollBy(delta: number, opts?: { behavior?: ScrollBehavior }) {
-            try { withWriteEnabled(() => writerImpl.scrollBy(delta, opts)); } catch {}
+            try { withWriteEnabled('scrollBy', Number(delta) || 0, () => writerImpl.scrollBy(delta, opts)); } catch {}
           },
           ensureVisible(top: number, paddingPx = 80) {
             try {
               if (typeof writerImpl.ensureVisible === 'function') {
-                withWriteEnabled(() => writerImpl.ensureVisible!(top, paddingPx));
+                withWriteEnabled('ensureVisible', estimateDelta(top), () => writerImpl.ensureVisible!(top, paddingPx));
               } else {
-                withWriteEnabled(() => writerImpl.scrollTo(Math.max(0, top - paddingPx), { behavior: 'auto' }));
+                const next = Math.max(0, top - paddingPx);
+                withWriteEnabled('ensureVisible', estimateDelta(next), () => writerImpl.scrollTo(next, { behavior: 'auto' }));
               }
             } catch {}
           },
@@ -238,7 +281,7 @@ export function seekToBlock(blockIdx: number, reason: string) {
   const { scroller, top } = target;
 
   try {
-    withWriteEnabled(() => writeScrollTop(scroller, top));
+    writeScrollTop(scroller, top, reason || 'seekToBlock');
     try {
       if (reason && typeof console !== 'undefined') {
         (console as any).debug?.('[scroll-writer] seekToBlock', { blockIdx, reason });
@@ -261,7 +304,7 @@ export function seekToBlockAnimated(blockIdx: number, reason: string) {
   const { scroller, top: targetTop } = target;
   const startTop = readScrollTop(scroller);
   if (!Number.isFinite(targetTop) || Math.abs(targetTop - startTop) < 0.5) {
-    withWriteEnabled(() => writeScrollTop(scroller, targetTop));
+    writeScrollTop(scroller, targetTop, reason || 'seekToBlockAnimated');
     return;
   }
   const durationMs = 200;
@@ -279,7 +322,7 @@ export function seekToBlockAnimated(blockIdx: number, reason: string) {
     const t = Math.max(0, Math.min(1, elapsed / durationMs));
     const eased = 1 - Math.pow(1 - t, 3);
     const next = startTop + (targetTop - startTop) * eased;
-    withWriteEnabled(() => writeScrollTop(scroller, next));
+    writeScrollTop(scroller, next, reason || 'seekToBlockAnimated');
     if (t < 1) {
       requestAnimationFrame(tick);
     } else {
