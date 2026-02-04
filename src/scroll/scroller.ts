@@ -3,9 +3,31 @@ import { computeAnchorLineIndex, shouldLogScrollWrite } from './scroll-helpers';
 let displayScrollChannel: BroadcastChannel | null = null;
 let scrollEventTrackerInstalled = false;
 
+function isElementLike(node: unknown): node is HTMLElement {
+  return !!node && typeof node === 'object' && (node as any).nodeType === 1;
+}
+
+export function getDisplayViewerElement(): HTMLElement | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const w = window as any;
+    const direct = w.__tpDisplayViewerEl;
+    if (isElementLike(direct)) return direct as HTMLElement;
+    const opener = w.opener as any;
+    const viaOpener = opener && !opener.closed ? opener.__tpDisplayViewerEl : null;
+    if (isElementLike(viaOpener)) return viaOpener as HTMLElement;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export function getScrollContainer(): HTMLElement | null {
   try {
-    return document.getElementById('scriptScrollContainer') as HTMLElement | null;
+    return (
+      (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+      (document.getElementById('wrap') as HTMLElement | null)
+    );
   } catch {
     return null;
   }
@@ -15,10 +37,12 @@ export function getViewerElement(): HTMLElement | null {
   try {
     return (
       (document.getElementById('viewer') as HTMLElement | null) ||
-      (document.querySelector('[data-role="viewer"]') as HTMLElement | null)
+      (document.querySelector('[data-role="viewer"]') as HTMLElement | null) ||
+      (document.getElementById('wrap') as HTMLElement | null) ||
+      getDisplayViewerElement()
     );
   } catch {
-    return null;
+    return getDisplayViewerElement();
   }
 }
 
@@ -71,7 +95,7 @@ export function describeElement(el: HTMLElement | null): string {
 }
 
 export function getPrimaryScroller(): HTMLElement | null {
-  return getScrollContainer() || getViewerElement();
+  return getScrollContainer() || getViewerElement() || getDisplayViewerElement();
 }
 
 function isDisplayWindow(): boolean {

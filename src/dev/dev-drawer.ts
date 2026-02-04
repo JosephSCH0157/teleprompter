@@ -59,11 +59,32 @@ function describeElement(el: Element | null | undefined): string {
   return `${el.tagName.toLowerCase()}${id}${cls}`;
 }
 
+function isElementLike(node: unknown): node is HTMLElement {
+  return !!node && typeof node === 'object' && (node as any).nodeType === 1;
+}
+
+function getDisplayViewerEl(): HTMLElement | null {
+  if (!isBrowser()) return null;
+  try {
+    const w = window as any;
+    const direct = w.__tpDisplayViewerEl;
+    if (isElementLike(direct)) return direct as HTMLElement;
+    const opener = w.opener as any;
+    const viaOpener = opener && !opener.closed ? opener.__tpDisplayViewerEl : null;
+    if (isElementLike(viaOpener)) return viaOpener as HTMLElement;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function getKickScroller(): HTMLElement | null {
   if (!isBrowser()) return null;
   return (
     (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
     (document.getElementById('viewer') as HTMLElement | null) ||
+    (document.getElementById('wrap') as HTMLElement | null) ||
+    getDisplayViewerEl() ||
     (document.scrollingElement as HTMLElement | null) ||
     (document.documentElement as HTMLElement | null) ||
     (document.body as HTMLElement | null)

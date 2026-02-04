@@ -2,7 +2,7 @@
 // All code that moves the main script viewport should route through this helper.
 
 import { getAsrBlockElements } from './asr-block-store';
-import { getViewerElement } from './scroller';
+import { getDisplayViewerElement, getViewerElement } from './scroller';
 
 export interface ScrollWriter {
   /** Absolute scroll in CSS px from top of script viewport. */
@@ -155,6 +155,8 @@ function getDeltaScroller(): HTMLElement | null {
   return (
     (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
     (document.getElementById('viewer') as HTMLElement | null) ||
+    (document.getElementById('wrap') as HTMLElement | null) ||
+    getDisplayViewerElement() ||
     (document.scrollingElement as HTMLElement | null) ||
     (document.documentElement as HTMLElement | null) ||
     (document.body as HTMLElement | null)

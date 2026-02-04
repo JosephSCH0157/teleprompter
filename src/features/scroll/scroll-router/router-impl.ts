@@ -532,10 +532,38 @@ const nowMs = () =>
     ? performance.now()
     : Date.now();
 
+const KNOWN_SCROLL_MODES = new Set([
+  'hybrid',
+  'timed',
+  'wpm',
+  'asr',
+  'step',
+  'rehearsal',
+]);
+
+function normalizeScrollModeValue(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === 'manual' || raw === 'off') return 'step';
+  if (raw === 'auto') return 'timed';
+  return KNOWN_SCROLL_MODES.has(raw) ? raw : null;
+}
+
 function getScrollMode(): string {
   try {
-    const mode = (state2 as any)?.mode;
-    if (typeof mode === 'string' && mode) return mode;
+    const w = typeof window !== 'undefined' ? (window as any) : null;
+    const override = normalizeScrollModeValue(w?.__tpModeOverride);
+    if (override) return override;
+    const store = w?.__tpStore || appStore;
+    const storeMode = normalizeScrollModeValue(store?.get?.('scrollMode'));
+    if (storeMode) return storeMode;
+    const uiMode = normalizeScrollModeValue(w?.__tpUiScrollMode);
+    if (uiMode) return uiMode;
+    const legacyMode = normalizeScrollModeValue(w?.__tpScrollMode);
+    if (legacyMode) return legacyMode;
+    const mode = normalizeScrollModeValue((state2 as any)?.mode);
+    if (mode) return mode;
   } catch {
     // ignore
   }
@@ -2880,8 +2908,24 @@ function installScrollRouter(opts) {
   } catch {
   }
   restoreMode();
+  try {
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    const storeMode = normalizeScrollModeValue(store?.get?.("scrollMode"));
+    if (storeMode && storeMode !== state2.mode) {
+      state2.mode = storeMode;
+    }
+  } catch {}
   applyMode(state2.mode);
   emitScrollModeSnapshot("mode-change");
+  try {
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    store?.subscribe?.("scrollMode", (next) => {
+      const normalized = normalizeScrollModeValue(next);
+      if (!normalized || normalized === state2.mode) return;
+      applyMode(normalized);
+      emitScrollModeSnapshot("store-change");
+    });
+  } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     seedHybridBaseSpeed();
   }
@@ -3784,7 +3828,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
   }
   function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
-    if (state2.mode !== "hybrid") return;
+    if (getScrollMode() !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(detail.timestamp, perfNow);
     const isNoMatch = detail.noMatch === true;
@@ -3822,7 +3866,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     window.addEventListener("tp:asr:sync", (ev) => {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
-      if (state2.mode !== "hybrid") return;
+      if (getScrollMode() !== "hybrid") return;
       try {
         noteHybridSpeechActivity(ts, { source: "sync", noMatch: detail.noMatch === true });
       } catch (err) {
