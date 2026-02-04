@@ -2419,6 +2419,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       resetLowSimStreak();
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
+      try {
+        const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
+        console.log(
+          `[ASR_DRIVER] driveToLine best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=transcript`,
+        );
+      } catch {}
       const intendedTargetTop = pursuitTargetTop ?? currentTop;
       try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {

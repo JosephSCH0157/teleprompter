@@ -75,7 +75,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
   const rawMode = appStore.get('scrollMode') as string | undefined;
   const canonicalMode = normalizeScrollMode(rawMode);
   const canonicalModeStr = String(canonicalMode);
-  const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(rawMode);
+  const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(canonicalMode);
   if (phase !== 'live') {
     if (prevPhase === 'live' && shouldStopAutoForPhase(phase)) {
       stopAutoScroll({
@@ -177,7 +177,7 @@ export function initScrollSessionRouter(): void {
       }
       const rawMode = appStore.get('scrollMode') as string | undefined;
       const canonicalMode = normalizeScrollMode(rawMode);
-      if (!shouldAutoStartForMode(rawMode)) {
+      if (!shouldAutoStartForMode(canonicalMode)) {
         try { console.debug('[scroll-session] auto-scroll disabled for this mode (manual block)', { mode: canonicalMode }); } catch {}
         return;
       }
