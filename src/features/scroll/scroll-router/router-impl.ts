@@ -5,7 +5,11 @@ import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-wri
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { getAsrBlockElements } from '../../../scroll/asr-block-store';
-import { DEFAULT_COMPLETION_POLICY, type CompletionEvidence } from '../../../scroll/asr-block-completion';
+import {
+  DEFAULT_COMPLETION_POLICY,
+  decideBlockCompletion,
+  type CompletionEvidence,
+} from '../../../scroll/asr-block-completion';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -156,6 +160,9 @@ type AsrTelemetryLast = {
   decision: AsrTelemetryDecision;
   rejectReason?: string;
   completionEvidenceSummary?: string;
+  completionOk?: boolean;
+  completionReason?: string;
+  completionConfidence?: number;
 };
 type AsrTelemetry = {
   intentsSeen: number;
@@ -392,6 +399,10 @@ function recordAsrReject(
     decision: 'reject',
     rejectReason: reasonKey,
     completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
+    completionOk: reasonKey.startsWith('reject_completion_') ? false : telemetry.last?.completionOk,
+    completionReason: reasonKey.startsWith('reject_completion_')
+      ? reasonKey.replace('reject_completion_', '')
+      : telemetry.last?.completionReason,
   };
 }
 
@@ -403,6 +414,7 @@ function recordAsrAccept(
   currentBlockIdx: number,
   candidateBlockIdx: number,
   completionEvidenceSummary?: string,
+  completionConfidence?: number,
 ) {
   if (!telemetry) return;
   telemetry.commitAccepted += 1;
@@ -414,6 +426,11 @@ function recordAsrAccept(
     candidateBlockIdx,
     decision: 'accept',
     completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
+    completionOk: true,
+    completionReason: 'complete',
+    completionConfidence: Number.isFinite(completionConfidence as number)
+      ? (completionConfidence as number)
+      : telemetry.last?.completionConfidence,
   };
 }
 const hybridSilence = {
@@ -3104,6 +3121,7 @@ function installScrollRouter(opts) {
 
         const isFinal = intentReason.includes('final');
         const isInterim = intentReason.includes('interim') && !isFinal;
+        const isRescue = intentReason.includes('rescue');
         if (isInterim) {
           if (blockIdx !== lastCandidate) {
             lastCandidate = blockIdx;
@@ -3113,6 +3131,22 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_not_final',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (isRescue) {
+          recentAsrMatches = [];
+          lastCandidate = -1;
+          stableSince = now;
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_rescue',
             state2.mode,
             sessionPhase,
             committedBlockIdx,
@@ -3151,6 +3185,59 @@ function installScrollRouter(opts) {
           return;
         }
 
+        const completionEvidence = buildCompletionEvidence(committedBlockIdx, blockIdx, now);
+        if (telemetry) {
+          telemetry.completionEvidence = completionEvidence;
+          telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(completionEvidence);
+        }
+        if (!completionEvidence) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_completion_no_evidence',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        let completionDecision;
+        try {
+          completionDecision = decideBlockCompletion(completionEvidence);
+        } catch (err) {
+          if (isDevMode()) {
+            try {
+              console.warn('[ASR_COMPLETION] decision failed', { err });
+            } catch {}
+          }
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_completion_exception',
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (!completionDecision.ok) {
+          recordAsrReject(
+            telemetry,
+            now,
+            `reject_completion_${completionDecision.reason}`,
+            state2.mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+
         seekToBlockAnimated(blockIdx, 'asr_commit');
         committedBlockIdx = blockIdx;
         lastCommitAt = now;
@@ -3162,6 +3249,7 @@ function installScrollRouter(opts) {
           committedBlockIdx,
           blockIdx,
           telemetry?.completionEvidenceSummary,
+          completionDecision.confidence,
         );
       } catch {}
     });

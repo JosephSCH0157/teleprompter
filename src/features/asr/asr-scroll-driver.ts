@@ -1608,11 +1608,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         typeof telemetry.completionEvidenceSummary === 'string'
           ? telemetry.completionEvidenceSummary
           : '';
+      const last = telemetry.last || {};
+      const rejectReason = typeof last.rejectReason === 'string' ? last.rejectReason : '';
+      const completionReason = rejectReason.startsWith('reject_completion_')
+        ? rejectReason.replace('reject_completion_', '')
+        : '';
       if (!topText && accept === 0 && reject === 0 && !evidenceSummary) return '';
       const base = `accept ${accept} / rej ${reject}`;
       const parts = [base];
       if (topText) parts.push(`top: ${topText}`);
       if (evidenceSummary) parts.push(evidenceSummary);
+      if (completionReason) parts.push(`comp=${completionReason}`);
       return parts.join(' • ');
     } catch {
       return '';
