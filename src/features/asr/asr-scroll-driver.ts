@@ -1609,16 +1609,35 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           ? telemetry.completionEvidenceSummary
           : '';
       const last = telemetry.last || {};
+      const mode =
+        typeof last.mode === 'string' && last.mode ? String(last.mode).toLowerCase() : '';
       const rejectReason = typeof last.rejectReason === 'string' ? last.rejectReason : '';
-      const completionReason = rejectReason.startsWith('reject_completion_')
-        ? rejectReason.replace('reject_completion_', '')
-        : '';
+      const completionOk = typeof last.completionOk === 'boolean' ? last.completionOk : null;
+      const completionReason =
+        typeof last.completionReason === 'string' ? last.completionReason : '';
+      let lastResult = '';
+      if (last.decision === 'reject') {
+        if (rejectReason.startsWith('reject_completion_')) {
+          lastResult = `rejected=${rejectReason.replace('reject_completion_', '')}`;
+        } else if (rejectReason.startsWith('reject_')) {
+          lastResult = `blocked=${rejectReason.replace('reject_', '')}`;
+        } else if (rejectReason) {
+          lastResult = `blocked=${rejectReason}`;
+        }
+      } else if (last.decision === 'accept') {
+        if (completionOk === false) {
+          lastResult = `comp=${completionReason || 'unknown'}`;
+        } else if (completionOk === true) {
+          lastResult = `comp=${completionReason || 'complete'}`;
+        }
+      }
       if (!topText && accept === 0 && reject === 0 && !evidenceSummary) return '';
       const base = `accept ${accept} / rej ${reject}`;
       const parts = [base];
+      if (mode) parts.push(`mode=${mode}`);
       if (topText) parts.push(`top: ${topText}`);
       if (evidenceSummary) parts.push(evidenceSummary);
-      if (completionReason) parts.push(`comp=${completionReason}`);
+      if (lastResult) parts.push(lastResult);
       return parts.join(' • ');
     } catch {
       return '';

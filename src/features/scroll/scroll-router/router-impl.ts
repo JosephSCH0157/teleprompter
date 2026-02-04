@@ -152,6 +152,7 @@ let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
+let hybridModeMismatchLogged = false;
 let recentAsrMatches: Array<{
   ts: number;
   blockIdx: number;
@@ -161,6 +162,17 @@ let recentAsrMatches: Array<{
 }> = [];
 let asrBlockLineCacheRef: HTMLElement[] | null = null;
 const asrBlockLineCache = new Map<number, number[]>();
+function logHybridModeMismatch(source: string) {
+  if (!isDevMode()) return;
+  if (hybridModeMismatchLogged) return;
+  hybridModeMismatchLogged = true;
+  try {
+    console.warn('[HYBRID] activity blocked (mode mismatch)', {
+      source,
+      mode: getScrollMode(),
+    });
+  } catch {}
+}
 
 type AsrTelemetryDecision = 'accept' | 'reject';
 type AsrRejectEvent = { ts: number; reason: string };
@@ -519,6 +531,16 @@ const nowMs = () =>
   (typeof performance !== 'undefined' && typeof performance.now === 'function')
     ? performance.now()
     : Date.now();
+
+function getScrollMode(): string {
+  try {
+    const mode = (state2 as any)?.mode;
+    if (typeof mode === 'string' && mode) return mode;
+  } catch {
+    // ignore
+  }
+  return 'hybrid';
+}
 
 function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
   const perfNow = Number.isFinite(referenceNow) ? referenceNow : nowMs();
@@ -2986,6 +3008,7 @@ function installScrollRouter(opts) {
         const intentReason = typeof intent.reason === 'string' ? intent.reason : '';
         recordAsrIntentTelemetry(telemetry, intentReason);
         const now = Date.now();
+        const mode = getScrollMode();
         recordAsrMatchEvent(now, intent, intentReason);
         if (telemetry) {
           telemetry.completionEvidence = null;
@@ -2996,7 +3019,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_kind',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
@@ -3004,12 +3027,12 @@ function installScrollRouter(opts) {
           );
           return;
         }
-        if (state2.mode !== 'asr') {
+        if (mode !== 'asr') {
           recordAsrReject(
             telemetry,
             now,
             'reject_mode',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
@@ -3022,7 +3045,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_phase',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
@@ -3042,7 +3065,7 @@ function installScrollRouter(opts) {
                   autoEnabled,
                   autoRunning,
                   hybridRunning,
-                  mode: state2.mode,
+                  mode,
                   phase: sessionPhase,
                 });
               } catch {}
@@ -3071,7 +3094,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_warmup',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
@@ -3085,7 +3108,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_invalid_target',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             resolveAsrIntentCandidateBlockIdx(intent),
@@ -3100,7 +3123,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             reasonKey,
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3113,7 +3136,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_debounce',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3126,7 +3149,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_low_confidence',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3147,7 +3170,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_not_final',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3163,7 +3186,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_rescue',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3178,7 +3201,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_stability',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3192,7 +3215,7 @@ function installScrollRouter(opts) {
             telemetry,
             now,
             'reject_stability',
-            state2.mode,
+            mode,
             sessionPhase,
             committedBlockIdx,
             blockIdx,
@@ -3252,7 +3275,7 @@ function installScrollRouter(opts) {
                   telemetry,
                   now,
                   `reject_completion_${completionDecision.reason}`,
-                  state2.mode,
+                  mode,
                   sessionPhase,
                   committedBlockIdx,
                   blockIdx,
@@ -3278,7 +3301,7 @@ function installScrollRouter(opts) {
         recordAsrAccept(
           telemetry,
           now,
-          state2.mode,
+          mode,
           sessionPhase,
           committedBlockIdx,
           blockIdx,
@@ -3633,7 +3656,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), nextDelay);
   }
   function ensureHybridMotorRunningForSpeech() {
-    if (state2.mode !== "hybrid") return;
+    if (getScrollMode() !== "hybrid") {
+      logHybridModeMismatch('ensureHybridMotorRunningForSpeech');
+      return;
+    }
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
     runHybridVelocity(hybridSilence);
@@ -3645,7 +3671,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
   }
   function startHybridMotorFromSpeedChange() {
-    if (state2.mode !== "hybrid") return;
+    if (getScrollMode() !== "hybrid") {
+      logHybridModeMismatch('startHybridMotorFromSpeedChange');
+      return;
+    }
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
     hybridSilence.pausedBySilence = false;
@@ -3660,7 +3689,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     ts?: number,
     opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
   ) {
-    if (state2.mode !== "hybrid") return;
+    if (getScrollMode() !== "hybrid") {
+      logHybridModeMismatch(opts?.source ?? 'speech');
+      return;
+    }
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(ts, perfNow);
     if (typeof opts?.noMatch === "boolean") {
