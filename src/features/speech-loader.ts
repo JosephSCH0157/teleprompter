@@ -63,6 +63,7 @@ type TranscriptPayload = {
   candidates?: unknown;
   sim?: number;
   noMatch?: boolean;
+  currentIdx?: number | null;
 };
 
 declare global {

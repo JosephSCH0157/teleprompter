@@ -187,9 +187,15 @@ type AsrEnvelope = {
   sim?: number | null;
   line?: number | null;
   candidates?: Array<{ idx: number; score: number }> | [];
+  currentIdx?: number | null;
 } & Partial<matcher.MatchResult>;
 
-function buildTranscriptEnvelope(text: string, final: boolean, match?: matcher.MatchResult): AsrEnvelope {
+function buildTranscriptEnvelope(
+  text: string,
+  final: boolean,
+  match?: matcher.MatchResult,
+  currentIdx?: number | null,
+): AsrEnvelope {
   try {
     const expected = getExpectedLineText();
     const sim = expected ? simCosine(text, expected) : undefined;
@@ -203,6 +209,9 @@ function buildTranscriptEnvelope(text: string, final: boolean, match?: matcher.M
       final,
       timestamp: Date.now(),
       source: meta ? 'meta' : 'orchestrator',
+      currentIdx: Number.isFinite(currentIdx as number)
+        ? Math.max(0, Math.floor(currentIdx as number))
+        : null,
     };
     const payload: AsrEnvelope = hasMatch
       ? {
@@ -230,6 +239,9 @@ function buildTranscriptEnvelope(text: string, final: boolean, match?: matcher.M
     source: 'orchestrator',
     matchId: null,
     noMatch: true,
+    currentIdx: Number.isFinite(currentIdx as number)
+      ? Math.max(0, Math.floor(currentIdx as number))
+      : null,
   };
 }
 
@@ -356,6 +368,10 @@ export function matchBatch(text: string, isFinal: boolean, opts?: MatchBatchOpti
       multiLineMaxLines: opts?.multiLineMaxLines,
       multiLineMinLines: opts?.multiLineMinLines,
     });
+    try {
+      const curIdx = Number.isFinite(currentIndex) ? Math.floor(currentIndex) : 0;
+      (res as any).currentIdx = curIdx;
+    } catch {}
 
     // Compact matcher log (throttled)
     const now = Date.now();
@@ -481,7 +497,12 @@ export function startRecognizer(cb: (_evt: MatchEvent) => void, opts?: { lang?: 
       const thresholds = getAsrDriverThresholds();
       const bestSim = Number.isFinite(match?.bestSim) ? match.bestSim : 0;
       const candidateMatch = bestSim >= thresholds.candidateMinSim ? match : undefined;
-      const payload = buildTranscriptEnvelope(text, isFinal, candidateMatch);
+      const currentIdx = Number.isFinite((match as any)?.currentIdx)
+        ? Math.floor((match as any).currentIdx)
+        : (typeof (window as any).currentIndex === 'number'
+          ? Math.floor((window as any).currentIndex)
+          : null);
+      const payload = buildTranscriptEnvelope(text, isFinal, candidateMatch, currentIdx);
       dispatchTranscript(payload);
       });
       try { console.log('[ASR] recognizer.start() returned without throwing'); } catch {}

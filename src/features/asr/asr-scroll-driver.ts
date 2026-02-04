@@ -30,6 +30,7 @@ type TranscriptDetail = {
   source?: string;
   meta?: boolean;
   noMatch?: boolean;
+  currentIdx?: number | null;
 };
 
 type PendingMatch = {
@@ -2674,6 +2675,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    const incomingIdx = Number((detail as any)?.currentIdx);
+    if (Number.isFinite(incomingIdx)) {
+      const nextIdx = Math.max(0, Math.floor(incomingIdx));
+      if (nextIdx !== lastLineIndex) {
+        lastLineIndex = nextIdx;
+        matchAnchorIdx = nextIdx;
+      }
+    }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     const rawMatchId = (detail as any)?.matchId;
     const noMatch = detail?.noMatch === true;
