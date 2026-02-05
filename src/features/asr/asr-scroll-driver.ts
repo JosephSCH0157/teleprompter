@@ -276,6 +276,10 @@ const MANUAL_ANCHOR_MAX_SCROLL_WINDOW_MS = 1000;
 const MANUAL_ANCHOR_PENDING_TIMEOUT_MS = 5000;
 const MANUAL_ANCHOR_WINDOW_LINES = 10;
 const MANUAL_ANCHOR_SIM_SLACK = 0.03;
+const MAX_LINES_PER_COMMIT = 1.25;
+const DELTA_SMOOTHING_FACTOR = 0.3;
+const TAPER_EXPONENT = 2.2;
+const TAPER_MIN = 0.15;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -964,6 +968,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;
     behindStrongSince = 0;
+    lastCommitDeltaPx = 0;
     setCurrentIndex(lastLineIndex, 'behind-recovery');
     resetLookahead('behind-recovery');
     behindRecoveryHits.length = 0;
@@ -983,6 +988,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return true;
   };
   let lastEvidenceAt = 0;
+  let lastCommitDeltaPx = 0;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
   let lastBackRecoverHitAt = 0;
@@ -2539,10 +2545,39 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       const prevLineIndex = lastLineIndex;
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const lineHeightPx = (() => {
+        try {
+          if (!lineEl) return 0;
+          const h = lineEl.offsetHeight || lineEl.clientHeight;
+          if (h && Number.isFinite(h)) return h;
+          const computed = Number.parseFloat(getComputedStyle(lineEl).lineHeight);
+          return Number.isFinite(computed) ? computed : 0;
+        } catch {
+          return 0;
+        }
+      })();
+      const rawDeltaPx = Math.max(0, targetTop - currentTop);
+      const maxJumpPx = lineHeightPx > 0 ? lineHeightPx * MAX_LINES_PER_COMMIT : rawDeltaPx;
+      const clampedDeltaPx = Math.min(rawDeltaPx, maxJumpPx);
+      const prevCommitDeltaPx = lastCommitDeltaPx > 0 ? lastCommitDeltaPx : clampedDeltaPx;
+      let smoothedDeltaPx =
+        prevCommitDeltaPx +
+        (clampedDeltaPx - prevCommitDeltaPx) * DELTA_SMOOTHING_FACTOR;
+      smoothedDeltaPx = Math.min(smoothedDeltaPx, clampedDeltaPx);
+      smoothedDeltaPx = Math.max(0, smoothedDeltaPx);
+      let taper = 1;
+      if (max > 0) {
+        const progress = clamp(currentTop / max, 0, 1);
+        taper = clamp(1 - Math.pow(progress, TAPER_EXPONENT), TAPER_MIN, 1);
+      }
+      const taperedDeltaPx = Math.min(clampedDeltaPx, smoothedDeltaPx * taper);
+      lastCommitDeltaPx = taperedDeltaPx;
+      const maxAllowedTarget = clamp(currentTop + taperedDeltaPx, 0, max);
       const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
-      const candidate = clamp(targetTop, 0, max);
-      const limitedTarget = forced ? candidate : Math.min(candidate, base + jumpCap);
-      const nextTargetTop = Math.max(base, limitedTarget);
+      const baseClamped = Math.min(base, maxAllowedTarget);
+      const candidate = maxAllowedTarget;
+      const limitedTarget = forced ? candidate : Math.min(candidate, baseClamped + jumpCap);
+      const nextTargetTop = Math.max(baseClamped, limitedTarget);
       pursuitTargetTop = nextTargetTop;
       if (nextTargetTop > base) {
         emitHybridTargetHint(
@@ -3982,6 +4017,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     pursuitVel = 0;
     pursuitActive = false;
     lastEvidenceAt = 0;
+    lastCommitDeltaPx = 0;
     lastBackRecoverAt = 0;
     lastBackRecoverIdx = -1;
     lastBackRecoverHitAt = 0;
