@@ -280,6 +280,9 @@ const MAX_LINES_PER_COMMIT = 1.25;
 const DELTA_SMOOTHING_FACTOR = 0.3;
 const TAPER_EXPONENT = 2.2;
 const TAPER_MIN = 0.15;
+const GLIDE_MIN_MS = 120;
+const GLIDE_MAX_MS = 250;
+const GLIDE_DEFAULT_MS = 180;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -879,6 +882,70 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     scheduleAsrWriteCheck(scroller, currentTop, reason, targetTop, source);
     return appliedTop;
   }
+  const stopGlide = (reason?: string) => {
+    if (!glideAnim) return;
+    try { glideAnim.cancel(); } catch {}
+    glideAnim = null;
+    if (reason) {
+      logDev('glide canceled', { reason });
+    }
+  };
+  const startGlideTo = (
+    targetTop: number,
+    opts: { scroller?: HTMLElement | null; reason?: string; source?: string; durationMs?: number },
+  ): boolean => {
+    if (isHybridMode()) return false;
+    const scroller = opts.scroller ?? getScroller();
+    if (!scroller) return false;
+    if (!Number.isFinite(targetTop)) return false;
+    stopGlide('retarget');
+    const fromTop = Number(scroller.scrollTop || 0);
+    const toTop = Number(targetTop);
+    if (!Number.isFinite(fromTop) || !Number.isFinite(toTop)) return false;
+    const duration = clamp(
+      Number.isFinite(opts.durationMs as number) ? (opts.durationMs as number) : GLIDE_DEFAULT_MS,
+      GLIDE_MIN_MS,
+      GLIDE_MAX_MS,
+    );
+    let cancelled = false;
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    glideAnim = {
+      cancel: () => {
+        cancelled = true;
+      },
+    };
+    const step = (ts: number) => {
+      if (cancelled) return;
+      const now = Number.isFinite(ts) ? ts : (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const t = clamp((now - startedAt) / duration, 0, 1);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      const nextTop = fromTop + (toTop - fromTop) * eased;
+      const applied = applyScrollWithHybridGuard(nextTop, {
+        scroller,
+        reason: opts.reason ?? 'asr-glide',
+        source: opts.source ?? 'asr',
+      });
+      appliedTopPx = applied;
+      lastKnownScrollTop = applied;
+      lastMoveAt = Date.now();
+      markProgrammaticScroll();
+      if (t < 1) {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(step);
+        } else {
+          setTimeout(() => step((typeof performance !== 'undefined' ? performance.now() : Date.now())), 16);
+        }
+      } else {
+        glideAnim = null;
+      }
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(step);
+    } else {
+      setTimeout(() => step((typeof performance !== 'undefined' ? performance.now() : Date.now())), 0);
+    }
+    return true;
+  };
   const computeDeltaMinSim = (deltaLines: number): number => {
     if (!Number.isFinite(deltaLines) || deltaLines <= 0) return 0;
     if (deltaLines >= DELTA_LARGE_MIN_LINES) return DELTA_MIN_SIM_LARGE;
@@ -949,6 +1016,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const scroller = getScroller();
     const targetTop = scroller ? resolveTargetTop(scroller, targetIdx) : null;
     if (scroller && targetTop != null) {
+      stopGlide('behind-recovery');
       const applied = applyScrollWithHybridGuard(targetTop, {
         scroller,
         reason: 'asr-behind-recovery',
@@ -989,6 +1057,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
   let lastEvidenceAt = 0;
   let lastCommitDeltaPx = 0;
+  let glideAnim: { cancel: () => void } | null = null;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
   let lastBackRecoverHitAt = 0;
@@ -2461,6 +2530,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           lastBackRecoverIdx = targetLine;
           lastBackRecoverHitAt = now;
               if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
+                stopGlide('back-recovery');
                 const applied = applyScrollWithHybridGuard(currentTop + deltaPx, {
                   scroller,
                   reason: 'asr-back-recovery',
@@ -2588,6 +2658,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           targetLine,
         );
       }
+      let didGlide = false;
+      if (!isHybridMode()) {
+        pursuitActive = false;
+        pursuitVel = 0;
+        didGlide = startGlideTo(nextTargetTop, {
+          scroller,
+          reason: forced ? 'asr-forced-commit' : 'asr-commit',
+          source: 'asr',
+        });
+      }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
       creepBudgetUsed = 0;
@@ -2653,7 +2733,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relock: !!relockOverride,
         relockReason: relockReason || undefined,
       });
-      ensurePursuitActive();
+      if (!didGlide) {
+        ensurePursuitActive();
+      }
       try {
         const forcedCount = getForcedCount(now);
         const forcedCooldown = getForcedCooldownRemaining(now);
@@ -3821,6 +3903,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const scrollTopBefore = scroller?.scrollTop ?? 0;
         const targetTop = scroller ? resolveTargetTop(scroller, rawIdx) : null;
         if (scroller && targetTop != null) {
+          stopGlide('behind-reanchor');
           const applied = applyScrollWithHybridGuard(targetTop, {
             scroller,
             reason: 'asr-behind-reanchor',
@@ -4018,6 +4101,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     pursuitActive = false;
     lastEvidenceAt = 0;
     lastCommitDeltaPx = 0;
+    stopGlide('sync-index');
     lastBackRecoverAt = 0;
     lastBackRecoverIdx = -1;
     lastBackRecoverHitAt = 0;
