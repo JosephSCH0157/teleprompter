@@ -279,6 +279,7 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
  'devHud',
  'hudEnabledByUser',
  'cameraEnabled',
+ 'singleMonitorReadEnabled',
   'asr.engine',
   'asr.language',
   'asr.useInterimResults',
@@ -1376,6 +1377,7 @@ import './ui/step-visibility'; // hides step-only controls unless scrollMode ===
 import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
 import './ui/upload'; // installs script upload wiring
+import { initSingleMonitorRead } from './ui/single-monitor';
 import './utils/safe-dom'; // installs window.safeDOM for legacy callers
 import { initObsBridge } from './wiring/obs-bridge';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
@@ -1965,8 +1967,9 @@ export async function boot() {
             try { installCKEgg(); } catch {}
             try { installAboutPopover(); } catch {}
           }
-          // Core UI binder (idempotent)
+								// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+								try { initSingleMonitorRead(appStore); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
 								try { wireSettings({ store: appStore }); } catch {}
                 if (isCiSmoke()) {

@@ -92,6 +92,16 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           </div>
           <div class="settings-small">Applies to UI chrome only. Script text stays on --tp-font-size.</div>
         </div>
+
+        <div class="settings-card anim-in" id="singleMonitorCard">
+          <h4>Reading Layout</h4>
+          <div class="row" style="gap:10px;align-items:center">
+            <label><input id="singleMonitorReadToggle" type="checkbox"> Single Monitor Read</label>
+            <span class="microcopy" style="color:#9fb4c9;font-size:12px">
+              Maximize script space and add look-ahead without shrinking text.
+            </span>
+          </div>
+        </div>
       </div>
       <div class="settings-small">Changes apply live to the selected display and are persisted.</div>
       </section>

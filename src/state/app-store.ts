@@ -25,6 +25,7 @@ const ASR_THRESHOLD_KEY = 'tp_asr_threshold_v1';
 const ASR_ENDPOINT_KEY = 'tp_asr_endpoint_v1';
 const ASR_PROFILES_KEY = 'tp_asr_profiles_v1';
 const ASR_ACTIVE_PROFILE_KEY = 'tp_asr_active_profile_v1';
+const SINGLE_MONITOR_READ_KEY = 'tp_single_monitor_read_v1';
 const ASR_CALM_MODE_KEY = 'tp_asr_calm_mode_v1';
 const ASR_TUNING_PROFILES_KEY = 'tp_asr_tuning_profiles_v1';
 const ASR_TUNING_ACTIVE_PROFILE_KEY = 'tp_asr_tuning_active_profile_v1';
@@ -67,6 +68,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   hudSpeechNotesEnabledByUser: HUD_SPEECH_NOTES_KEY,
   overlay: OVERLAY_KEY,
   cameraEnabled: CAMERA_KEY,
+  singleMonitorReadEnabled: SINGLE_MONITOR_READ_KEY,
   // Scroll router persistence
   scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
@@ -125,6 +127,7 @@ export type AppStoreState = {
   obsEnabled: boolean;
   micGranted: boolean;
   cameraEnabled: boolean;
+  singleMonitorReadEnabled: boolean;
   cameraAvailable: boolean;
   obsScene: string;
   obsReconnect: boolean;
@@ -352,6 +355,13 @@ function buildInitialState(): AppStoreState {
     hudSpeechNotesEnabledByUser: (() => {
       try {
         return localStorage.getItem(HUD_SPEECH_NOTES_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    singleMonitorReadEnabled: (() => {
+      try {
+        return localStorage.getItem(SINGLE_MONITOR_READ_KEY) === '1';
       } catch {
         return false;
       }

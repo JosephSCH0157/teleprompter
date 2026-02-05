@@ -44,6 +44,7 @@ export type PersistedAppKey =
   | 'devHud'
   | 'hudEnabledByUser'
   | 'cameraEnabled'
+  | 'singleMonitorReadEnabled'
   | 'settingsTab'
   | 'asr.engine'
   | 'asr.language'
