@@ -116,6 +116,17 @@ export function bindCoreUI(opts: BindCoreUIOptions = {}): void {
     /* ignore */
   }
 
+  // Escape should always exit Present Mode (even when topbar is hidden)
+  try {
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (!root.classList.contains('tp-present')) return;
+      applyPresent(false);
+    }, { capture: true });
+  } catch {
+    /* ignore */
+  }
+
   // --- Overlay helpers (settings/help) ---
 
   function markOpen(name: 'settings' | 'help'): void {
