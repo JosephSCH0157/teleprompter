@@ -7,6 +7,7 @@ import {
   clearAsrThresholdsDirty,
 } from '../asr/asr-threshold-store';
 import { saveDevAsrThresholds } from './dev-thresholds';
+import { speechStore } from '../state/speech-store';
 import type {
   SpeakerProfile,
   SpeakerSlot,
@@ -103,6 +104,35 @@ if (!isDevMode() || typeof document === 'undefined') {
   title.style.fontWeight = '600';
   title.style.marginBottom = '6px';
   panel.appendChild(title);
+
+  const calmRow = document.createElement('label');
+  calmRow.style.display = 'flex';
+  calmRow.style.alignItems = 'center';
+  calmRow.style.gap = '8px';
+  calmRow.style.marginBottom = '8px';
+  const calmInput = document.createElement('input');
+  calmInput.type = 'checkbox';
+  const calmLabel = document.createElement('span');
+  calmLabel.textContent = 'Calm Mode';
+  calmLabel.style.opacity = '0.9';
+  calmRow.appendChild(calmInput);
+  calmRow.appendChild(calmLabel);
+  panel.appendChild(calmRow);
+
+  const syncCalm = () => {
+    try {
+      calmInput.checked = !!speechStore.get().calmModeEnabled;
+    } catch {}
+  };
+  syncCalm();
+  calmInput.addEventListener('change', () => {
+    try {
+      speechStore.set({ calmModeEnabled: calmInput.checked });
+    } catch {}
+  });
+  try {
+    speechStore.subscribe(() => syncCalm());
+  } catch {}
 
   const controlMap: Record<string, { input: HTMLInputElement; value: HTMLElement }> = {};
 

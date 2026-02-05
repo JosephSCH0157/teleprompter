@@ -285,6 +285,7 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
   'asr.filterFillers',
   'asr.threshold',
   'asr.endpointMs',
+  'asrCalmModeEnabled',
   'asrProfiles',
   'asrActiveProfileId',
   'asrTuningProfiles',
@@ -467,6 +468,7 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 						filterFillers: 'asr.filterFillers',
 						threshold: 'asr.threshold',
 						endpointingMs: 'asr.endpointMs',
+						calmModeEnabled: 'asrCalmModeEnabled',
 					};
 					const patch: Partial<SpeechState> = {};
 					Object.keys(mapping).forEach((src) => {
@@ -526,6 +528,7 @@ function snapshotAppSettings(store: typeof appStore): UserSettings {
 		filterFillers: store.get?.('asr.filterFillers'),
 		threshold: store.get?.('asr.threshold'),
 		endpointingMs: store.get?.('asr.endpointMs'),
+		calmModeEnabled: store.get?.('asrCalmModeEnabled'),
 	};
 	const rawProfiles = store.get?.('asrProfiles') as Record<string, unknown> | undefined;
 	const asrProfiles = rawProfiles ? Object.values(rawProfiles) : [];

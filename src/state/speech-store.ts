@@ -11,6 +11,7 @@ export interface SpeechState {
   endpointingMs: number;
   fillerFilter: boolean;
   manualAnchorAdoptEnabled: boolean;
+  calmModeEnabled: boolean;
 }
 
 type Subscriber = (next: SpeechState) => void;
@@ -23,6 +24,7 @@ const state: SpeechState = {
   endpointingMs: 700,
   fillerFilter: true,
   manualAnchorAdoptEnabled: true,
+  calmModeEnabled: false,
 };
 
 const subs = new Set<Subscriber>();

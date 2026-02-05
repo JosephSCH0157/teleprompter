@@ -36,6 +36,7 @@ type AsrInputs = {
   fillers?: HTMLInputElement | null;
   thresh?: HTMLInputElement | null;
   endms?: HTMLInputElement | null;
+  calm?: HTMLInputElement | null;
 };
 
 function queryAsrInputs(card: HTMLElement): AsrInputs {
@@ -47,6 +48,7 @@ function queryAsrInputs(card: HTMLElement): AsrInputs {
     fillers: q<HTMLInputElement>('#asrFillers'),
     thresh: q<HTMLInputElement>('#asrThresh'),
     endms: q<HTMLInputElement>('#asrEndMs'),
+    calm: q<HTMLInputElement>('#asrCalmMode'),
   };
 }
 
@@ -66,10 +68,11 @@ function applyAsrStateToInputs(inputs: AsrInputs, state: SpeechState): void {
   if (endms && typeof state.endpointingMs === 'number') {
     endms.value = String(state.endpointingMs);
   }
+  if (inputs.calm) inputs.calm.checked = !!state.calmModeEnabled;
 }
 
 function attachAsrInputListeners(inputs: AsrInputs): void {
-  const { eng, lang, interim, fillers, thresh, endms } = inputs;
+  const { eng, lang, interim, fillers, thresh, endms, calm } = inputs;
   const persist = (patch: Partial<SpeechState>) => {
     if (isHydratingAsrSettings) return;
     persistAsrPatch(patch);
@@ -95,6 +98,7 @@ function attachAsrInputListeners(inputs: AsrInputs): void {
   thresh?.addEventListener('change', () => clampThreshold(thresh.value));
   endms?.addEventListener('input', () => clampEndpoint(endms.value));
   endms?.addEventListener('change', () => clampEndpoint(endms.value));
+  calm?.addEventListener('change', () => persist({ calmModeEnabled: calm.checked }));
 }
 
 function withAsrHydration(fn: () => void): void {
@@ -124,6 +128,7 @@ function readAsrPatchFromCard(card: HTMLElement): Partial<SpeechState> {
   const fillers = q<HTMLInputElement>('#asrFillers');
   const thresh = q<HTMLInputElement>('#asrThresh');
   const endms = q<HTMLInputElement>('#asrEndMs');
+  const calm = q<HTMLInputElement>('#asrCalmMode');
 
   if (eng) patch.engine = eng.value || '';
   if (lang) patch.lang = lang.value || '';
@@ -141,6 +146,7 @@ function readAsrPatchFromCard(card: HTMLElement): Partial<SpeechState> {
       patch.endpointingMs = Math.max(200, val);
     }
   }
+  if (calm) patch.calmModeEnabled = !!calm.checked;
   return patch;
 }
 

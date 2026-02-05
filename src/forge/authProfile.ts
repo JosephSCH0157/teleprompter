@@ -51,6 +51,7 @@ export type PersistedAppKey =
   | 'asr.filterFillers'
   | 'asr.threshold'
   | 'asr.endpointMs'
+  | 'asrCalmModeEnabled'
   | 'asrProfiles'
   | 'asrActiveProfileId'
   | 'asrTuningProfiles'

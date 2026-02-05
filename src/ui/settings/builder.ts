@@ -139,6 +139,10 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <input id="asrEndMs" type="number" min="200" step="50" title="How long ASR waits after silence before finalizing a phrase. Lower reacts faster; higher is smoother but delayed.">
           </label>
         </div>
+        <div class="row" style="margin-top:8px;">
+          <label><input id="asrCalmMode" type="checkbox"> Calm Mode</label>
+          <span class="microcopy" style="color:#9fb4c9;font-size:12px">Smoother, slower ASR scroll. Best for long reads.</span>
+        </div>
         <div class="settings-small asr-status-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
           <span id="asrSaveStatus" aria-live="polite"></span>
           <span id="asrAppliedStatus" aria-live="polite"></span>

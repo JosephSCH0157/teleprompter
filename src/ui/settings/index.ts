@@ -68,6 +68,7 @@ function buildAsrSnapshot(store: AppStore | null): Record<string, unknown> {
         filterFillers: store.get?.('asr.filterFillers'),
         threshold: store.get?.('asr.threshold'),
         endpointingMs: store.get?.('asr.endpointMs'),
+        calmModeEnabled: store.get?.('asrCalmModeEnabled'),
       }
     : null;
   return { store: snapshot, speechStore: speechState };

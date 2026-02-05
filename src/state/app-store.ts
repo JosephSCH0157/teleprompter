@@ -25,6 +25,7 @@ const ASR_THRESHOLD_KEY = 'tp_asr_threshold_v1';
 const ASR_ENDPOINT_KEY = 'tp_asr_endpoint_v1';
 const ASR_PROFILES_KEY = 'tp_asr_profiles_v1';
 const ASR_ACTIVE_PROFILE_KEY = 'tp_asr_active_profile_v1';
+const ASR_CALM_MODE_KEY = 'tp_asr_calm_mode_v1';
 const ASR_TUNING_PROFILES_KEY = 'tp_asr_tuning_profiles_v1';
 const ASR_TUNING_ACTIVE_PROFILE_KEY = 'tp_asr_tuning_active_profile_v1';
 
@@ -86,6 +87,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   'asr.threshold': ASR_THRESHOLD_KEY,
   'asr.endpointMs': ASR_ENDPOINT_KEY,
   'asr.filterFillers': ASR_FILTER_KEY,
+  asrCalmModeEnabled: ASR_CALM_MODE_KEY,
   asrProfiles: ASR_PROFILES_KEY,
   asrActiveProfileId: ASR_ACTIVE_PROFILE_KEY,
   asrTuningProfiles: ASR_TUNING_PROFILES_KEY,
@@ -143,6 +145,7 @@ export type AppStoreState = {
   'asr.filterFillers': boolean;
   'asr.threshold': number;
   'asr.endpointMs': number;
+  asrCalmModeEnabled: boolean;
   asrProfiles: Record<string, unknown>;
   asrActiveProfileId: string | null;
   asrTuningProfiles: Record<string, unknown>;
@@ -407,6 +410,13 @@ function buildInitialState(): AppStoreState {
         if (legacyAsrSettings?.endpointMs !== undefined) return Number(legacyAsrSettings.endpointMs) || 700;
       } catch {}
       return 700;
+    })(),
+    asrCalmModeEnabled: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_CALM_MODE_KEY);
+        if (raw !== null) return raw === '1';
+      } catch {}
+      return false;
     })(),
     asrProfiles: (() => {
       try {
