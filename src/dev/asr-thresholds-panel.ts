@@ -44,6 +44,18 @@ const CONTROLS: ThresholdControl[] = [
   { key: 'maxJumpsPerSecond', label: 'Max jumps/sec', min: 1, max: 8, step: 1, isInt: true },
 ];
 
+const MOTION_CONTROLS: ThresholdControl[] = [
+  { key: 'maxLinesPerCommit', label: 'Max lines/commit', min: 0.5, max: 3, step: 0.05 },
+  { key: 'deltaSmoothingFactor', label: 'Delta smoothing', min: 0, max: 1, step: 0.05 },
+  { key: 'taperExponent', label: 'Taper exponent', min: 0.5, max: 4, step: 0.1 },
+  { key: 'taperMin', label: 'Taper min', min: 0.05, max: 0.5, step: 0.01 },
+  { key: 'glideDefaultMs', label: 'Glide ms', min: 100, max: 400, step: 10, isInt: true },
+  { key: 'microDeltaLineRatio', label: 'Micro delta (lines)', min: 0.2, max: 1.5, step: 0.05 },
+  { key: 'microPursuitMs', label: 'Micro pursuit ms', min: 150, max: 600, step: 10, isInt: true },
+  { key: 'microPursuitMaxPxPerSec', label: 'Micro max px/sec', min: 10, max: 200, step: 5, isInt: true },
+  { key: 'minPursuitPxPerSec', label: 'Min px/sec', min: 0, max: 120, step: 2, isInt: true },
+];
+
 const OVERRIDE_CONTROLS: ThresholdControl[] = [
   { key: 'commitInterimMinSim', label: 'Commit interim sim', min: 0, max: 1, step: 0.01 },
   { key: 'stickinessDelta', label: 'Stickiness delta', min: 0, max: 0.3, step: 0.01 },
@@ -104,7 +116,8 @@ if (!isDevMode() || typeof document === 'undefined') {
 
   const syncControls = () => {
     const thresholds = getAsrDriverThresholds();
-    CONTROLS.forEach((cfg) => {
+    const allControls = [...CONTROLS, ...MOTION_CONTROLS];
+    allControls.forEach((cfg) => {
       const value = thresholds[cfg.key];
       if (!Number.isFinite(value)) return;
       updateDisplayValue(cfg.key, value, cfg);
@@ -119,6 +132,44 @@ if (!isDevMode() || typeof document === 'undefined') {
   };
 
   CONTROLS.forEach((cfg) => {
+    const line = document.createElement('label');
+    line.style.display = 'flex';
+    line.style.alignItems = 'center';
+    line.style.marginBottom = '6px';
+    line.style.gap = '6px';
+    const label = document.createElement('span');
+    label.textContent = cfg.label;
+    label.style.flex = '1';
+    const value = document.createElement('span');
+    value.style.minWidth = '42px';
+    value.style.textAlign = 'right';
+    const input = document.createElement('input');
+    input.type = 'range';
+    input.min = String(cfg.min);
+    input.max = String(cfg.max);
+    input.step = String(cfg.step);
+    input.style.flex = '1';
+    input.addEventListener('input', (event) => {
+      const target = event.target as HTMLInputElement;
+      const parsed = Number.parseFloat(target.value);
+      if (Number.isNaN(parsed)) return;
+      handleInput(cfg, parsed);
+    });
+    controlMap[cfg.key] = { input, value };
+    line.appendChild(label);
+    line.appendChild(input);
+    line.appendChild(value);
+    panel.appendChild(line);
+  });
+
+  const motionHeader = document.createElement('div');
+  motionHeader.textContent = 'Motion shaping';
+  motionHeader.style.fontWeight = '600';
+  motionHeader.style.marginTop = '10px';
+  motionHeader.style.marginBottom = '6px';
+  panel.appendChild(motionHeader);
+
+  MOTION_CONTROLS.forEach((cfg) => {
     const line = document.createElement('label');
     line.style.display = 'flex';
     line.style.alignItems = 'center';

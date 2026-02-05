@@ -283,6 +283,10 @@ const TAPER_MIN = 0.15;
 const GLIDE_MIN_MS = 120;
 const GLIDE_MAX_MS = 250;
 const GLIDE_DEFAULT_MS = 180;
+const MICRO_DELTA_LINE_RATIO = 0.8;
+const MICRO_PURSUE_MS = 320;
+const MICRO_PURSUE_MAX_PXPS = 60;
+const MIN_PX_PER_SEC = 18;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -882,12 +886,73 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     scheduleAsrWriteCheck(scroller, currentTop, reason, targetTop, source);
     return appliedTop;
   }
+  let motionTuning = {
+    maxLinesPerCommit: MAX_LINES_PER_COMMIT,
+    deltaSmoothingFactor: DELTA_SMOOTHING_FACTOR,
+    taperExponent: TAPER_EXPONENT,
+    taperMin: TAPER_MIN,
+    glideMinMs: GLIDE_MIN_MS,
+    glideMaxMs: GLIDE_MAX_MS,
+    glideDefaultMs: GLIDE_DEFAULT_MS,
+    microDeltaLineRatio: MICRO_DELTA_LINE_RATIO,
+    microPursuitMs: MICRO_PURSUE_MS,
+    microPursuitMaxPxPerSec: MICRO_PURSUE_MAX_PXPS,
+    minPursuitPxPerSec: MIN_PX_PER_SEC,
+  };
+  let lastTuningSnapshot = '';
+  let lastTuningHudAt = 0;
+  const emitTuningHud = (now: number) => {
+    if (now - lastTuningHudAt < 2000) return;
+    lastTuningHudAt = now;
+    const payload = {
+      maxLinesPerCommit: Number(motionTuning.maxLinesPerCommit.toFixed(2)),
+      deltaSmoothingFactor: Number(motionTuning.deltaSmoothingFactor.toFixed(2)),
+      taperExponent: Number(motionTuning.taperExponent.toFixed(2)),
+      taperMin: Number(motionTuning.taperMin.toFixed(2)),
+      glideMs: Math.round(motionTuning.glideDefaultMs),
+      microDeltaLineRatio: Number(motionTuning.microDeltaLineRatio.toFixed(2)),
+      microPursuitMs: Math.round(motionTuning.microPursuitMs),
+      microMaxPxPerSec: Math.round(motionTuning.microPursuitMaxPxPerSec),
+      minPxPerSec: Math.round(motionTuning.minPursuitPxPerSec),
+    };
+    try { (window as any).__tpHud?.log?.('ASR_TUNING', payload); } catch {}
+    try { (window as any).HUD?.log?.('ASR_TUNING', payload); } catch {}
+  };
+  const syncMotionTuning = (thresholds: ReturnType<typeof getAsrDriverThresholds>, now: number) => {
+    motionTuning = {
+      maxLinesPerCommit: Number.isFinite(thresholds.maxLinesPerCommit) ? thresholds.maxLinesPerCommit : MAX_LINES_PER_COMMIT,
+      deltaSmoothingFactor: Number.isFinite(thresholds.deltaSmoothingFactor) ? thresholds.deltaSmoothingFactor : DELTA_SMOOTHING_FACTOR,
+      taperExponent: Number.isFinite(thresholds.taperExponent) ? thresholds.taperExponent : TAPER_EXPONENT,
+      taperMin: Number.isFinite(thresholds.taperMin) ? thresholds.taperMin : TAPER_MIN,
+      glideMinMs: Number.isFinite(thresholds.glideMinMs) ? thresholds.glideMinMs : GLIDE_MIN_MS,
+      glideMaxMs: Number.isFinite(thresholds.glideMaxMs) ? thresholds.glideMaxMs : GLIDE_MAX_MS,
+      glideDefaultMs: Number.isFinite(thresholds.glideDefaultMs) ? thresholds.glideDefaultMs : GLIDE_DEFAULT_MS,
+      microDeltaLineRatio: Number.isFinite(thresholds.microDeltaLineRatio) ? thresholds.microDeltaLineRatio : MICRO_DELTA_LINE_RATIO,
+      microPursuitMs: Number.isFinite(thresholds.microPursuitMs) ? thresholds.microPursuitMs : MICRO_PURSUE_MS,
+      microPursuitMaxPxPerSec: Number.isFinite(thresholds.microPursuitMaxPxPerSec) ? thresholds.microPursuitMaxPxPerSec : MICRO_PURSUE_MAX_PXPS,
+      minPursuitPxPerSec: Number.isFinite(thresholds.minPursuitPxPerSec) ? thresholds.minPursuitPxPerSec : MIN_PX_PER_SEC,
+    };
+    const snapshot = JSON.stringify(motionTuning);
+    if (snapshot !== lastTuningSnapshot) {
+      lastTuningSnapshot = snapshot;
+      emitTuningHud(now);
+    }
+  };
   const stopGlide = (reason?: string) => {
     if (!glideAnim) return;
     try { glideAnim.cancel(); } catch {}
     glideAnim = null;
     if (reason) {
       logDev('glide canceled', { reason });
+    }
+  };
+  const armMicroPursuit = (now: number, reason?: string, capOverride?: number) => {
+    microPursuitUntil = now + Math.max(100, motionTuning.microPursuitMs);
+    microPursuitCapPxPerSec = Number.isFinite(capOverride as number)
+      ? (capOverride as number)
+      : motionTuning.microPursuitMaxPxPerSec;
+    if (reason) {
+      logDev('micro pursuit', { reason, until: microPursuitUntil });
     }
   };
   const startGlideTo = (
@@ -903,9 +968,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const toTop = Number(targetTop);
     if (!Number.isFinite(fromTop) || !Number.isFinite(toTop)) return false;
     const duration = clamp(
-      Number.isFinite(opts.durationMs as number) ? (opts.durationMs as number) : GLIDE_DEFAULT_MS,
-      GLIDE_MIN_MS,
-      GLIDE_MAX_MS,
+      Number.isFinite(opts.durationMs as number) ? (opts.durationMs as number) : motionTuning.glideDefaultMs,
+      motionTuning.glideMinMs,
+      motionTuning.glideMaxMs,
     );
     let cancelled = false;
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -1037,6 +1102,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastBehindStrongAt = 0;
     behindStrongSince = 0;
     lastCommitDeltaPx = 0;
+    microPursuitUntil = 0;
     setCurrentIndex(lastLineIndex, 'behind-recovery');
     resetLookahead('behind-recovery');
     behindRecoveryHits.length = 0;
@@ -1058,6 +1124,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastEvidenceAt = 0;
   let lastCommitDeltaPx = 0;
   let glideAnim: { cancel: () => void } | null = null;
+  let microPursuitUntil = 0;
+  let microPursuitCapPxPerSec = MICRO_PURSUE_MAX_PXPS;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
   let lastBackRecoverHitAt = 0;
@@ -2129,7 +2197,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     const err = pursuitTargetTop - current;
-    if (err <= deadbandPx) {
+    const microActive = microPursuitUntil > now;
+    const allowCreep = microActive || motionTuning.minPursuitPxPerSec > 0;
+    if (err <= 0.5) {
+      const target = pursuitTargetTop;
+      pursuitVel = 0;
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      emitPursuitHud(err, pursuitVel, target, current);
+      return;
+    }
+    if (err <= deadbandPx && !allowCreep) {
       const target = pursuitTargetTop;
       pursuitVel = 0;
       pursuitActive = false;
@@ -2138,11 +2216,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
 
-    const maxVelForErr = resolveMaxVel(err);
+    let maxVelForErr = resolveMaxVel(err);
+    if (microActive) {
+      maxVelForErr = Math.min(maxVelForErr, microPursuitCapPxPerSec);
+    }
     const desiredVel = Math.min(maxVelForErr, Math.max(0, err * DEFAULT_PURSUE_KP));
     const accelCap = maxAccelPxPerSec2 * dt;
     const velDelta = clamp(desiredVel - pursuitVel, -accelCap, accelCap);
     pursuitVel = clamp(pursuitVel + velDelta, 0, maxVelForErr);
+    if (err > 0 && pursuitVel < motionTuning.minPursuitPxPerSec) {
+      pursuitVel = Math.min(maxVelForErr, Math.max(pursuitVel, motionTuning.minPursuitPxPerSec));
+    }
 
     let move = pursuitVel * dt;
     move = Math.min(move, maxStepPx);
@@ -2216,6 +2300,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         tieGap,
       } = pending;
       const thresholds = getAsrDriverThresholds();
+      syncMotionTuning(thresholds, now);
       const requiredThresholdValue =
         typeof pendingRequiredThreshold === 'number' ? pendingRequiredThreshold : NaN;
       const baselineRequired = Number.isFinite(requiredThresholdValue)
@@ -2458,9 +2543,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               const desired = clamp(targetTop, 0, max);
               const limitedTarget = Math.min(desired, base + jumpCap);
               if (limitedTarget > base) {
+                stopGlide('same-line-recenter');
                 pursuitTargetTop = limitedTarget;
                 lastSameLineNudgeTs = now;
                 lastEvidenceAt = now;
+                const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+                const microThresholdPx = lineHeightPx > 0
+                  ? lineHeightPx * motionTuning.microDeltaLineRatio
+                  : 0;
+                if (microThresholdPx > 0 && (limitedTarget - base) <= microThresholdPx) {
+                  armMicroPursuit(now, 'same-line-recenter');
+                }
                 ensurePursuitActive();
                 logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
                 emitHybridTargetHint(
@@ -2501,10 +2594,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               const creepTarget = clamp(base + creepStep, 0, max);
               const limitedTarget = Math.min(creepTarget, base + jumpCap);
               if (limitedTarget > base) {
+                stopGlide('same-line-creep');
                 pursuitTargetTop = limitedTarget;
                 lastSameLineNudgeTs = now;
                 lastEvidenceAt = now;
                 creepBudgetUsed += Math.max(0, limitedTarget - base);
+                const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+                const microThresholdPx = lineHeightPx > 0
+                  ? lineHeightPx * motionTuning.microDeltaLineRatio
+                  : 0;
+                if (microThresholdPx > 0 && (limitedTarget - base) <= microThresholdPx) {
+                  armMicroPursuit(now, 'same-line-creep');
+                }
                 ensurePursuitActive();
                 logDev('same-line creep', { line: targetLine, px: creepStep, conf });
                 emitHybridTargetHint(
@@ -2627,18 +2728,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       })();
       const rawDeltaPx = Math.max(0, targetTop - currentTop);
-      const maxJumpPx = lineHeightPx > 0 ? lineHeightPx * MAX_LINES_PER_COMMIT : rawDeltaPx;
+      const maxJumpPx = lineHeightPx > 0 ? lineHeightPx * motionTuning.maxLinesPerCommit : rawDeltaPx;
       const clampedDeltaPx = Math.min(rawDeltaPx, maxJumpPx);
       const prevCommitDeltaPx = lastCommitDeltaPx > 0 ? lastCommitDeltaPx : clampedDeltaPx;
       let smoothedDeltaPx =
         prevCommitDeltaPx +
-        (clampedDeltaPx - prevCommitDeltaPx) * DELTA_SMOOTHING_FACTOR;
+        (clampedDeltaPx - prevCommitDeltaPx) * motionTuning.deltaSmoothingFactor;
       smoothedDeltaPx = Math.min(smoothedDeltaPx, clampedDeltaPx);
       smoothedDeltaPx = Math.max(0, smoothedDeltaPx);
       let taper = 1;
       if (max > 0) {
         const progress = clamp(currentTop / max, 0, 1);
-        taper = clamp(1 - Math.pow(progress, TAPER_EXPONENT), TAPER_MIN, 1);
+        taper = clamp(1 - Math.pow(progress, motionTuning.taperExponent), motionTuning.taperMin, 1);
       }
       const taperedDeltaPx = Math.min(clampedDeltaPx, smoothedDeltaPx * taper);
       lastCommitDeltaPx = taperedDeltaPx;
@@ -2658,15 +2759,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           targetLine,
         );
       }
+      const microThresholdPx = lineHeightPx > 0
+        ? lineHeightPx * motionTuning.microDeltaLineRatio
+        : 0;
+      const useMicro = microThresholdPx > 0 && taperedDeltaPx > 0 && taperedDeltaPx <= microThresholdPx;
       let didGlide = false;
       if (!isHybridMode()) {
-        pursuitActive = false;
-        pursuitVel = 0;
-        didGlide = startGlideTo(nextTargetTop, {
-          scroller,
-          reason: forced ? 'asr-forced-commit' : 'asr-commit',
-          source: 'asr',
-        });
+        if (useMicro) {
+          stopGlide('micro-commit');
+          pursuitTargetTop = nextTargetTop;
+          pursuitVel = 0;
+          armMicroPursuit(now, 'micro-commit');
+        } else {
+          microPursuitUntil = 0;
+          pursuitActive = false;
+          pursuitVel = 0;
+          didGlide = startGlideTo(nextTargetTop, {
+            scroller,
+            reason: forced ? 'asr-forced-commit' : 'asr-commit',
+            source: 'asr',
+          });
+        }
       }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
@@ -3922,6 +4035,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongSince = 0;
         behindStrongCount = 0;
         lastBehindRecoveryAt = now;
+        microPursuitUntil = 0;
         resetLookahead('behind-reanchor');
         setCurrentIndex(lastLineIndex, 'behind-reanchor');
         logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
@@ -4102,6 +4216,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastEvidenceAt = 0;
     lastCommitDeltaPx = 0;
     stopGlide('sync-index');
+    microPursuitUntil = 0;
     lastBackRecoverAt = 0;
     lastBackRecoverIdx = -1;
     lastBackRecoverHitAt = 0;
