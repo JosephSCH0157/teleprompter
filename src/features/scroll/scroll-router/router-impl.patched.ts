@@ -2317,7 +2317,7 @@ function applyMode(m) {
         if (speedHint) speedHint.textContent = 'Scroll speed is driven purely by this WPM value.';
       } else {
         if (speedLabel) speedLabel.textContent = 'Baseline speed (WPM)';
-        if (speedHint) speedHint.textContent = 'Hybrid (Performance): uses this WPM as a floor while ASR (Training) can pull the text ahead as you speak.';
+        if (speedHint) speedHint.textContent = 'Hybrid: uses this WPM as a floor while ASR can pull the text ahead as you speak.';
       }
       if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = m; }
     } else {
@@ -2332,7 +2332,7 @@ function applyMode(m) {
 
       if (m === 'asr') {
         if (speedLabel) speedLabel.textContent = 'Scroll speed';
-        if (speedHint) speedHint.textContent = 'ASR (Training)-only: scroll position is driven by your voice; speed slider is ignored.';
+        if (speedHint) speedHint.textContent = 'ASR-only: scroll position is driven by your voice; speed slider is ignored.';
         if (speedInput) { speedInput.disabled = true; speedInput.dataset.mode = 'asr'; }
       } else {
         if (speedLabel) speedLabel.textContent = 'Scroll speed';
@@ -2348,10 +2348,10 @@ function applyMode(m) {
           modeExplain.textContent = 'WPM: scrolls at a fixed words-per-minute target; good for solo reads.';
           break;
         case 'hybrid':
-          modeExplain.textContent = 'Hybrid (Performance): PLL between your voice and the WPM baseline; ASR (Training) nudges while the baseline keeps moving.';
+          modeExplain.textContent = 'Hybrid: PLL between your voice and the WPM baseline; ASR nudges while the baseline keeps moving.';
           break;
         case 'asr':
-          modeExplain.textContent = 'ASR (Training): pure voice-locked mode - scroll position follows recognized speech; speed slider is ignored.';
+          modeExplain.textContent = 'ASR: pure voice-locked mode - scroll position follows recognized speech; speed slider is ignored.';
           break;
         case 'timed':
           modeExplain.textContent = 'Timed: scrolls to hit your end time; useful for fixed-slot rehearsals.';
