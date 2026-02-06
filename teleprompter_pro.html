@@ -48,63 +48,11 @@
   <!-- BOOTSTRAP ONLY -->
   <script src="/forge-config.js"></script>
 
-  <!-- TS bundle preload + entry (single brain) -->
+  <!-- TS bundle entry (single brain) -->
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
   <!-- LEGACY COMPAT -->
   <script type="module" src="./adapters/obsBridge.js"></script>
-  <script>
-    // BOOTSTRAP ONLY
-    (function(){
-      try {
-        var host = (location && location.hostname) ? location.hostname : '';
-        var Q = new URLSearchParams(location.search);
-        var hash = location.hash || '';
-        var isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-        var isDev = isLocal || Q.has('dev') || Q.get('dev') === '1' || Q.has('dev1') || Q.get('dev1') === '1' || hash.indexOf('dev') !== -1;
-        var addv = (window).__TP_ADDV;
-        var candidates = isDev ? ['./dist/index.js', './index.js'] : ['./index.js'];
-        if (typeof addv === 'function') {
-          candidates = candidates.map(function(p){ return addv(p); });
-        } else if (addv) {
-          candidates = candidates.map(function(p){ return p + '?v=' + encodeURIComponent(addv); });
-        } else if (isDev) {
-          candidates = candidates.map(function(p){ return p + '?v=dev&b=20251227a'; });
-        }
-        var preload = document.getElementById('tp-dist-preload');
-        if (!preload && !isDev && candidates.length) {
-          preload = document.createElement('link');
-          preload.id = 'tp-dist-preload';
-          preload.rel = 'modulepreload';
-          preload.as = 'script';
-          document.head.appendChild(preload);
-        }
-        if (preload) {
-          if (isDev) preload.removeAttribute('href');
-          else if (candidates.length) preload.href = candidates[0];
-        }
-        var entry = document.getElementById('tp-dist-entry');
-        if (!entry) {
-          entry = document.createElement('script');
-          entry.type = 'module';
-          entry.id = 'tp-dist-entry';
-          document.head.appendChild(entry);
-        }
-        var idx = 0;
-        var loadNext = function() {
-          if (idx >= candidates.length) return;
-          var src = candidates[idx++];
-          entry.onerror = function(){ loadNext(); };
-          entry.onload = function(){ entry.onerror = null; };
-          entry.src = src;
-        };
-        loadNext();
-      } catch (err) {
-        try { console.warn('[preload] using default dist path', err); } catch {}
-      }
-    })();
-  </script>
-  <!-- BOOTSTRAP ONLY -->
-  <script id="tp-dist-entry" type="module" src="./index.js"></script>
+  <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
   <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
 <!-- Dev flag: add .tp-dev class early so CSS can key off it -->
