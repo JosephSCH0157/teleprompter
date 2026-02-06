@@ -15,6 +15,17 @@ async function main() {
     const a = argv.find((s) => s.startsWith(`--${k}=`) || s.startsWith(`--${k.toLowerCase()}=`));
     return a ? a.split('=')[1] : d;
   };
+  const parsePort = (value) => {
+    const n = Number.parseInt(String(value || ''), 10);
+    return Number.isFinite(n) && n >= 0 && n < 65536 ? n : null;
+  };
+  const argPortFlag = argv.find((a) => a.startsWith('--port='));
+  let argPort = argPortFlag ? parsePort(argPortFlag.split('=')[1]) : null;
+  if (argPort == null) {
+    const idx = argv.findIndex((a) => a === '--port');
+    if (idx >= 0 && argv[idx + 1]) argPort = parsePort(argv[idx + 1]);
+  }
+  const smokePort = parsePort(process.env.TP_SMOKE_PORT) ?? argPort;
 
   const RUN_CRAWL = flag('--crawl');
   const RUN_SMOKE = flag('--runSmoke') || flag('--runsmoke') || RUN_CRAWL;
@@ -34,7 +45,7 @@ async function main() {
   try { process.env.CI = process.env.CI || 'true'; } catch {}
   // If running the smoke harness, prefer a deterministic non-dev port and ensure
   // the static server listens on that port so the loader can see ?ci=1 without dev mode.
-  const effectivePort = RUN_SMOKE ? 5180 : port;
+  const effectivePort = RUN_SMOKE ? (smokePort ?? 5180) : port;
   try { process.env.PORT = String(effectivePort); } catch (_e) {}
   const server = require('./static_server.js');
 
