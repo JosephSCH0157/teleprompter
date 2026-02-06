@@ -176,6 +176,20 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         <h4>Recording</h4>
 
       <div class="settings-card anim-in">
+        <h4>Recording Engine</h4>
+        <div class="row settings-inline-row">
+          <button id="recEngineCore" class="chip" type="button" aria-pressed="false">Core Recorder</button>
+          <button id="recEngineObs" class="chip" type="button" aria-pressed="false">OBS</button>
+        </div>
+        <h4 style="margin-top:6px">Recording Mode</h4>
+        <div class="row settings-inline-row">
+          <button id="recModeAv" class="chip" type="button" aria-pressed="false">Video + Audio</button>
+          <button id="recModeAudio" class="chip" type="button" aria-pressed="false">Audio Only</button>
+        </div>
+        <span id="recModeHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Audio-only records WAV and skips camera capture.</span>
+      </div>
+
+      <div class="settings-card anim-in">
         <h4>Auto-record</h4>
         <div class="row">
           <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>
@@ -184,21 +198,6 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>
           <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder</button>
           <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>
-        </div>
-      </div>
-
-      <div class="settings-card anim-in">
-        <h4>Recorder integrations</h4>
-        <div class="row settings-inline-row" id="recAdaptersRow">
-          <div class="rec-list" style="display:flex;flex-wrap:wrap;gap:10px">
-            <label class="tp-check"><input type="checkbox" id="recAdapterCore" checked/> Core recorder</label>
-            <label class="tp-check"><input type="checkbox" id="recAdapterObs"/> OBS (WebSocket)</label>
-          </div>
-        </div>
-        <div class="row settings-inline-row">
-          <label class="tp-check"><input type="checkbox" id="recModeSingle"/> Single mode (one adapter at a time)</label>
-          <button id="recAdaptersRefresh" class="chip btn-chip" type="button">Refresh status</button>
-          <span id="recAdaptersHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Pick which integrations to trigger when Auto-record is on.</span>
         </div>
       </div>
 

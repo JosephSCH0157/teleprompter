@@ -8,6 +8,7 @@ import {
   stopSessionRecording,
   listRecorders,
 } from '../recording/recorderRegistry';
+import { getRecordingEngine } from '../recording/recording-settings';
 
 function maybeStartOnLive(phase: SessionPhase): void {
   if (phase !== 'live') return;
@@ -25,21 +26,24 @@ function maybeStartOnLive(phase: SessionPhase): void {
 
   try {
     const obsEnabled = !!appStore.get('obsEnabled');
+    const engine = getRecordingEngine();
     try {
       console.debug('[recording-session] live phase', {
         recordOnLive: shouldRecord,
         reason,
         obsEnabled,
+        engine,
       });
     } catch {}
     try {
       console.debug('[recording-session] startRecorders: intent', {
         obsEnabled,
+        engine,
         recordOnLive: shouldRecord,
         registered: listRecorders().map((r) => r.id),
       });
     } catch {}
-    startSessionRecording({ obsEnabled }).catch((err) => {
+    startSessionRecording({ obsEnabled, engine }).catch((err) => {
       console.warn('[session] startSessionRecording failed', err);
     });
   } catch (err) {

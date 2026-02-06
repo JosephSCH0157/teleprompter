@@ -1,6 +1,7 @@
 import { getAutoRecordEnabled } from '../state/auto-record-ssot';
 import type { AppStore } from '../state/app-store';
 import { isSessionRecording } from '../recording/recorderRegistry';
+import { getRecordingMode } from '../recording/recording-settings';
 import { pushDisplayRecordState } from './display-sync';
 
 export type RecState = 'off' | 'armed' | 'recording';
@@ -170,7 +171,11 @@ function renderPill(pill: HTMLElement, next: RecState, prev: RecState, variant: 
     return;
   }
 
-  pill.textContent = isRecording ? 'REC' : 'REC ARMED';
+  if (isRecording) {
+    pill.textContent = getRecordingMode() === 'audio' ? 'REC • AUDIO' : 'REC';
+  } else {
+    pill.textContent = 'REC ARMED';
+  }
   pill.style.display = 'inline-flex';
   pill.setAttribute('aria-hidden', 'false');
   if (justAppeared) {

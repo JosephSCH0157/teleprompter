@@ -3,8 +3,12 @@ import {
   getSettings as getRecorderSettings,
   setMode as setRecorderMode,
   setSelected as setRecorderSelected,
+  setRecordingMode as setRecorderRecordingMode,
 } from '../../../recorders';
 import type { AppStore } from '../../state/app-store';
+import { setRecorderEnabled } from '../../state/recorder-settings';
+import { isSessionRecording } from '../../recording/recorderRegistry';
+import { applyRecordingModeUi } from '../recording-mode-ui';
 
 const DATASET_SETTINGS_WIRED = 'tpSettingsWired';
 const DATASET_CHANGE_WIRED = 'tpChangeWired';
@@ -239,6 +243,112 @@ function wireRecorderAdapters(rootEl: HTMLElement) {
   syncFromSettings();
 }
 
+function wireRecordingModeControls(rootEl: HTMLElement) {
+  const coreBtn = rootEl.querySelector('#recEngineCore') as HTMLButtonElement | null;
+  const obsBtn = rootEl.querySelector('#recEngineObs') as HTMLButtonElement | null;
+  const avBtn = rootEl.querySelector('#recModeAv') as HTMLButtonElement | null;
+  const audioBtn = rootEl.querySelector('#recModeAudio') as HTMLButtonElement | null;
+  const hintEl = rootEl.querySelector('#recModeHint') as HTMLElement | null;
+
+  if (!coreBtn && !obsBtn && !avBtn && !audioBtn) return;
+
+  const setActive = (btn: HTMLButtonElement | null, on: boolean) => {
+    if (!btn) return;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  };
+
+  const resolveEngine = (cfg: any): 'core' | 'obs' => {
+    const selected = Array.isArray(cfg?.selected) ? cfg.selected.map((v: any) => String(v)) : [];
+    const mode = String(cfg?.mode || '').toLowerCase();
+    if (mode === 'single') {
+      if (selected.includes('obs')) return 'obs';
+      if (selected.includes('core')) return 'core';
+    }
+    if (selected.includes('obs') && !selected.includes('core')) return 'obs';
+    return 'core';
+  };
+
+  const guardRecordingChange = (message: string) => {
+    if (!isSessionRecording()) return true;
+    try { (window as any).toast?.(message || 'Stop recording to change recording mode.', { type: 'warn' }); } catch {}
+    return false;
+  };
+
+  const syncUi = () => {
+    let cfg: any = null;
+    try { cfg = getRecorderSettings(); } catch {}
+    const engine = resolveEngine(cfg);
+    let recordingMode: 'av' | 'audio' = cfg?.recordingMode === 'audio' ? 'audio' : 'av';
+    const audioAllowed = engine !== 'obs';
+
+    if (!audioAllowed && recordingMode === 'audio') {
+      recordingMode = 'av';
+      try { setRecorderRecordingMode('av'); } catch {}
+    }
+
+    setActive(coreBtn, engine === 'core');
+    setActive(obsBtn, engine === 'obs');
+    setActive(avBtn, recordingMode === 'av');
+    setActive(audioBtn, recordingMode === 'audio');
+
+    if (audioBtn) {
+      audioBtn.disabled = !audioAllowed;
+      audioBtn.title = audioAllowed ? '' : 'Audio-only recording is supported in Core Recorder.';
+    }
+
+    if (hintEl) {
+      hintEl.textContent = audioAllowed
+        ? 'Audio-only records WAV and skips camera capture.'
+        : 'Audio-only is available when Core Recorder is selected.';
+    }
+
+    applyRecordingModeUi(recordingMode);
+  };
+
+  const setEngine = (engine: 'core' | 'obs') => {
+    if (!guardRecordingChange('Stop recording to change recording engine.')) return;
+    try { setRecorderMode('single'); } catch {}
+    try { setRecorderSelected([engine]); } catch {}
+    try { setRecorderEnabled('obs', engine === 'obs'); } catch {}
+    if (engine === 'obs') {
+      try { setRecorderRecordingMode('av'); } catch {}
+    }
+    syncUi();
+  };
+
+  const setRecordingMode = (mode: 'av' | 'audio') => {
+    if (!guardRecordingChange('Stop recording to change recording mode.')) return;
+    const cfg = getRecorderSettings();
+    const engine = resolveEngine(cfg);
+    if (engine === 'obs' && mode === 'audio') {
+      try { (window as any).toast?.('Audio-only recording is supported in Core Recorder.', { type: 'info' }); } catch {}
+      return;
+    }
+    try { setRecorderRecordingMode(mode); } catch {}
+    syncUi();
+  };
+
+  if (coreBtn && !coreBtn.dataset[DATASET_CARD_WIRED]) {
+    coreBtn.dataset[DATASET_CARD_WIRED] = '1';
+    coreBtn.addEventListener('click', () => setEngine('core'));
+  }
+  if (obsBtn && !obsBtn.dataset[DATASET_CARD_WIRED]) {
+    obsBtn.dataset[DATASET_CARD_WIRED] = '1';
+    obsBtn.addEventListener('click', () => setEngine('obs'));
+  }
+  if (avBtn && !avBtn.dataset[DATASET_CARD_WIRED]) {
+    avBtn.dataset[DATASET_CARD_WIRED] = '1';
+    avBtn.addEventListener('click', () => setRecordingMode('av'));
+  }
+  if (audioBtn && !audioBtn.dataset[DATASET_CARD_WIRED]) {
+    audioBtn.dataset[DATASET_CARD_WIRED] = '1';
+    audioBtn.addEventListener('click', () => setRecordingMode('audio'));
+  }
+
+  syncUi();
+}
+
 export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore | null) {
   if (!rootEl) return;
   if ((window as any).__TP_DEV) {
@@ -446,7 +556,7 @@ export function wireSettingsDynamic(rootEl: HTMLElement | null, store?: AppStore
   } catch {}
 
   try {
-    wireRecorderAdapters(rootEl);
+    wireRecordingModeControls(rootEl);
   } catch {}
   try {
     wireAutoRecord(rootEl, store);

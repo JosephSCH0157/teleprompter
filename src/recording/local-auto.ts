@@ -1,11 +1,19 @@
 // Lightweight auto-record stub (browser MediaRecorder-based).
 // Mirrors the legacy JS behavior but typed for the TS runtime.
+import { getRecordingMode } from './recording-settings';
 
 (() => {
   let mediaRecorder: MediaRecorder | null = null;
   let chunks: Blob[] = [];
   let active = false;
+  let activeMode: 'av' | 'audio' | null = null;
   let currentStream: MediaStream | null = null;
+  let audioCtx: AudioContext | null = null;
+  let audioSource: MediaStreamAudioSourceNode | null = null;
+  let audioProcessor: ScriptProcessorNode | null = null;
+  let audioGain: GainNode | null = null;
+  let audioChunks: Float32Array[] = [];
+  let audioSampleRate = 48000;
 
   const pad = (n: number) => String(n).padStart(2, '0');
   function formatTimestamp(date: Date): string {
@@ -41,14 +49,16 @@
     return 'Script';
   }
 
-  const nowName = (): string => {
+  const nowName = (mode: 'av' | 'audio'): string => {
     try {
       const date = new Date();
       const title = sanitizeTitle(getActiveScriptTitle());
       const ts = formatTimestamp(date);
+      if (mode === 'audio') return `${title}_${ts}_audio.wav`;
       return `${title}_${ts}.webm`;
     } catch {
-      return `Script_${formatTimestamp(new Date())}.webm`;
+      const fallback = formatTimestamp(new Date());
+      return mode === 'audio' ? `Script_${fallback}_audio.wav` : `Script_${fallback}.webm`;
     }
   };
 
@@ -60,6 +70,47 @@
       }
     } catch {}
     return 'video/webm';
+  };
+
+  const encodeWav = (buffers: Float32Array[], sampleRate: number): ArrayBuffer => {
+    const numChannels = 1;
+    const bytesPerSample = 2;
+    const totalSamples = buffers.reduce((sum, b) => sum + b.length, 0);
+    const dataSize = totalSamples * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    let offset = 0;
+    writeString(offset, 'RIFF'); offset += 4;
+    view.setUint32(offset, 36 + dataSize, true); offset += 4;
+    writeString(offset, 'WAVE'); offset += 4;
+    writeString(offset, 'fmt '); offset += 4;
+    view.setUint32(offset, 16, true); offset += 4; // PCM chunk size
+    view.setUint16(offset, 1, true); offset += 2; // audio format = PCM
+    view.setUint16(offset, numChannels, true); offset += 2;
+    view.setUint32(offset, sampleRate, true); offset += 4;
+    view.setUint32(offset, sampleRate * numChannels * bytesPerSample, true); offset += 4;
+    view.setUint16(offset, numChannels * bytesPerSample, true); offset += 2;
+    view.setUint16(offset, 16, true); offset += 2; // bits per sample
+    writeString(offset, 'data'); offset += 4;
+    view.setUint32(offset, dataSize, true); offset += 4;
+
+    let dataOffset = 44;
+    for (const chunk of buffers) {
+      for (let i = 0; i < chunk.length; i++) {
+        let s = chunk[i];
+        if (s > 1) s = 1;
+        else if (s < -1) s = -1;
+        const v = s < 0 ? s * 0x8000 : s * 0x7fff;
+        view.setInt16(dataOffset, v, true);
+        dataOffset += 2;
+      }
+    }
+    return buffer;
   };
 
   const getVideoStream = async (): Promise<MediaStream> => {
@@ -106,6 +157,75 @@
     }
   };
 
+  const startAudioOnly = async (): Promise<void> => {
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) throw new Error('AudioContext not available');
+
+    const stream = await getAudioStream();
+    currentStream = stream;
+    const ctx = new AC({ sampleRate: 48000 });
+    audioCtx = ctx as AudioContext;
+    try {
+      if (typeof ctx.resume === 'function' && (ctx as AudioContext).state === 'suspended') {
+        await (ctx as AudioContext).resume();
+      }
+    } catch {}
+    audioSampleRate = (ctx as AudioContext).sampleRate || 48000;
+    audioChunks = [];
+
+    audioSource = (ctx as AudioContext).createMediaStreamSource(stream);
+    audioProcessor = (ctx as AudioContext).createScriptProcessor(4096, 1, 1);
+    audioGain = (ctx as AudioContext).createGain();
+    audioGain.gain.value = 0;
+
+    audioProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
+      try {
+        const input = e.inputBuffer;
+        const channelCount = input.numberOfChannels || 1;
+        const length = input.length;
+        if (channelCount === 1) {
+          const data = input.getChannelData(0);
+          audioChunks.push(new Float32Array(data));
+          return;
+        }
+        const mixed = new Float32Array(length);
+        for (let c = 0; c < channelCount; c++) {
+          const data = input.getChannelData(c);
+          for (let i = 0; i < length; i++) mixed[i] += data[i] / channelCount;
+        }
+        audioChunks.push(mixed);
+      } catch {}
+    };
+
+    audioSource.connect(audioProcessor);
+    audioProcessor.connect(audioGain);
+    audioGain.connect((ctx as AudioContext).destination);
+  };
+
+  const stopAudioOnly = async (): Promise<void> => {
+    try {
+      if (audioProcessor) audioProcessor.disconnect();
+    } catch {}
+    try {
+      if (audioSource) audioSource.disconnect();
+    } catch {}
+    try {
+      if (audioGain) audioGain.disconnect();
+    } catch {}
+    try {
+      if (audioCtx && typeof audioCtx.close === 'function') await audioCtx.close();
+    } catch {}
+    audioCtx = null;
+    audioSource = null;
+    audioProcessor = null;
+    audioGain = null;
+
+    const wavBuffer = encodeWav(audioChunks, audioSampleRate);
+    audioChunks = [];
+    const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+    await saveBlob(blob, nowName('audio'));
+  };
+
   async function start(): Promise<void> {
     if (active) return;
     try {
@@ -114,11 +234,23 @@
         return;
       }
 
+      const recordingMode = getRecordingMode();
       try {
         console.log('[core-recorder] start', {
           mode: (window as any).__tpStore?.get?.('scrollMode') || null,
+          recordingMode,
         });
       } catch {}
+
+      if (recordingMode === 'audio') {
+        await startAudioOnly();
+        active = true;
+        activeMode = 'audio';
+        try {
+          window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'recording', adapter: 'local-auto' } }));
+        } catch {}
+        return;
+      }
 
       const v = await getVideoStream();
       const a = await getAudioStream();
@@ -148,7 +280,7 @@
           try {
             console.log('[core-recorder] about to save blob', { size: blob.size, type: blob.type });
           } catch {}
-          await saveBlob(blob, nowName());
+          await saveBlob(blob, nowName('av'));
         } catch (e) {
           try {
             console.warn('[auto-rec] save failed', e);
@@ -157,6 +289,7 @@
       };
       mediaRecorder.start();
       active = true;
+      activeMode = 'av';
       try {
         window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'recording', adapter: 'local-auto' } }));
       } catch {}
@@ -171,7 +304,11 @@
     try { console.log('[core-recorder] stop called'); } catch {}
     if (!active) return;
     try {
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      if (activeMode === 'audio') {
+        await stopAudioOnly();
+      } else if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
     } catch {}
     try {
       if (currentStream) currentStream.getTracks().forEach((t) => {
@@ -183,6 +320,7 @@
     currentStream = null;
     mediaRecorder = null;
     active = false;
+    activeMode = null;
     try {
       window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'idle', adapter: 'local-auto' } }));
     } catch {}

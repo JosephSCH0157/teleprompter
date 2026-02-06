@@ -511,6 +511,9 @@ body.ck::after{
 /* Mirror mode for teleprompter */
 .mirror .viewer{ transform: scaleX(-1); }
 
+/* Audio-only recording: hide camera preview area */
+html.tp-audio-only #camWrap{ display:none !important; }
+
 /* Toast system */
 .tp-toast-container{position:fixed;right:calc(16px * var(--tp-ui-scale));bottom:calc(16px * var(--tp-ui-scale));display:flex;flex-direction:column;gap:calc(8px * var(--tp-ui-scale));z-index:2147483646;max-width:320px}
 .tp-toast{background:#0e141b;border:1px solid var(--edge);color:var(--fg);padding:calc(10px * var(--tp-ui-scale)) calc(12px * var(--tp-ui-scale));border-radius:calc(8px * var(--tp-ui-scale));box-shadow:0 8px 20px rgba(0,0,0,.6);opacity:0;transform:translateY(6px) scale(.99);transition:all 0.1s ease-out}

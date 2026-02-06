@@ -1,3 +1,5 @@
+import { getRecordingEngine, type RecordingEngine } from './recording-settings';
+
 export type RecorderId = 'core' | 'obs' | string;
 
 export interface RecorderBackend {
@@ -44,15 +46,18 @@ export function registerRecorders(options: {
   if (options?.obs) registerRecorder(options.obs);
 }
 
-export async function startSessionRecording(opts: { obsEnabled: boolean }): Promise<void> {
+
+export async function startSessionRecording(opts: { obsEnabled?: boolean; engine?: RecordingEngine }): Promise<void> {
   if (sessionRecording) return;
 
+  const engine = opts?.engine ?? getRecordingEngine();
+  const obsEnabled = !!opts?.obsEnabled;
   const tasks: Promise<unknown>[] = [];
 
   const core = registry.get('core');
-  if (core) {
+  if (core && engine === 'core') {
     try {
-      console.debug('[recording-session] startRecorders: core available, obsEnabled=', !!opts?.obsEnabled);
+      console.debug('[recording-session] startRecorders: core available', { engine, obsEnabled });
     } catch {}
     tasks.push(
       core
@@ -66,11 +71,11 @@ export async function startSessionRecording(opts: { obsEnabled: boolean }): Prom
     console.warn('[recording] no "core" recorder registered');
   }
 
-  if (opts?.obsEnabled) {
+  if (engine === 'obs' && obsEnabled) {
     const obs = registry.get('obs');
     if (obs) {
       try {
-        console.debug('[recording-session] startRecorders: obs available');
+        console.debug('[recording-session] startRecorders: obs available', { engine });
       } catch {}
       tasks.push(
         obs

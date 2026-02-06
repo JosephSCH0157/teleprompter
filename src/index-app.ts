@@ -72,6 +72,7 @@ import { installAutoMaxCh } from './ui/autoMaxCh';
 import { initUiScale } from './ui/ui-scale';
 import { DEFAULT_SCRIPT_FONT_PX } from './ui/typography-ssot';
 import { wireRecordButtons } from './ui/recordButtons';
+import { initRecordingModeUi } from './ui/recording-mode-ui';
 import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
 import { initPrerollSession } from './features/preroll-session';
@@ -1960,6 +1961,7 @@ export async function boot() {
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
           try { wireSidebarCalibrationUI(); } catch {}
+          try { initRecordingModeUi(); } catch {}
           try { bindCameraUI(); } catch {}
           try { initRecPillsMain(appStore); } catch {}
           if (!isDisplayContext()) {
