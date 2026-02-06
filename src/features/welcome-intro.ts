@@ -12,7 +12,19 @@ const SCRIPT_STORAGE_KEYS = [
   'tp_last_script_name',
   'tp_scripts_v1',
 ];
-let welcomeCheckRun = false;
+let welcomeCheckInFlight = false;
+let welcomeCheckDone = false;
+
+function isDevMode(): boolean {
+  try {
+    const w = window as any;
+    if (w?.__TP_DEV_MODE === true) return true;
+    if (window.localStorage.getItem('tp_dev_mode') === '1') return true;
+    const href = String(window.location?.href ?? '');
+    if (href.includes('?dev=1') || href.includes('&dev=1') || href.includes('#dev')) return true;
+  } catch {}
+  return false;
+}
 
 type WelcomeState = {
   seen: boolean;
@@ -81,6 +93,20 @@ function waitForScriptStabilization(timeoutMs = 220): Promise<void> {
       window.addEventListener('tp:script-rendered', handler);
     } catch {}
     timer = setTimeout(finish, Math.max(0, timeoutMs));
+  });
+}
+
+function waitForEditorReady(timeoutMs = 1500): Promise<HTMLTextAreaElement | null> {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      const el = document.getElementById('editor') as HTMLTextAreaElement | null;
+      if (el) return resolve(el);
+      if (Date.now() - start >= timeoutMs) return resolve(null);
+      requestAnimationFrame(tick);
+    };
+    tick();
   });
 }
 
@@ -177,31 +203,82 @@ async function resolveWelcomeState(): Promise<WelcomeState> {
 }
 
 export async function ensureWelcomeScript(): Promise<void> {
-  if (welcomeCheckRun) return;
+  if (welcomeCheckDone) return;
+  if (welcomeCheckInFlight) return;
   if (typeof document === 'undefined') return;
   if ((window as any).__TP_FORCE_DISPLAY) return;
-  welcomeCheckRun = true;
-
-  if (hasSupabaseConfig) {
-    await ensureUserStorageFresh();
-  }
-
-  const initialSnapshot = captureEditorSnapshot();
-  if (!initialSnapshot.isEmpty) return;
-
-  await waitForScriptStabilization();
+  welcomeCheckInFlight = true;
 
   try {
+    const editor = await waitForEditorReady(2000);
+    if (!editor) return;
+
+    if (hasSupabaseConfig) {
+      await ensureUserStorageFresh();
+    }
+
+    const initialSnapshot = captureEditorSnapshot();
+    if (!initialSnapshot.isEmpty) {
+      welcomeCheckDone = true;
+      return;
+    }
+
+    await waitForScriptStabilization(1200);
+
     const state = await resolveWelcomeState();
-    if (state.seen) return;
+    if (state.seen) {
+      welcomeCheckDone = true;
+      return;
+    }
 
     const beforeApplySnapshot = captureEditorSnapshot();
-    if (!beforeApplySnapshot.isEmpty) return;
+    if (!beforeApplySnapshot.isEmpty) {
+      welcomeCheckDone = true;
+      return;
+    }
 
     const script = buildWelcomeScript(state.displayName);
     applyScript(script, 'load', { updateEditor: true });
     await state.markSeen();
+    welcomeCheckDone = true;
   } catch {
     // swallow errors to avoid blocking boot
+  } finally {
+    welcomeCheckInFlight = false;
   }
 }
+
+export async function devResetWelcomeSeen(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (!isDevMode()) {
+    console.warn('[welcome-intro] devResetWelcomeSeen blocked (not in dev mode)');
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(LOCAL_STORAGE_KEY);
+  } catch {}
+
+  try {
+    [...SCRIPT_STORAGE_KEYS].forEach((key) => window.localStorage.removeItem(key));
+  } catch {}
+
+  if (hasSupabaseConfig) {
+    try {
+      const store = new ProfileStore(supabase);
+      await store.saveProfilePatch({ workflow: { hasSeenWelcome: false } });
+      console.log('[welcome-intro] devResetWelcomeSeen: profile.workflow.hasSeenWelcome=false');
+    } catch (err) {
+      console.warn('[welcome-intro] devResetWelcomeSeen: failed to patch profile', err);
+    }
+  }
+
+  welcomeCheckDone = false;
+  welcomeCheckInFlight = false;
+}
+
+try {
+  if (typeof window !== 'undefined' && isDevMode()) {
+    (window as any).__tpDevResetWelcome = devResetWelcomeSeen;
+  }
+} catch {}
