@@ -8,17 +8,33 @@ const FALLBACK_HTML = path.join(ROOT, 'teleprompter_pro.html');
 
 // Choose host/port (allow overrides via env or argv)
 const DEFAULT_HOST = process.env.CI_HOST || '0.0.0.0';
+const isCi = process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
 let PORT = 5180; // default for CI
-const envPort = parseInt(process.env.PORT || process.env.CI_PORT, 10);
-if (!Number.isNaN(envPort) && envPort >= 0 && envPort < 65536) {
-  PORT = envPort;
-} else {
-  const argNum = process.argv.find((a) => /^\d+$/.test(String(a)));
-  const argPort = argNum ? parseInt(argNum, 10) : NaN;
-  if (!Number.isNaN(argPort) && argPort >= 0 && argPort < 65536) {
-    PORT = argPort;
-  }
+
+const parsePort = (value) => {
+  const n = parseInt(String(value || ''), 10);
+  return !Number.isNaN(n) && n >= 0 && n < 65536 ? n : null;
+};
+
+const argv = process.argv.slice(2);
+const argPortFlag = argv.find((a) => a.startsWith('--port='));
+let argPort = argPortFlag ? parsePort(argPortFlag.split('=')[1]) : null;
+if (argPort == null) {
+  const idx = argv.findIndex((a) => a === '--port');
+  if (idx >= 0 && argv[idx + 1]) argPort = parsePort(argv[idx + 1]);
 }
+const argNum = argv.find((a) => /^\d+$/.test(String(a)));
+const argNumericPort = argNum ? parsePort(argNum) : null;
+
+const envPort = parsePort(process.env.TP_SMOKE_PORT || process.env.PORT || process.env.CI_PORT);
+if (envPort != null) {
+  PORT = envPort;
+} else if (argPort != null) {
+  PORT = argPort;
+} else if (argNumericPort != null) {
+  PORT = argNumericPort;
+}
+
 const HOST = process.env.CI_HOST || DEFAULT_HOST;
 
 function contentType(p) {
@@ -202,6 +218,10 @@ if (displayRelay) {
 
 server.on('error', (err) => {
   if (err && err.code === 'EADDRINUSE') {
+    if (isCi) {
+      console.error(`[static-server] port ${PORT} already in use on ${HOST}; refusing to assume existing server in CI`);
+      process.exit(1);
+    }
     // Port already in use: assume another step already started the server.
     console.log(`[static-server] port ${PORT} already in use on ${HOST}; assuming server already running`);
     // If this script is being required by another module (e.g., smoke_test.js),

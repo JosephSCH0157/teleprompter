@@ -22,7 +22,7 @@
     "build:router": "npx esbuild src/features/scroll-router.ts --bundle --format=esm --sourcemap --outfile=dist/features/scroll-router.js",
     "watch:router": "npx esbuild src/features/scroll-router.js --bundle --format=esm --sourcemap --outfile=dist/features/scroll-router.js --watch",
     "typecheck": "npm run build:logic && tsc -p tsconfig.json --noEmit",
-    "smoke": "node tools/static_server.js & node tools/smoke_test.js --calm --timeout=120000",
+    "smoke": "TP_SMOKE_PORT=5181 node tools/static_server.js & TP_SMOKE_PORT=5181 node tools/smoke_test.js --calm --timeout=120000",
     "test:asr-smoke": "node tools/build_asr_smoke.mjs && node tools/asr_smoke.js",
     "test:rec-smoke": "node tools/rec_smoke.js",
     "lint:ts": "eslint \"**/*.{ts,tsx}\"",

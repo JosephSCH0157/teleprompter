@@ -11,12 +11,19 @@
 
 // Build default URL from CI_HOST/CI_PORT if provided, else fall back to 127.0.0.1:5180
 const CI_HOST = process.env.CI_HOST || '127.0.0.1';
-const CI_PORT = process.env.CI_PORT || process.env.PORT || '5180';
+const argv = process.argv.slice(2);
+const argPortFlag = argv.find(a => a.startsWith('--port='));
+let ARG_PORT = argPortFlag ? (argPortFlag.split('=')[1] || '').trim() : '';
+if (!ARG_PORT) {
+  const idx = argv.findIndex(a => a === '--port');
+  if (idx >= 0 && argv[idx + 1]) ARG_PORT = String(argv[idx + 1]).trim();
+}
+const CI_PORT = process.env.TP_SMOKE_PORT || ARG_PORT || process.env.CI_PORT || process.env.PORT || '5180';
 const DEFAULT_URL = `http://${CI_HOST}:${CI_PORT}/teleprompter_pro.html`;
-const ARG_URL = (process.argv.find(a => a.startsWith('--url=')) || '').split('=')[1];
-const ARG_TIMEOUT = Number((process.argv.find(a => a.startsWith('--timeout=')) || '').split('=')[1]) || 60000;
-const ARG_CALM = process.argv.includes('--calm');
-const ARG_CI = process.argv.includes('--ci');
+const ARG_URL = (argv.find(a => a.startsWith('--url=')) || '').split('=')[1];
+const ARG_TIMEOUT = Number((argv.find(a => a.startsWith('--timeout=')) || '').split('=')[1]) || 60000;
+const ARG_CALM = argv.includes('--calm');
+const ARG_CI = argv.includes('--ci');
 
 function withParam(url, key, val = '1') {
   const u = new URL(url);
