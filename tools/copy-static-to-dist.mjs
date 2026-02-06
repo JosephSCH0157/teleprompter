@@ -22,6 +22,7 @@ const STATIC_PATHS = [
   'login.html',
   'account.html',
   'reset.html',
+  'robots.txt',
   'sitemap.xml',
   'sitemaps.xml',
   'atom.xml',

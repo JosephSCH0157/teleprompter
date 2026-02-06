@@ -9,6 +9,7 @@ const requiredFiles = [
   'dist/login.html',
   'dist/reset.html',
   'dist/account.html',
+  'dist/robots.txt',
   'dist/assets',
   'dist/forge-config.js',
   'dist/adapters/obsBridge.js',
