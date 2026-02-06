@@ -20,6 +20,8 @@ let sendQueue: string[] = [];
 const SCROLL_THROTTLE_MS = 60;
 let scrollTimer: number | null = null;
 let pendingScroll: string | null = null;
+let relayEnabled = false;
+const RELAY_ENABLED_KEY = 'tp_display_ws_enabled';
 
 const flushScroll = () => {
   if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -61,6 +63,22 @@ const isDisplayContext = () => {
 };
 
 const isSupported = typeof window !== 'undefined' && typeof WebSocket !== 'undefined' && !isDisplayContext();
+
+const isRelayDisabled = () => {
+  if (typeof window === 'undefined') return false;
+  const w = window as any;
+  if (w.__TP_DISABLE_DISPLAY_WS) return true;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('ci') === '1') return true;
+    if (params.get('uiMock') === '1') return true;
+    if (params.get('mockFolder') === '1') return true;
+    if (params.get('noDisplayWs') === '1') return true;
+  } catch {
+    // ignore
+  }
+  return false;
+};
 
 const notifyListeners = () => {
   const snapshot = { ...status };
@@ -116,7 +134,7 @@ const flushQueue = () => {
 };
 
 const scheduleReconnect = () => {
-  if (reconnectTimer || !isSupported) return;
+  if (reconnectTimer || !isSupported || !relayEnabled) return;
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null;
     connect();
@@ -146,7 +164,7 @@ const resetSocket = () => {
 };
 
 const connect = () => {
-  if (!isSupported) return;
+  if (!isSupported || !relayEnabled) return;
   if (socket && socket.readyState === WebSocket.OPEN) return;
   updateStatus({ state: 'connecting', lastError: undefined });
   const url = getWsUrl();
@@ -179,17 +197,43 @@ const connect = () => {
   });
 };
 
-if (isSupported) {
-  connect();
+const loadRelayEnabled = () => {
+  if (typeof window === 'undefined') return false;
+  if (isRelayDisabled()) return false;
   try {
-    window.addEventListener('beforeunload', () => {
-      socket?.close();
-    });
-  } catch {}
+    return localStorage.getItem(RELAY_ENABLED_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const persistRelayEnabled = (on: boolean) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (on) {
+      localStorage.setItem(RELAY_ENABLED_KEY, '1');
+    } else {
+      localStorage.removeItem(RELAY_ENABLED_KEY);
+    }
+  } catch {
+    // ignore
+  }
+};
+
+relayEnabled = loadRelayEnabled();
+
+if (isSupported && relayEnabled) {
+  connect();
 }
 
+try {
+  window.addEventListener('beforeunload', () => {
+    socket?.close();
+  });
+} catch {}
+
 export function publishToNetworkDisplays(payload: unknown): void {
-  if (!isSupported || typeof payload === 'undefined') return;
+  if (!isSupported || !relayEnabled || typeof payload === 'undefined') return;
   try {
   const str = JSON.stringify(payload);
   let payloadType: string | null = null;
@@ -226,4 +270,13 @@ export function onNetworkDisplayStatus(fn: (status: RelayStatus) => void): () =>
 
 export function getNetworkDisplayStatus(): RelayStatus {
   return { ...status };
+}
+
+export function enableNetworkDisplayRelay(): void {
+  if (!isSupported) return;
+  if (isRelayDisabled()) return;
+  if (relayEnabled) return;
+  relayEnabled = true;
+  persistRelayEnabled(true);
+  connect();
 }
