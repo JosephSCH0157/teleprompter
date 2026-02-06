@@ -66,6 +66,7 @@ type TranscriptPayload = {
   candidates?: unknown;
   sim?: number;
   noMatch?: boolean;
+  currentIdx?: number | null;
 };
 
 declare global {
@@ -823,8 +824,16 @@ function attachAsrScrollDriver(): void {
   transcriptListener = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
     const detectedMode = typeof detail.mode === 'string' ? detail.mode.toLowerCase() : '';
-    const effectiveMode = detectedMode || getScrollMode();
-    if (effectiveMode !== 'asr' && effectiveMode !== 'hybrid') return;
+    const rawMode = (detectedMode || getScrollMode() || '').toLowerCase();
+    const effectiveMode = rawMode === 'manual' ? 'step' : rawMode;
+    const phase = getSession().phase;
+    if (effectiveMode === 'hybrid') {
+      // allow
+    } else if (effectiveMode === 'asr' && phase === 'live') {
+      // allow
+    } else {
+      return;
+    }
     const text = typeof detail.text === 'string' ? detail.text : '';
     if (!text) return;
     const isFinal = Boolean(detail.isFinal ?? detail.final);

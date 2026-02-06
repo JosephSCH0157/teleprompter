@@ -1,4 +1,4 @@
-1.7.7-pre
-ANVIL build: 2025-12-06 00:00
-Baseline: v1.7.x
-Notes: Session-first preroll/scroll pipeline stable; display mirroring uses single scroll/render channel with marker padding parity; OBS/settings hooks aligned; checkpoint before final 1.7.7 cut.
+1.8.2
+ANVIL build: 2026-02-06 00:00
+Baseline: v1.8.x
+Notes: Audio-only recording mode (Core Recorder), recording engine/mode UI, robots.txt crawler policy.

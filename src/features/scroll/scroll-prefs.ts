@@ -1,5 +1,6 @@
 // src/features/scroll/scroll-prefs.ts
 // Tiny helper to persist scroll mode prefs alongside the TS store.
+import { withScrollModeWriter } from '../../scroll/audit';
 
 export type ScrollModePref = 'hybrid' | 'timed' | 'wpm' | 'asr' | 'step' | 'rehearsal';
 
@@ -106,7 +107,9 @@ export function initScrollPrefsPersistence(store: ScrollStoreLike | undefined | 
 
   try {
     if (!fromStore || fromStore !== initial) {
-      store.set?.('scrollMode', initial as any);
+      withScrollModeWriter('state/app-store', () => {
+        try { store.set?.('scrollMode', initial as any); } catch {}
+      }, { source: 'migration' });
     }
   } catch {
     // ignore

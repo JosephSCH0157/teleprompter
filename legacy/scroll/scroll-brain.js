@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 let scrollMode = 'manual';
 let scrollTimer = null;
 // Tune later: px per frame at 60fps ⇒ ~144 px/sec

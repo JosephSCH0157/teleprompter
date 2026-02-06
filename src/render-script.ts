@@ -2,6 +2,15 @@
 import { normalizeToStandardText, fallbackNormalizeText } from './script/normalize';
 import { formatInlineMarkup } from './format-inline';
 import { installScrollRouter, createAutoMotor, ROUTER_STAMP } from './features/scroll/scroll-router';
+import {
+  ASR_MIN_CHARS_PER_BLOCK,
+  ASR_MIN_SENTENCES_PER_BLOCK,
+  ASR_MAX_CHARS_PER_BLOCK,
+  ASR_MAX_SENTENCES_PER_BLOCK,
+  type AsrBlockMetaV1,
+  type AsrBlockUnit,
+} from './scroll/asr-block-index';
+import { setAsrBlocks } from './scroll/asr-block-store';
 
 try { console.warn('[ROUTER_STAMP] render-script', ROUTER_STAMP); } catch {}
 
@@ -71,7 +80,96 @@ function resolveSpeakerTag(tag: string): SpeakerKey | null {
 
 let viewerScrollRouterInstalled = false;
 
+function isDevMode(): boolean {
+  try {
+    const qs = new URLSearchParams(String(location.search || ''));
+    if (qs.has('dev') || qs.get('dev') === '1') return true;
+    if (qs.has('dev1') || qs.get('dev1') === '1') return true;
+    if (qs.has('ci') || qs.get('ci') === '1') return true;
+    if ((window as any).__TP_DEV || (window as any).__TP_DEV1) return true;
+    if (localStorage.getItem('tp_dev_mode') === '1') return true;
+  } catch {}
+  return false;
+}
+
+function normalizeAsrText(input: string): string {
+  const raw = String(input || '');
+  const stripped = raw
+    .replace(/\[[^\]]+\]/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped.toLowerCase();
+}
+
+function countSentences(text: string): number {
+  const t = String(text || '').trim();
+  if (!t) return 0;
+  const cleaned = t.replace(/\.{3,}/g, '.');
+  const matches = cleaned.match(/[.!?]+/g);
+  if (!matches || matches.length === 0) return 1;
+  return matches.length;
+}
+
+function chunkAsrUnits(units: AsrBlockUnit[]) {
+  const blocks: Array<{
+    blockIdx: number;
+    unitStart: number;
+    unitEnd: number;
+    sentenceCount: number;
+    charCount: number;
+  }> = [];
+  const warnings: string[] = [];
+  if (!units.length) return { blocks, warnings };
+
+  let start = 0;
+  let sentences = 0;
+  let chars = 0;
+
+  const closeBlock = (endIdx: number) => {
+    const blockIdx = blocks.length;
+    blocks.push({
+      blockIdx,
+      unitStart: start,
+      unitEnd: endIdx,
+      sentenceCount: sentences,
+      charCount: chars,
+    });
+  };
+
+  for (let i = 0; i < units.length; i++) {
+    const unit = units[i];
+    sentences += unit.sentenceCount;
+    chars += unit.charCount;
+
+    if (unit.charCount >= ASR_MAX_CHARS_PER_BLOCK) {
+      warnings.push(`Unit ${i} oversized (${unit.charCount} chars)`);
+    }
+
+    const meetsMin =
+      sentences >= ASR_MIN_SENTENCES_PER_BLOCK &&
+      chars >= ASR_MIN_CHARS_PER_BLOCK;
+    const meetsMax =
+      sentences >= ASR_MAX_SENTENCES_PER_BLOCK ||
+      chars >= ASR_MAX_CHARS_PER_BLOCK;
+
+    if (meetsMin || meetsMax) {
+      closeBlock(i);
+      start = i + 1;
+      sentences = 0;
+      chars = 0;
+    }
+  }
+
+  if (start < units.length) {
+    closeBlock(units.length - 1);
+  }
+
+  return { blocks, warnings };
+}
+
 export function renderScript(text: string, container?: HTMLElement | null): void {
+  console.log("[LIVE SCRIPT RENDERER] executing", { ts: Date.now() });
   const raw = String(text ?? '');
   try { (window as any).__tpRawScript = raw; } catch {}
 
@@ -179,6 +277,9 @@ export function renderScript(text: string, container?: HTMLElement | null): void
 
   try { root.textContent = ''; } catch {}
   let renderedLineIndex = 0;
+  const nodeEntries: Array<{ el: HTMLElement; unitIdx: number | null }> = [];
+  const asrUnits: AsrBlockUnit[] = [];
+  const asrUnitEls: HTMLElement[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     let rawLine = lines[i] ?? '';
@@ -195,7 +296,7 @@ export function renderScript(text: string, container?: HTMLElement | null): void
       (div as any).dataset.line = renderIdx;
       (div as any).dataset.lineIdx = renderIdx;
       (div as any).dataset.rawLine = String(i);
-      frag.appendChild(div);
+      nodeEntries.push({ el: div, unitIdx: null });
       renderedLineIndex += 1;
       continue;
     }
@@ -262,7 +363,25 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     const html = formatInline(rawLine);
     div.innerHTML = html || '&nbsp;';
     applyInlineColors(div);
-    frag.appendChild(div);
+
+    const textNorm = normalizeAsrText(rawLine);
+    const unitIdx = textNorm
+      ? (() => {
+          const sentenceCount = countSentences(textNorm);
+          const charCount = textNorm.length;
+          const unit: AsrBlockUnit = {
+            textNorm,
+            sentenceCount,
+            charCount,
+          };
+          const idx = asrUnits.length;
+          asrUnits.push(unit);
+          asrUnitEls.push(div);
+          return idx;
+        })()
+      : null;
+
+    nodeEntries.push({ el: div, unitIdx });
     renderedLineIndex += 1;
 
     if (closeAfterLine) {
@@ -270,7 +389,87 @@ export function renderScript(text: string, container?: HTMLElement | null): void
     }
   }
 
+  const { blocks, warnings } = chunkAsrUnits(asrUnits);
+  const unitToBlock = new Array(asrUnits.length).fill(0);
+  blocks.forEach((b) => {
+    for (let u = b.unitStart; u <= b.unitEnd; u++) unitToBlock[u] = b.blockIdx;
+  });
+
+  const blockEls: HTMLElement[] = [];
+  const appendedBlocks = new Set<number>();
+  const ensureBlock = (idx: number) => {
+    if (blockEls[idx]) return blockEls[idx];
+    const el = document.createElement('div');
+    el.className = 'tp-asr-block';
+    (el as any).dataset.tpBlock = String(idx);
+    blockEls[idx] = el;
+    if (!appendedBlocks.has(idx)) {
+      frag.appendChild(el);
+      appendedBlocks.add(idx);
+    }
+    return el;
+  };
+
+  let lastBlockIdx = -1;
+  for (const entry of nodeEntries) {
+    let bIdx = 0;
+    if (blocks.length) {
+      if (entry.unitIdx != null) {
+        bIdx = unitToBlock[entry.unitIdx] ?? 0;
+      } else {
+        bIdx = lastBlockIdx >= 0 ? lastBlockIdx : 0;
+      }
+    }
+    const blockEl = ensureBlock(bIdx);
+    blockEl.appendChild(entry.el);
+    lastBlockIdx = bIdx;
+  }
+
+  // If there were no units but nodes exist, ensure a single block wrapper exists.
+  if (!blocks.length && nodeEntries.length && !blockEls.length) {
+    const blockEl = ensureBlock(0);
+    for (const entry of nodeEntries) blockEl.appendChild(entry.el);
+  }
+
   try { root.appendChild(frag); } catch {}
+  try {
+    const meta: AsrBlockMetaV1 = {
+      schemaVersion: 1,
+      blockCount: blockEls.length,
+      createdAt: isDevMode() ? Date.now() : 0,
+      source: 'render',
+      units: blocks.map((b) => ({
+        blockIdx: b.blockIdx,
+        unitStart: b.unitStart,
+        unitEnd: b.unitEnd,
+        sentenceCount: b.sentenceCount,
+        charCount: b.charCount,
+      })),
+      warnings: warnings.length ? warnings : undefined,
+    };
+    setAsrBlocks(blockEls, meta);
+  } catch {}
+
+  if (isDevMode()) {
+    try {
+      let ok = true;
+      if (!blockEls.length) ok = false;
+      for (let i = 0; i < blockEls.length; i++) {
+        const el = blockEls[i];
+        if (!el || el.dataset.tpBlock !== String(i)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) {
+        try { (window as any).__tpAsrBlocksReady = false; } catch {}
+        console.error('[render] ASR block index invalid', {
+          blocks: blockEls.length,
+          warnings,
+        });
+      }
+    } catch {}
+  }
   try {
     const placeholder = viewer?.querySelector<HTMLElement>('.empty-msg');
     if (placeholder) placeholder.remove();

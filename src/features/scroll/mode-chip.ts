@@ -21,7 +21,7 @@ declare global {
   }
 }
 
-function formatMode(mode: ScrollMode): string {
+function formatMode(mode: ScrollMode, calmEnabled = false): string {
   const m = String(mode || '').toLowerCase();
   switch (m) {
     case 'timed':
@@ -29,7 +29,7 @@ function formatMode(mode: ScrollMode): string {
     case 'wpm':
       return 'WPM';
     case 'asr':
-      return 'ASR';
+      return calmEnabled ? 'ASR • Calm' : 'ASR';
     case 'hybrid':
       return 'Hybrid';
     case 'step':
@@ -77,13 +77,13 @@ function installModeChip(): void {
   wrap.setAttribute('data-role', 'scroll-mode-chip');
   wrap.style.display = 'inline-flex';
   wrap.style.alignItems = 'center';
-  wrap.style.gap = '0.25rem';
-  wrap.style.marginLeft = '0.75rem';
+  wrap.style.gap = 'calc(4px * var(--tp-ui-scale))';
+  wrap.style.marginLeft = 'calc(12px * var(--tp-ui-scale))';
 
   const label = document.createElement('span');
   label.textContent = 'Mode:';
   label.style.opacity = '0.8';
-  label.style.fontSize = '0.8rem';
+  label.style.fontSize = 'var(--tp-ui-font-sm)';
 
   const pill = document.createElement('span');
   pill.setAttribute('data-scroll-mode-label', '1');
@@ -91,12 +91,23 @@ function installModeChip(): void {
   pill.className = 'btn-chip';
   pill.style.cursor = 'default';
 
+  let currentMode: ScrollMode = getInitialMode();
+  let calmEnabled = false;
+  const getCalmEnabled = () => {
+    try {
+      const store = (window as any).__tpStore;
+      return !!store?.get?.('asrCalmModeEnabled');
+    } catch {
+      return false;
+    }
+  };
+  calmEnabled = getCalmEnabled();
   const setText = (mode: ScrollMode) => {
-    pill.textContent = formatMode(mode);
+    pill.textContent = formatMode(mode, calmEnabled);
     pill.setAttribute('data-mode', String(mode || 'manual'));
   };
 
-  setText(getInitialMode());
+  setText(currentMode);
 
   wrap.appendChild(label);
   wrap.appendChild(pill);
@@ -115,10 +126,21 @@ function installModeChip(): void {
       (ev: Event) => {
         const detail = (ev as CustomEvent<{ mode?: ScrollMode }>).detail;
         if (!detail || !detail.mode) return;
-        setText(detail.mode);
+        currentMode = detail.mode;
+        setText(currentMode);
       },
       { capture: false },
     );
+  } catch {
+    // ignore
+  }
+
+  try {
+    const store = (window as any).__tpStore;
+    store?.subscribe?.('asrCalmModeEnabled', (value: unknown) => {
+      calmEnabled = !!value;
+      setText(currentMode);
+    });
   } catch {
     // ignore
   }

@@ -36,6 +36,8 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
       <span class="tp-hud-pill" data-hud-scroll-state>Scroll: Waiting</span>
       <span class="tp-hud-pill" data-hud-scroll-speed>Speed: -</span>
       <span class="tp-hud-pill" data-hud-scroll-pos>Line: -</span>
+      <span class="tp-hud-pill" data-hud-asr-stall style="display:none"></span>
+      <button class="tp-hud-pill" data-hud-asr-resync style="display:none;border:1px solid rgba(255,255,255,0.22);cursor:pointer">Resync</button>
     </div>
   `;
 
@@ -46,10 +48,13 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   const stateEl = container.querySelector<HTMLElement>('[data-hud-scroll-state]');
   const speedEl = container.querySelector<HTMLElement>('[data-hud-scroll-speed]');
   const posEl = container.querySelector<HTMLElement>('[data-hud-scroll-pos]');
+  const stallEl = container.querySelector<HTMLElement>('[data-hud-asr-stall]');
+  const resyncBtn = container.querySelector<HTMLButtonElement>('[data-hud-asr-resync]');
 
   let lastMode: ScrollMode | null = null;
   let offsetX = 0;
   let offsetY = 0;
+  let stallText = '';
 
   const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -194,6 +199,9 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
       const pct = Math.round((idx / detail.lineCount) * 100);
       posEl.textContent = `Line: ${idx} / ${detail.lineCount} (${pct}%)`;
     }
+    if (detail.mode !== 'asr') {
+      clearStall();
+    }
   }
 
   function updateFromCommit(detail: ScrollCommitDetail) {
@@ -203,6 +211,68 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
       speedEl.textContent = `${label}: Δ${delta.toFixed(1)} px`;
     }
   }
+
+  function showStall(text: string) {
+    stallText = text;
+    if (stallEl) {
+      stallEl.textContent = stallText;
+      stallEl.style.display = '';
+    }
+    if (resyncBtn) resyncBtn.style.display = '';
+  }
+
+  function clearStall() {
+    stallText = '';
+    if (stallEl) stallEl.style.display = 'none';
+    if (resyncBtn) resyncBtn.style.display = 'none';
+  }
+
+  function triggerResync(source: string) {
+    try { (window as any).__tpAsrRequestRescue?.(); } catch {}
+    try { window.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: { source } })); } catch {}
+    clearStall();
+  }
+
+  function handleGuard(ev: Event) {
+    const detail = (ev as CustomEvent<any>)?.detail ?? {};
+    if (!detail || typeof detail !== 'object') return;
+    const text = typeof detail.text === 'string' ? detail.text : '';
+    const key = typeof detail.key === 'string' ? detail.key : '';
+    if (key === 'stall' || text.toLowerCase().includes('asr stalled')) {
+      const reasonSummary = typeof detail.reasonSummary === 'string' ? detail.reasonSummary : '';
+      const msg = reasonSummary ? `ASR stalled • ${reasonSummary}` : (text || 'ASR stalled');
+      showStall(msg);
+    }
+  }
+
+  function handleAdvance() {
+    clearStall();
+  }
+
+  const isEditableTarget = (target: EventTarget | null) => {
+    const el = target as HTMLElement | null;
+    if (!el) return false;
+    const tag = el.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    if ((el as HTMLElement).isContentEditable) return true;
+    return false;
+  };
+  const getScrollMode = (): string => {
+    try {
+      const store: any = (window as any).__tpStore;
+      const mode = store?.get?.('scrollMode') ?? store?.get?.('mode');
+      if (mode) return String(mode).toLowerCase();
+      const router: any = (window as any).__tpScrollMode;
+      if (router && typeof router.getMode === 'function') {
+        const m = router.getMode();
+        if (m) return String(m).toLowerCase();
+      }
+      if (typeof router === 'string') return router.toLowerCase();
+    } catch {
+      // ignore
+    }
+    return '';
+  };
 
   function handleStatus(ev: Event) {
     const detail = (ev as CustomEvent<ScrollStatusDetail>).detail;
@@ -219,10 +289,29 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
 
   window.addEventListener('tp:scroll:status', handleStatus);
   window.addEventListener('tp:scroll:commit', handleCommit);
+  window.addEventListener('tp:asr:guard', handleGuard as EventListener);
+  window.addEventListener('asr:advance', handleAdvance as EventListener);
+
+  if (resyncBtn) {
+    resyncBtn.addEventListener('click', () => triggerResync('hud'));
+  }
+
+  const onKeyDown = (ev: KeyboardEvent) => {
+    if (ev.defaultPrevented) return;
+    if (ev.key !== 'r' && ev.key !== 'R') return;
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (isEditableTarget(ev.target)) return;
+    if (getScrollMode() !== 'asr') return;
+    triggerResync('hotkey');
+  };
+  window.addEventListener('keydown', onKeyDown);
 
   function destroy() {
     window.removeEventListener('tp:scroll:status', handleStatus);
     window.removeEventListener('tp:scroll:commit', handleCommit);
+    window.removeEventListener('tp:asr:guard', handleGuard as EventListener);
+    window.removeEventListener('asr:advance', handleAdvance as EventListener);
+    window.removeEventListener('keydown', onKeyDown);
     container.remove();
   }
 

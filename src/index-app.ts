@@ -58,6 +58,7 @@ import { initObsWiring } from './obs/obs-wiring';
 import { initRecorderBackends } from './recording/registerRecorders';
 import { createStartOnPlay } from './recording/startOnPlay';
 import './scroll/adapter';
+import * as scrollWriter from './scroll/scroll-writer';
 import './index-hooks/preroll';
 import { initDevDrawer } from './dev/dev-drawer';
 import { renderScript } from './render-script';
@@ -69,7 +70,10 @@ import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
 import { initObsToggle } from './ui/obs-toggle';
 import { installAutoMaxCh } from './ui/autoMaxCh';
+import { initUiScale } from './ui/ui-scale';
+import { DEFAULT_SCRIPT_FONT_PX } from './ui/typography-ssot';
 import { wireRecordButtons } from './ui/recordButtons';
+import { initRecordingModeUi } from './ui/recording-mode-ui';
 import { installAboutPopover, installCKEgg, installEasterEggs } from './ui/eggs';
 import './wiring/ui-binds';
 import { initPrerollSession } from './features/preroll-session';
@@ -81,6 +85,7 @@ import { ensurePageTabs } from './features/page-tabs';
 import { applyPagePanel } from './features/page-tabs';
 import { triggerWireAutoIntentListener, __AUTO_INTENT_WIRE_SENTINEL, ROUTER_STAMP } from './features/scroll/scroll-router';
 import { applyScrollModeUI, initWpmBindings } from './ui/scrollMode';
+import { recordWindowSetterCall, withScrollModeWriter } from './scroll/audit';
 import './dev/ci-mocks';
 import './dev/asr-thresholds-panel';
 import './hud/loader';
@@ -217,6 +222,17 @@ function shouldGateAuth(): boolean {
 	return true;
 }
 
+function attachScrollWriterOnce(): void {
+	try {
+		const w = window as any;
+		if (w.__tpScrollWriter) return;
+		w.__tpScrollWriter = scrollWriter;
+		if (import.meta.env.DEV) {
+			try { console.info('[DEV] __tpScrollWriter attached'); } catch {}
+		}
+	} catch {}
+}
+
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
@@ -303,12 +319,14 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
  'devHud',
  'hudEnabledByUser',
  'cameraEnabled',
+ 'singleMonitorReadEnabled',
   'asr.engine',
   'asr.language',
   'asr.useInterimResults',
   'asr.filterFillers',
   'asr.threshold',
   'asr.endpointMs',
+  'asrCalmModeEnabled',
   'asrProfiles',
   'asrActiveProfileId',
   'asrTuningProfiles',
@@ -491,6 +509,7 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 						filterFillers: 'asr.filterFillers',
 						threshold: 'asr.threshold',
 						endpointingMs: 'asr.endpointMs',
+						calmModeEnabled: 'asrCalmModeEnabled',
 					};
 					const patch: Partial<SpeechState> = {};
 					Object.keys(mapping).forEach((src) => {
@@ -550,6 +569,7 @@ function snapshotAppSettings(store: typeof appStore): UserSettings {
 		filterFillers: store.get?.('asr.filterFillers'),
 		threshold: store.get?.('asr.threshold'),
 		endpointingMs: store.get?.('asr.endpointMs'),
+		calmModeEnabled: store.get?.('asrCalmModeEnabled'),
 	};
 	const rawProfiles = store.get?.('asrProfiles') as Record<string, unknown> | undefined;
 	const asrProfiles = rawProfiles ? Object.values(rawProfiles) : [];
@@ -830,6 +850,11 @@ function applyUiScrollMode(
       document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));
     } catch {}
   };
+  const setScrollModeFromUi = (next: UiScrollMode) => {
+    withScrollModeWriter('ui/applyUiScrollMode', () => {
+      try { appStore.set?.('scrollMode', next as any); } catch {}
+    }, { source: 'ui' });
+  };
   let micPermissionCheckPending = false;
   const isPermissionRetry = opts.__permissionRetry === true;
   function handleAsrBlock(reason: GateReason) {
@@ -854,7 +879,7 @@ function applyUiScrollMode(
     try {
       console.debug('[Scroll Mode] ASR rejected', { reason, fallback });
     } catch {}
-    try { appStore.set?.('scrollMode', fallback as any); } catch {}
+    setScrollModeFromUi(fallback);
     try { requestAsrStop(); } catch {}
   }
   const ensureMicPermissionThenRetry = () => {
@@ -925,7 +950,7 @@ function applyUiScrollMode(
   (window as any).__tpUiScrollMode = normalized;
   // Persist for next load (CI smoke expects scrollMode to survive reloads)
   if (!opts.skipStore) {
-    try { appStore.set?.('scrollMode', normalized); } catch {}
+    setScrollModeFromUi(normalized);
   }
 
   try { applyScrollModeUI(normalized as any); } catch {}
@@ -1203,7 +1228,10 @@ initScrollModeUiSync();
 try { (window as any).__tpAppStore = appStore; } catch {}
 (window as any).setScrollMode = (mode: UiScrollMode) => {
 	const normalized = normalizeUiScrollMode(mode);
-	try { appStore.set?.('scrollMode', normalized as any); } catch {}
+	recordWindowSetterCall('window.setScrollMode', { mode: normalized }, true);
+	withScrollModeWriter('window/setScrollMode', () => {
+		try { appStore.set?.('scrollMode', normalized as any); } catch {}
+	}, { source: 'window', stack: true });
 	try { applyUiScrollMode(normalized, { skipStore: true, source: 'legacy' }); } catch {}
 	try { (window as any).__scrollCtl?.stopAutoCatchup?.(); } catch {}
 };
@@ -1392,6 +1420,7 @@ import './ui/step-visibility'; // hides step-only controls unless scrollMode ===
 import './ui/toasts'; // installs window.toast + container wiring
 import './ui/typography'; // installs window.applyTypography + wheel zoom handling
 import './ui/upload'; // installs script upload wiring
+import { initSingleMonitorRead } from './ui/single-monitor';
 import './utils/safe-dom'; // installs window.safeDOM for legacy callers
 import { initObsBridge } from './wiring/obs-bridge';
 import { initObsBridgeClaim } from './wiring/obs-bridge-claim';
@@ -1494,6 +1523,7 @@ import { ensureSettingsFolderControls, ensureSettingsFolderControlsAsync } from 
 import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './ui/mapped-folder-bind';
 import { triggerSettingsDownload } from './features/settings/exportSettings';
 import { triggerSettingsImport } from './features/settings/importSettings';
+import { installScrollWriteGuard } from './dev/scroll-write-guard';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
@@ -1546,6 +1576,17 @@ function onDomReady(fn: () => void): void {
 		} catch (err) {
 			try { console.warn('[scheduler] install failed', err); } catch {}
 		}
+
+		// Dev-only guard: log direct scroll writes on the main scroller.
+		try {
+			const scroller =
+				(document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+				(document.getElementById('viewer') as HTMLElement | null) ||
+				(document.scrollingElement as HTMLElement | null) ||
+				(document.documentElement as HTMLElement | null) ||
+				(document.body as HTMLElement | null);
+			installScrollWriteGuard(scroller);
+		} catch {}
 
 		// LEGACY AUTO-SPEED HOOK – intentionally disabled.
 		// Autoscroll now owns #autoSpeed via src/features/autoscroll.ts.
@@ -1791,6 +1832,22 @@ function __maybePopulateMockFolder() {
 // Unified TS boot function — consolidates prior scattered DOMContentLoaded wiring
 export async function boot() {
 		try {
+			try {
+				if ((window as any).__tpBooted) {
+					throw new Error('Anvil booted twice — aborting');
+				}
+				(window as any).__tpBooted = true;
+			} catch (err) {
+				throw err;
+			}
+
+			try {
+				console.assert(
+					document.querySelectorAll('script[src*="scroll"]').length === 0,
+					'Legacy scroll scripts detected',
+				);
+			} catch {}
+
 			// Count boot attempts (used by smoke to assert single boot)
 			try { (window as any).__tpBootsSeen = ((window as any).__tpBootsSeen || 0) + 1; } catch {}
 			// Single-owner guard: boot orchestration belongs to ts/index only
@@ -1806,6 +1863,8 @@ export async function boot() {
 			(window as any).__tpTsBooted = 1;
 			(window as any).__TP_BOOT_TRACE = (window as any).__TP_BOOT_TRACE || [];
 			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:start:ts' });
+
+			try { initUiScale(); } catch {}
 
 			const devFlag = !!((window as any).__TP_DEV || (window as any).__TP_DEV1);
 			if (devFlag) {
@@ -1944,6 +2003,7 @@ export async function boot() {
           try { initMicPermissions(); } catch {}
           try { bindMicUI(); } catch {}
           try { wireSidebarCalibrationUI(); } catch {}
+          try { initRecordingModeUi(); } catch {}
           try { bindCameraUI(); } catch {}
           try { initRecPillsMain(appStore); } catch {}
           if (!isDisplayContext()) {
@@ -1951,8 +2011,9 @@ export async function boot() {
             try { installCKEgg(); } catch {}
             try { installAboutPopover(); } catch {}
           }
-          // Core UI binder (idempotent)
+								// Core UI binder (idempotent)
 								try { bindCoreUI({ presentBtnSelector: '#presentBtn, [data-action="present-toggle"]' }); } catch {}
+								try { initSingleMonitorRead(appStore); } catch {}
 								// Ensure Settings overlay content uses TS builder (single source of truth)
 								try { wireSettings({ store: appStore }); } catch {}
                 if (isCiSmoke()) {
@@ -2079,7 +2140,12 @@ try {
 
   // Expose minimal setter for dev/diagnostics
   (window as any).__tpScrollMode = {
-    setMode: (m: RouterMode) => { try { store?.set?.('scrollMode', m); } catch {} },
+    setMode: (m: RouterMode) => {
+      recordWindowSetterCall('window.__tpScrollMode.setMode', { mode: m }, true);
+      withScrollModeWriter('window/setScrollMode', () => {
+        try { store?.set?.('scrollMode', m); } catch {}
+      }, { source: 'window', stack: true });
+    },
     getMode: () => scrollModeSource.get(),
   };
 
@@ -2129,7 +2195,7 @@ try {
 							try {
 								const root = document.documentElement;
 								const cs = getComputedStyle(root);
-								const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+								const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX;
 								const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
 								const pxPerLine = fs * lh;
 								const stepPx = Math.round(pxPerLine * 7);
@@ -2223,6 +2289,14 @@ try {
 						const ensureScripts = () => { try { applyPagePanel('scripts'); } catch {} };
 						ensureScripts();
 						setTimeout(ensureScripts, 50);
+					} catch {}
+
+					// Attach scroll writer only once after auth + router + UI are live
+					try {
+						attachScrollWriterOnce();
+						if (import.meta.env.DEV && !(window as any).__tpScrollWriter) {
+							console.error('[BOOT] Scroll writer missing');
+						}
 					} catch {}
 
 					// Signal init completion so harness/tests can proceed

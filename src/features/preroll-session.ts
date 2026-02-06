@@ -7,6 +7,7 @@ import {
 import { computeAsrReadiness } from '../asr/readiness';
 import { wantsAutoRecord } from '../recording/wantsAutoRecord';
 import { listRecorders } from '../recording/recorderRegistry';
+import { getRecordingEngine, getRecordingMode } from '../recording/recording-settings';
 import {
   normalizeScrollMode,
   shouldAutoStartForMode,
@@ -60,7 +61,9 @@ function computeRecordArmOnLive(recordingEnabledOverride?: boolean): { recordOnL
       return { recordOnLive: false, reason: 'disabled-by-settings' };
     }
 
-    const needsCamera = !!appStore.get('obsEnabled');
+    const recordingMode = getRecordingMode();
+    const engine = getRecordingEngine();
+    const needsCamera = recordingMode === 'av' && engine === 'core';
     if (needsCamera && !hasCameraActive()) {
       try {
         window.dispatchEvent(

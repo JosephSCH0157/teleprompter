@@ -5,6 +5,7 @@ import { ensureMicAccess } from '../asr/mic-gate';
 import { showToast } from '../ui/toasts';
 import { getScrollBrain } from '../scroll/brain-access';
 import type { ScrollMode as BrainMode } from '../scroll/scroll-brain';
+import { withScrollModeWriter } from '../scroll/audit';
 
 type UiScrollMode = 'off' | 'auto' | 'asr' | 'step' | 'rehearsal' | 'wpm' | 'hybrid' | 'timed';
 type ScrollModeSource = 'user' | 'boot' | 'store' | 'external';
@@ -71,6 +72,12 @@ function getSafeFallbackMode(): UiScrollMode {
   return candidate;
 }
 
+function setScrollModeFromUi(mode: UiScrollMode): void {
+  withScrollModeWriter('ui/applyUiScrollMode', () => {
+    try { appStore.set?.('scrollMode', mode as any); } catch {}
+  }, { source: 'ui' });
+}
+
 export function applyUiScrollMode(
   mode: UiScrollMode,
   opts: { skipStore?: boolean; allowToast?: boolean; source?: ScrollModeSource } = {},
@@ -104,11 +111,11 @@ export function applyUiScrollMode(
         const fallback = result.reason === 'NO_PERMISSION' ? 'hybrid' : getSafeFallbackMode();
         try { (window as any).toast?.('ASR blocked: microphone permission denied'); } catch {}
         setScrollModeSelectValue(fallback);
-        try { appStore.set?.('scrollMode', fallback as any); } catch {}
+        setScrollModeFromUi(fallback);
         return applyModeNow(fallback, opts);
       }
       setScrollModeSelectValue('asr');
-      try { appStore.set?.('scrollMode', 'asr' as any); } catch {}
+      setScrollModeFromUi('asr');
       return applyModeNow('asr', opts);
     }).catch(() => {});
     return;
@@ -139,7 +146,7 @@ function applyModeNow(
       try {
         console.debug('[Scroll Mode] ASR rejected', { reason: readiness.reason, fallback });
       } catch {}
-      try { appStore.set?.('scrollMode', fallback as any); } catch {}
+      setScrollModeFromUi(fallback);
     }
   }
   if (normalized !== 'asr' || readiness?.ready) {
@@ -148,7 +155,7 @@ function applyModeNow(
   }
   (window as any).__tpUiScrollMode = normalized;
   if (!opts.skipStore) {
-    try { appStore.set?.('scrollMode', normalized); } catch {}
+    setScrollModeFromUi(normalized);
   }
 
   try { applyScrollModeUI(normalized as any); } catch {}

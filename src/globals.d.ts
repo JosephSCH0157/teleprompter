@@ -2,6 +2,7 @@ interface Window {
   __TP_DEV?: boolean;
   __TP_CALM?: boolean;
   __tpScrollWrite?: import('./scroll/scroll-writer').ScrollWriter | ((top: number) => void);
+  __tpScrollWriter?: typeof import('./scroll/scroll-writer');
   __tpAuto?: {
     set?: (on: boolean) => void;
     setEnabled?: (on: boolean) => void;

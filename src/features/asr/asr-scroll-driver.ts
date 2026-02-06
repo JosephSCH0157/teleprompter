@@ -30,6 +30,7 @@ type TranscriptDetail = {
   source?: string;
   meta?: boolean;
   noMatch?: boolean;
+  currentIdx?: number | null;
 };
 
 type PendingMatch = {
@@ -238,6 +239,25 @@ const POST_CATCHUP_MS = 2200;
 const POST_CATCHUP_DROP = 0.05;
 const POST_CATCHUP_MAX_DELTA = 24;
 const POST_CATCHUP_REQUIRE_IN_BAND = true;
+const DELTA_SMALL_MAX_LINES = 6;
+const DELTA_MED_MAX_LINES = 30;
+const DELTA_LARGE_MIN_LINES = 31;
+const DELTA_MIN_SIM_SMALL = 0.26;
+const DELTA_MIN_SIM_MED = 0.33;
+const DELTA_MIN_SIM_LARGE = 0.45;
+const LARGE_DELTA_CONFIRM_HITS = 2;
+const LARGE_DELTA_CONFIRM_WINDOW_MS = 1500;
+const LARGE_DELTA_CONFIRM_SPREAD = 6;
+const OVERSHOOT_RISK_DELTA_LINES = 30;
+const OVERSHOOT_RISK_WINDOW_MS = 3500;
+const OVERSHOOT_RISK_MIN_SIM = 0.4;
+const BEHIND_RECOVERY_WINDOW_MS = 2500;
+const BEHIND_RECOVERY_HITS = 3;
+const BEHIND_RECOVERY_CLUSTER_SPREAD = 6;
+const BEHIND_RECOVERY_MIN_DELTA = 6;
+const BEHIND_RECOVERY_MAX_REWIND = 20;
+const BEHIND_RECOVERY_MIN_SIM = 0.3;
+const BEHIND_RECOVERY_COOLDOWN_MS = 2500;
 const POST_CATCHUP_SAMPLES = 6;
 const DEFAULT_BACKJUMP_BLOCK_LINES = 5;
 const DEFAULT_FREEZE_LOW_SIM_HITS = 20;
@@ -256,6 +276,57 @@ const MANUAL_ANCHOR_MAX_SCROLL_WINDOW_MS = 1000;
 const MANUAL_ANCHOR_PENDING_TIMEOUT_MS = 5000;
 const MANUAL_ANCHOR_WINDOW_LINES = 10;
 const MANUAL_ANCHOR_SIM_SLACK = 0.03;
+const MAX_LINES_PER_COMMIT = 1.25;
+const DELTA_SMOOTHING_FACTOR = 0.3;
+const TAPER_EXPONENT = 2.2;
+const TAPER_MIN = 0.15;
+const GLIDE_MIN_MS = 120;
+const GLIDE_MAX_MS = 250;
+const GLIDE_DEFAULT_MS = 180;
+const MICRO_DELTA_LINE_RATIO = 0.8;
+const MICRO_PURSUE_MS = 320;
+const MICRO_PURSUE_MAX_PXPS = 60;
+const MIN_PX_PER_SEC = 18;
+const MOTION_PRESET_NORMAL = {
+  maxLinesPerCommit: MAX_LINES_PER_COMMIT,
+  deltaSmoothingFactor: DELTA_SMOOTHING_FACTOR,
+  taperExponent: TAPER_EXPONENT,
+  taperMin: TAPER_MIN,
+  glideMinMs: GLIDE_MIN_MS,
+  glideMaxMs: GLIDE_MAX_MS,
+  glideDefaultMs: GLIDE_DEFAULT_MS,
+  microDeltaLineRatio: MICRO_DELTA_LINE_RATIO,
+  microPursuitMs: MICRO_PURSUE_MS,
+  microPursuitMaxPxPerSec: MICRO_PURSUE_MAX_PXPS,
+  minPursuitPxPerSec: MIN_PX_PER_SEC,
+};
+const MOTION_PRESET_CALM = {
+  maxLinesPerCommit: 0.9,
+  deltaSmoothingFactor: 0.2,
+  taperExponent: 2.6,
+  taperMin: 0.1,
+  glideMinMs: 180,
+  glideMaxMs: 360,
+  glideDefaultMs: 270,
+  microDeltaLineRatio: 0.95,
+  microPursuitMs: 420,
+  microPursuitMaxPxPerSec: 40,
+  minPursuitPxPerSec: 12,
+};
+const MOTION_OVERRIDE_EPS = 0.0001;
+const MOTION_KEYS: Array<keyof typeof MOTION_PRESET_NORMAL> = [
+  'maxLinesPerCommit',
+  'deltaSmoothingFactor',
+  'taperExponent',
+  'taperMin',
+  'glideMinMs',
+  'glideMaxMs',
+  'glideDefaultMs',
+  'microDeltaLineRatio',
+  'microPursuitMs',
+  'microPursuitMaxPxPerSec',
+  'minPursuitPxPerSec',
+];
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -308,6 +379,7 @@ const guardLastAt = new Map<string, number>();
 const logLastAt = new Map<string, number>();
 const guardStatusLastAt = new Map<string, number>();
 let activeGuardCounts: Map<string, number> | null = null;
+const guardEvents: Array<{ ts: number; reason: string }> = [];
 const LOG_THROTTLE_MS = 500;
 const HUD_STATUS_THROTTLE_MS = 500;
 const HUD_PURSUE_THROTTLE_MS = 200;
@@ -326,6 +398,14 @@ function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: str
 }
 
 function warnGuard(reason: string, parts: Array<string | number | null | undefined>) {
+  const now = Date.now();
+  try {
+    guardEvents.push({ ts: now, reason });
+    const cutoff = now - DEFAULT_STALL_COMMIT_MS;
+    while (guardEvents.length && guardEvents[0].ts < cutoff) guardEvents.shift();
+  } catch {
+    // ignore
+  }
   try {
     if (activeGuardCounts) {
       activeGuardCounts.set(reason, (activeGuardCounts.get(reason) || 0) + 1);
@@ -333,7 +413,6 @@ function warnGuard(reason: string, parts: Array<string | number | null | undefin
   } catch {
     // ignore
   }
-  const now = Date.now();
   const last = guardLastAt.get(reason) ?? 0;
   if (now - last < GUARD_THROTTLE_MS) return;
   guardLastAt.set(reason, now);
@@ -736,6 +815,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let summaryEmitted = false;
   let lastStallLogAt = 0;
   let lastForwardCommitAt = Date.now();
+  let stallRescueRequested = false;
+  let stallHudEmitted = false;
   let disposed = false;
   let desyncWarned = false;
   let lowSimStreak = 0;
@@ -845,7 +926,247 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     scheduleAsrWriteCheck(scroller, currentTop, reason, targetTop, source);
     return appliedTop;
   }
+  let calmModeEnabled = false;
+  try {
+    calmModeEnabled = !!speechStore.get().calmModeEnabled;
+  } catch {}
+  let activeMotionPreset: 'normal' | 'calm' = calmModeEnabled ? 'calm' : 'normal';
+  let motionTuning = { ...(calmModeEnabled ? MOTION_PRESET_CALM : MOTION_PRESET_NORMAL) };
+  let lastTuningSnapshot = '';
+  let lastTuningHudAt = 0;
+  const emitTuningHud = (now: number) => {
+    if (now - lastTuningHudAt < 2000) return;
+    lastTuningHudAt = now;
+    const payload = {
+      preset: activeMotionPreset,
+      maxLinesPerCommit: Number(motionTuning.maxLinesPerCommit.toFixed(2)),
+      deltaSmoothingFactor: Number(motionTuning.deltaSmoothingFactor.toFixed(2)),
+      taperExponent: Number(motionTuning.taperExponent.toFixed(2)),
+      taperMin: Number(motionTuning.taperMin.toFixed(2)),
+      glideMs: Math.round(motionTuning.glideDefaultMs),
+      microDeltaLineRatio: Number(motionTuning.microDeltaLineRatio.toFixed(2)),
+      microPursuitMs: Math.round(motionTuning.microPursuitMs),
+      microMaxPxPerSec: Math.round(motionTuning.microPursuitMaxPxPerSec),
+      minPxPerSec: Math.round(motionTuning.minPursuitPxPerSec),
+    };
+    try { (window as any).__tpHud?.log?.('ASR_TUNING', payload); } catch {}
+    try { (window as any).HUD?.log?.('ASR_TUNING', payload); } catch {}
+  };
+  const syncMotionTuning = (thresholds: ReturnType<typeof getAsrDriverThresholds>, now: number) => {
+    const presetName: 'normal' | 'calm' = calmModeEnabled ? 'calm' : 'normal';
+    const preset = presetName === 'calm' ? MOTION_PRESET_CALM : MOTION_PRESET_NORMAL;
+    const next: typeof motionTuning = { ...preset };
+    MOTION_KEYS.forEach((key) => {
+      const overrideVal = (thresholds as any)[key];
+      const baselineVal = (MOTION_PRESET_NORMAL as any)[key];
+      if (Number.isFinite(overrideVal) && Math.abs(overrideVal - baselineVal) > MOTION_OVERRIDE_EPS) {
+        (next as any)[key] = overrideVal;
+      }
+    });
+    motionTuning = next;
+    if (presetName !== activeMotionPreset) {
+      activeMotionPreset = presetName;
+      stopGlide('preset-change');
+      microPursuitUntil = 0;
+      lastCommitDeltaPx = 0;
+      pursuitVel = 0;
+      pursuitActive = false;
+      pursuitTargetTop = null;
+    }
+    const snapshot = JSON.stringify({ preset: activeMotionPreset, ...motionTuning });
+    if (snapshot !== lastTuningSnapshot) {
+      lastTuningSnapshot = snapshot;
+      emitTuningHud(now);
+    }
+  };
+  const stopGlide = (reason?: string) => {
+    if (!glideAnim) return;
+    try { glideAnim.cancel(); } catch {}
+    glideAnim = null;
+    if (reason) {
+      logDev('glide canceled', { reason });
+    }
+  };
+  const armMicroPursuit = (now: number, reason?: string, capOverride?: number) => {
+    microPursuitUntil = now + Math.max(100, motionTuning.microPursuitMs);
+    microPursuitCapPxPerSec = Number.isFinite(capOverride as number)
+      ? (capOverride as number)
+      : motionTuning.microPursuitMaxPxPerSec;
+    if (reason) {
+      logDev('micro pursuit', { reason, until: microPursuitUntil });
+    }
+  };
+  const startGlideTo = (
+    targetTop: number,
+    opts: { scroller?: HTMLElement | null; reason?: string; source?: string; durationMs?: number },
+  ): boolean => {
+    if (isHybridMode()) return false;
+    const scroller = opts.scroller ?? getScroller();
+    if (!scroller) return false;
+    if (!Number.isFinite(targetTop)) return false;
+    stopGlide('retarget');
+    const fromTop = Number(scroller.scrollTop || 0);
+    const toTop = Number(targetTop);
+    if (!Number.isFinite(fromTop) || !Number.isFinite(toTop)) return false;
+    const duration = clamp(
+      Number.isFinite(opts.durationMs as number) ? (opts.durationMs as number) : motionTuning.glideDefaultMs,
+      motionTuning.glideMinMs,
+      motionTuning.glideMaxMs,
+    );
+    let cancelled = false;
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    glideAnim = {
+      cancel: () => {
+        cancelled = true;
+      },
+    };
+    const step = (ts: number) => {
+      if (cancelled) return;
+      const now = Number.isFinite(ts) ? ts : (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const t = clamp((now - startedAt) / duration, 0, 1);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      const nextTop = fromTop + (toTop - fromTop) * eased;
+      const applied = applyScrollWithHybridGuard(nextTop, {
+        scroller,
+        reason: opts.reason ?? 'asr-glide',
+        source: opts.source ?? 'asr',
+      });
+      appliedTopPx = applied;
+      lastKnownScrollTop = applied;
+      lastMoveAt = Date.now();
+      markProgrammaticScroll();
+      if (t < 1) {
+        if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(step);
+        } else {
+          setTimeout(() => step((typeof performance !== 'undefined' ? performance.now() : Date.now())), 16);
+        }
+      } else {
+        glideAnim = null;
+      }
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(step);
+    } else {
+      setTimeout(() => step((typeof performance !== 'undefined' ? performance.now() : Date.now())), 0);
+    }
+    return true;
+  };
+  const computeDeltaMinSim = (deltaLines: number): number => {
+    if (!Number.isFinite(deltaLines) || deltaLines <= 0) return 0;
+    if (deltaLines >= DELTA_LARGE_MIN_LINES) return DELTA_MIN_SIM_LARGE;
+    if (deltaLines >= DELTA_SMALL_MAX_LINES + 1 && deltaLines <= DELTA_MED_MAX_LINES) {
+      return DELTA_MIN_SIM_MED;
+    }
+    return DELTA_MIN_SIM_SMALL;
+  };
+  const confirmLargeDelta = (targetLine: number, now: number): boolean => {
+    if (!Number.isFinite(targetLine)) return false;
+    if (!largeDeltaConfirm) {
+      largeDeltaConfirm = { idx: targetLine, ts: now, hits: 1 };
+      return false;
+    }
+    const withinWindow = now - largeDeltaConfirm.ts <= LARGE_DELTA_CONFIRM_WINDOW_MS;
+    const withinBand = Math.abs(targetLine - largeDeltaConfirm.idx) <= LARGE_DELTA_CONFIRM_SPREAD;
+    if (!withinWindow || !withinBand) {
+      largeDeltaConfirm = { idx: targetLine, ts: now, hits: 1 };
+      return false;
+    }
+    largeDeltaConfirm.hits += 1;
+    largeDeltaConfirm.ts = now;
+    if (largeDeltaConfirm.hits >= LARGE_DELTA_CONFIRM_HITS) {
+      largeDeltaConfirm = null;
+      return true;
+    }
+    return false;
+  };
+  const recordBehindRecoveryHit = (idx: number, sim: number, isFinal: boolean, now: number) => {
+    if (!Number.isFinite(idx) || !Number.isFinite(sim)) return;
+    if (sim < BEHIND_RECOVERY_MIN_SIM) return;
+    behindRecoveryHits.push({ ts: now, idx: Math.max(0, Math.floor(idx)), sim, isFinal });
+    // prune old hits
+    for (let i = behindRecoveryHits.length - 1; i >= 0; i--) {
+      if (now - behindRecoveryHits[i].ts > BEHIND_RECOVERY_WINDOW_MS) {
+        behindRecoveryHits.splice(i, 1);
+      }
+    }
+  };
+  const tryBehindRecovery = (
+    cursorLine: number,
+    now: number,
+    conf: number,
+    rawIdx: number,
+    isFinal: boolean,
+  ): boolean => {
+    if (now - lastBehindRecoveryAt < BEHIND_RECOVERY_COOLDOWN_MS) return false;
+    if (cursorLine - rawIdx < BEHIND_RECOVERY_MIN_DELTA) return false;
+    const activeHits = behindRecoveryHits.filter((h) => now - h.ts <= BEHIND_RECOVERY_WINDOW_MS);
+    if (activeHits.length < BEHIND_RECOVERY_HITS) return false;
+    let minIdx = Infinity;
+    let maxIdx = -Infinity;
+    let finalCount = 0;
+    for (const hit of activeHits) {
+      if (hit.idx < minIdx) minIdx = hit.idx;
+      if (hit.idx > maxIdx) maxIdx = hit.idx;
+      if (hit.isFinal) finalCount += 1;
+    }
+    if (!Number.isFinite(minIdx) || !Number.isFinite(maxIdx)) return false;
+    if (maxIdx - minIdx > BEHIND_RECOVERY_CLUSTER_SPREAD) return false;
+    if (!isFinal && finalCount === 0 && conf < DELTA_MIN_SIM_MED) return false;
+    const targetIdxRaw = Math.min(cursorLine - 1, Math.max(0, Math.floor(maxIdx)));
+    const rewind = Math.max(0, cursorLine - targetIdxRaw);
+    if (rewind <= 0) return false;
+    const targetIdx = rewind > BEHIND_RECOVERY_MAX_REWIND
+      ? Math.max(0, cursorLine - BEHIND_RECOVERY_MAX_REWIND)
+      : targetIdxRaw;
+    const scroller = getScroller();
+    const targetTop = scroller ? resolveTargetTop(scroller, targetIdx) : null;
+    if (scroller && targetTop != null) {
+      stopGlide('behind-recovery');
+      const applied = applyScrollWithHybridGuard(targetTop, {
+        scroller,
+        reason: 'asr-behind-recovery',
+      });
+      lastKnownScrollTop = applied;
+      lastMoveAt = Date.now();
+      markProgrammaticScroll();
+    }
+    lastLineIndex = Math.max(0, Math.floor(targetIdx));
+    matchAnchorIdx = lastLineIndex;
+    lastForwardCommitAt = now;
+    lastSeekTs = now;
+    lastEvidenceAt = now;
+    noteCommit(cursorLine, lastLineIndex, now);
+    resetLowSimStreak();
+    behindStrongCount = 0;
+    lastBehindStrongIdx = -1;
+    lastBehindStrongAt = 0;
+    behindStrongSince = 0;
+    lastCommitDeltaPx = 0;
+    microPursuitUntil = 0;
+    setCurrentIndex(lastLineIndex, 'behind-recovery');
+    resetLookahead('behind-recovery');
+    behindRecoveryHits.length = 0;
+    largeDeltaConfirm = null;
+    overshootRiskUntil = Math.max(overshootRiskUntil, now + OVERSHOOT_RISK_WINDOW_MS);
+    lastBehindRecoveryAt = now;
+    logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
+      prevIndex: cursorLine,
+      nextIndex: lastLineIndex,
+      delta: lastLineIndex - cursorLine,
+      sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+      forced: false,
+      mode: getScrollMode() || 'unknown',
+      reason: 'behind-recovery',
+    });
+    updateDebugState('behind-recovery');
+    return true;
+  };
   let lastEvidenceAt = 0;
+  let lastCommitDeltaPx = 0;
+  let glideAnim: { cancel: () => void } | null = null;
+  let microPursuitUntil = 0;
+  let microPursuitCapPxPerSec = MICRO_PURSUE_MAX_PXPS;
   let lastBackRecoverAt = 0;
   let lastBackRecoverIdx = -1;
   let lastBackRecoverHitAt = 0;
@@ -865,6 +1186,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindDebt = 0;
   let behindDebtStreak = 0;
   let lastBehindRecoveryAt = 0;
+  let overshootRiskUntil = 0;
+  let largeDeltaConfirm: { idx: number; ts: number; hits: number } | null = null;
+  const behindRecoveryHits: Array<{ ts: number; idx: number; sim: number; isFinal: boolean }> = [];
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -1253,6 +1577,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       threshold = clamp(state.threshold, 0, 1);
       setAsrDriverThresholds({ candidateMinSim: threshold });
     }
+    const nextCalm = !!state.calmModeEnabled;
+    if (nextCalm !== calmModeEnabled) {
+      calmModeEnabled = nextCalm;
+      syncMotionTuning(getAsrDriverThresholds(), Date.now());
+    }
   });
 
   const unsubscribeTuning = onAsrTuning(() => {
@@ -1457,12 +1786,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const resetHandler = () => {
     clearEvidenceBuffer('script-reset');
   };
+  const rescueHandler = () => {
+    stallRescueRequested = true;
+  };
 
   try { window.addEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
   try { window.addEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
+  try { window.addEventListener('tp:asr:rescue', rescueHandler as EventListener); } catch {}
+  try { (window as any).__tpAsrRequestRescue = rescueHandler; } catch {}
 
   const summarizeGuardCounts = (limit = Number.POSITIVE_INFINITY) => {
     const entries = Array.from(guardCounts.entries())
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count);
+    return entries.slice(0, limit);
+  };
+  const summarizeRecentGuardCounts = (limit = Number.POSITIVE_INFINITY) => {
+    const now = Date.now();
+    const cutoff = now - DEFAULT_STALL_COMMIT_MS;
+    const counts = new Map<string, number>();
+    for (let i = guardEvents.length - 1; i >= 0; i -= 1) {
+      const entry = guardEvents[i];
+      if (entry.ts < cutoff) break;
+      counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
+    }
+    const entries = Array.from(counts.entries())
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count);
     return entries.slice(0, limit);
@@ -1481,6 +1829,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     commitCount += 1;
+    stallHudEmitted = false;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
       firstCommitIndex = Math.max(0, Math.floor(prevIndex));
     }
@@ -1556,9 +1905,62 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const summarizeGuardText = () => {
-    const top = summarizeGuardCounts(4);
+    const top = summarizeRecentGuardCounts(3);
     if (!top.length) return 'none';
     return top.map((entry) => `${entry.reason}:${entry.count}`).join(', ');
+  };
+
+  const formatCompletionTelemetry = () => {
+    try {
+      const telemetry = (window as any).__tpAsrTelemetry;
+      if (!telemetry || typeof telemetry !== 'object') return '';
+      const accept = Number(telemetry.commitAccepted) || 0;
+      const reject = Number(telemetry.commitRejected) || 0;
+      const top = Array.isArray(telemetry.last15sRejectTop3)
+        ? telemetry.last15sRejectTop3
+        : [];
+      const topText = top
+        .slice(0, 3)
+        .map((entry: any) => `${entry.reason}(${entry.count})`)
+        .join(', ');
+      const evidenceSummary =
+        typeof telemetry.completionEvidenceSummary === 'string'
+          ? telemetry.completionEvidenceSummary
+          : '';
+      const last = telemetry.last || {};
+      const mode =
+        typeof last.mode === 'string' && last.mode ? String(last.mode).toLowerCase() : '';
+      const rejectReason = typeof last.rejectReason === 'string' ? last.rejectReason : '';
+      const completionOk = typeof last.completionOk === 'boolean' ? last.completionOk : null;
+      const completionReason =
+        typeof last.completionReason === 'string' ? last.completionReason : '';
+      let lastResult = '';
+      if (last.decision === 'reject') {
+        if (rejectReason.startsWith('reject_completion_')) {
+          lastResult = `rejected=${rejectReason.replace('reject_completion_', '')}`;
+        } else if (rejectReason.startsWith('reject_')) {
+          lastResult = `blocked=${rejectReason.replace('reject_', '')}`;
+        } else if (rejectReason) {
+          lastResult = `blocked=${rejectReason}`;
+        }
+      } else if (last.decision === 'accept') {
+        if (completionOk === false) {
+          lastResult = `comp=${completionReason || 'unknown'}`;
+        } else if (completionOk === true) {
+          lastResult = `comp=${completionReason || 'complete'}`;
+        }
+      }
+      if (!topText && accept === 0 && reject === 0 && !evidenceSummary) return '';
+      const base = `accept ${accept} / rej ${reject}`;
+      const parts = [base];
+      if (mode) parts.push(`mode=${mode}`);
+      if (topText) parts.push(`top: ${topText}`);
+      if (evidenceSummary) parts.push(evidenceSummary);
+      if (lastResult) parts.push(lastResult);
+      return parts.join(' • ');
+    } catch {
+      return '';
+    }
   };
 
   const maybeLogStall = (now: number) => {
@@ -1566,6 +1968,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (now - lastStallLogAt < DEFAULT_STALL_LOG_COOLDOWN_MS) return;
     lastStallLogAt = now;
     const reasonSummary = summarizeGuardText();
+    const telemetrySummary = formatCompletionTelemetry();
     try {
       console.warn('[ASR_STALLED] no commits in 15s', {
         sinceMs: Math.round(now - lastCommitAt),
@@ -1574,6 +1977,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         reasonSummary,
       });
     } catch {}
+    if (!stallHudEmitted) {
+      const stallText = telemetrySummary
+        ? `ASR stalled • ${reasonSummary} • ${telemetrySummary}`
+        : `ASR stalled • ${reasonSummary}`;
+      emitHudStatus('stall', stallText, {
+        key: 'stall',
+        sinceMs: Math.round(now - lastCommitAt),
+        reasonSummary,
+      });
+      stallHudEmitted = true;
+    }
   };
 
   const resetLowSimStreak = () => {
@@ -1829,7 +2243,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     const err = pursuitTargetTop - current;
-    if (err <= deadbandPx) {
+    const microActive = microPursuitUntil > now;
+    const allowCreep = microActive || motionTuning.minPursuitPxPerSec > 0;
+    if (err <= 0.5) {
+      const target = pursuitTargetTop;
+      pursuitVel = 0;
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      emitPursuitHud(err, pursuitVel, target, current);
+      return;
+    }
+    if (err <= deadbandPx && !allowCreep) {
       const target = pursuitTargetTop;
       pursuitVel = 0;
       pursuitActive = false;
@@ -1838,11 +2262,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
 
-    const maxVelForErr = resolveMaxVel(err);
+    let maxVelForErr = resolveMaxVel(err);
+    if (microActive) {
+      maxVelForErr = Math.min(maxVelForErr, microPursuitCapPxPerSec);
+    }
     const desiredVel = Math.min(maxVelForErr, Math.max(0, err * DEFAULT_PURSUE_KP));
     const accelCap = maxAccelPxPerSec2 * dt;
     const velDelta = clamp(desiredVel - pursuitVel, -accelCap, accelCap);
     pursuitVel = clamp(pursuitVel + velDelta, 0, maxVelForErr);
+    if (err > 0 && pursuitVel < motionTuning.minPursuitPxPerSec) {
+      pursuitVel = Math.min(maxVelForErr, Math.max(pursuitVel, motionTuning.minPursuitPxPerSec));
+    }
 
     let move = pursuitVel * dt;
     move = Math.min(move, maxStepPx);
@@ -1916,6 +2346,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         tieGap,
       } = pending;
       const thresholds = getAsrDriverThresholds();
+      syncMotionTuning(thresholds, now);
       const requiredThresholdValue =
         typeof pendingRequiredThreshold === 'number' ? pendingRequiredThreshold : NaN;
       const baselineRequired = Number.isFinite(requiredThresholdValue)
@@ -1925,6 +2356,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const matchThreshold = Number.isFinite(minThresholdValue)
         ? clamp(minThresholdValue, 0, 1)
         : baselineRequired;
+      const deltaLines = Math.max(0, Math.floor(line) - lastLineIndex);
+      const deltaMinSim = computeDeltaMinSim(deltaLines);
+      const overshootActive = now < overshootRiskUntil;
+      let effectiveMatchThreshold = Math.max(matchThreshold, deltaMinSim);
+      if (overshootActive) {
+        effectiveMatchThreshold = Math.max(effectiveMatchThreshold, OVERSHOOT_RISK_MIN_SIM);
+      }
       const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
       const tieMargin = typeof secondScore === 'number' && Number.isFinite(secondScore)
         ? conf - secondScore
@@ -1932,19 +2370,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           ? tieGap
           : undefined;
       const tieOk = tieMargin === undefined || tieMargin >= thresholds.tieDelta;
-      const strongMatch = conf >= matchThreshold && tieOk;
+      const strongMatch = conf >= effectiveMatchThreshold && tieOk;
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
           ? [`tie=${formatLogScore(tieMargin)}`, `tieNeed=${formatLogScore(thresholds.tieDelta)}`]
           : [];
+        const deltaParts = deltaMinSim > matchThreshold
+          ? [`deltaNeed=${formatLogScore(deltaMinSim)}`]
+          : [];
+        const riskParts = overshootActive ? ['overshoot=1'] : [];
         warnGuard('low_sim', [
           matchId ? `matchId=${matchId}` : '',
           `current=${lastLineIndex}`,
           `best=${line}`,
           `delta=${line - lastLineIndex}`,
           `sim=${formatLogScore(conf)}`,
-          `need=${formatLogScore(matchThreshold)}`,
+          `need=${formatLogScore(effectiveMatchThreshold)}`,
           ...tieParts,
+          ...deltaParts,
+          ...riskParts,
           relockOverride ? `relock=1` : '',
           relockReason ? `relockReason=${relockReason}` : '',
           Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
@@ -1956,7 +2400,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ]);
         emitHudStatus(
           'low_sim',
-          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(matchThreshold)})`,
+          `Low confidence - waiting (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveMatchThreshold)})`,
         );
         noteLowSimFreeze(Date.now(), {
           cursorLine: lastLineIndex,
@@ -1964,8 +2408,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           delta: line - lastLineIndex,
           sim: conf,
           inBand: true,
-          requiredSim: baselineRequired,
-          need: matchThreshold,
+          requiredSim: effectiveMatchThreshold,
+          need: effectiveMatchThreshold,
           repeatCount: relockRepeat || 0,
           bestSpan: relockSpan,
           overlapRatio: relockOverlapRatio,
@@ -1980,6 +2424,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       let targetLine = Math.max(0, Math.floor(line));
+      const confirmDelta = targetLine - lastLineIndex;
+      if (confirmDelta < DELTA_LARGE_MIN_LINES && largeDeltaConfirm) {
+        largeDeltaConfirm = null;
+      }
+      if (confirmDelta >= DELTA_LARGE_MIN_LINES) {
+        const confirmed = confirmLargeDelta(targetLine, now);
+        if (!confirmed) {
+          warnGuard('large_delta_confirm', [
+            `current=${lastLineIndex}`,
+            `best=${targetLine}`,
+            `delta=${confirmDelta}`,
+            `need=${LARGE_DELTA_CONFIRM_HITS}`,
+            `window=${LARGE_DELTA_CONFIRM_WINDOW_MS}`,
+          ]);
+          emitHudStatus(
+            'confirmations',
+            `Waiting: large jump confirm (${confirmDelta} lines)`,
+          );
+          return;
+        }
+      }
       let lineEl = getLineElementByIndex(scroller, targetLine);
       if (!lineEl) {
         lineEl = await findLineElWithRetry(scroller, targetLine);
@@ -2124,9 +2589,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               const desired = clamp(targetTop, 0, max);
               const limitedTarget = Math.min(desired, base + jumpCap);
               if (limitedTarget > base) {
+                stopGlide('same-line-recenter');
                 pursuitTargetTop = limitedTarget;
                 lastSameLineNudgeTs = now;
                 lastEvidenceAt = now;
+                const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+                const microThresholdPx = lineHeightPx > 0
+                  ? lineHeightPx * motionTuning.microDeltaLineRatio
+                  : 0;
+                if (microThresholdPx > 0 && (limitedTarget - base) <= microThresholdPx) {
+                  armMicroPursuit(now, 'same-line-recenter');
+                }
                 ensurePursuitActive();
                 logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
                 emitHybridTargetHint(
@@ -2167,10 +2640,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               const creepTarget = clamp(base + creepStep, 0, max);
               const limitedTarget = Math.min(creepTarget, base + jumpCap);
               if (limitedTarget > base) {
+                stopGlide('same-line-creep');
                 pursuitTargetTop = limitedTarget;
                 lastSameLineNudgeTs = now;
                 lastEvidenceAt = now;
                 creepBudgetUsed += Math.max(0, limitedTarget - base);
+                const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+                const microThresholdPx = lineHeightPx > 0
+                  ? lineHeightPx * motionTuning.microDeltaLineRatio
+                  : 0;
+                if (microThresholdPx > 0 && (limitedTarget - base) <= microThresholdPx) {
+                  armMicroPursuit(now, 'same-line-creep');
+                }
                 ensurePursuitActive();
                 logDev('same-line creep', { line: targetLine, px: creepStep, conf });
                 emitHybridTargetHint(
@@ -2196,6 +2677,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           lastBackRecoverIdx = targetLine;
           lastBackRecoverHitAt = now;
               if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
+                stopGlide('back-recovery');
                 const applied = applyScrollWithHybridGuard(currentTop + deltaPx, {
                   scroller,
                   reason: 'asr-back-recovery',
@@ -2280,10 +2762,39 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       const prevLineIndex = lastLineIndex;
       const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const lineHeightPx = (() => {
+        try {
+          if (!lineEl) return 0;
+          const h = lineEl.offsetHeight || lineEl.clientHeight;
+          if (h && Number.isFinite(h)) return h;
+          const computed = Number.parseFloat(getComputedStyle(lineEl).lineHeight);
+          return Number.isFinite(computed) ? computed : 0;
+        } catch {
+          return 0;
+        }
+      })();
+      const rawDeltaPx = Math.max(0, targetTop - currentTop);
+      const maxJumpPx = lineHeightPx > 0 ? lineHeightPx * motionTuning.maxLinesPerCommit : rawDeltaPx;
+      const clampedDeltaPx = Math.min(rawDeltaPx, maxJumpPx);
+      const prevCommitDeltaPx = lastCommitDeltaPx > 0 ? lastCommitDeltaPx : clampedDeltaPx;
+      let smoothedDeltaPx =
+        prevCommitDeltaPx +
+        (clampedDeltaPx - prevCommitDeltaPx) * motionTuning.deltaSmoothingFactor;
+      smoothedDeltaPx = Math.min(smoothedDeltaPx, clampedDeltaPx);
+      smoothedDeltaPx = Math.max(0, smoothedDeltaPx);
+      let taper = 1;
+      if (max > 0) {
+        const progress = clamp(currentTop / max, 0, 1);
+        taper = clamp(1 - Math.pow(progress, motionTuning.taperExponent), motionTuning.taperMin, 1);
+      }
+      const taperedDeltaPx = Math.min(clampedDeltaPx, smoothedDeltaPx * taper);
+      lastCommitDeltaPx = taperedDeltaPx;
+      const maxAllowedTarget = clamp(currentTop + taperedDeltaPx, 0, max);
       const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
-      const candidate = clamp(targetTop, 0, max);
-      const limitedTarget = forced ? candidate : Math.min(candidate, base + jumpCap);
-      const nextTargetTop = Math.max(base, limitedTarget);
+      const baseClamped = Math.min(base, maxAllowedTarget);
+      const candidate = maxAllowedTarget;
+      const limitedTarget = forced ? candidate : Math.min(candidate, baseClamped + jumpCap);
+      const nextTargetTop = Math.max(baseClamped, limitedTarget);
       pursuitTargetTop = nextTargetTop;
       if (nextTargetTop > base) {
         emitHybridTargetHint(
@@ -2293,6 +2804,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           undefined,
           targetLine,
         );
+      }
+      const microThresholdPx = lineHeightPx > 0
+        ? lineHeightPx * motionTuning.microDeltaLineRatio
+        : 0;
+      const useMicro = microThresholdPx > 0 && taperedDeltaPx > 0 && taperedDeltaPx <= microThresholdPx;
+      let didGlide = false;
+      if (!isHybridMode()) {
+        if (useMicro) {
+          stopGlide('micro-commit');
+          pursuitTargetTop = nextTargetTop;
+          pursuitVel = 0;
+          armMicroPursuit(now, 'micro-commit');
+        } else {
+          microPursuitUntil = 0;
+          pursuitActive = false;
+          pursuitVel = 0;
+          didGlide = startGlideTo(nextTargetTop, {
+            scroller,
+            reason: forced ? 'asr-forced-commit' : 'asr-commit',
+            source: 'asr',
+          });
+        }
       }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
@@ -2312,6 +2845,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         jumpHistory.push(now);
       }
       noteCommit(prevLineIndex, targetLine, now);
+      if (forwardDelta >= OVERSHOOT_RISK_DELTA_LINES) {
+        overshootRiskUntil = now + OVERSHOOT_RISK_WINDOW_MS;
+        logDev('overshoot risk', { delta: forwardDelta, until: overshootRiskUntil });
+      }
+      behindRecoveryHits.length = 0;
+      largeDeltaConfirm = null;
       if (pending.recoveryDetails && isDevMode()) {
         const { delta: recDelta, sim: recSim, streak, debt } = pending.recoveryDetails;
         const msg = `[ASR_RECOVERY] commit delta=${recDelta} sim=${formatLogScore(recSim)} streak=${streak} debt=${debt}`;
@@ -2324,6 +2863,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       resetLowSimStreak();
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
+      try {
+        const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
+        const fromTop = Number.isFinite(currentTop) ? Math.round(currentTop) : currentTop;
+        const toTop = Number.isFinite(pursuitTargetTop ?? currentTop)
+          ? Math.round((pursuitTargetTop ?? currentTop) as number)
+          : (pursuitTargetTop ?? currentTop);
+        const movedPx =
+          typeof fromTop === 'number' && typeof toTop === 'number' ? Math.round(toTop - fromTop) : 0;
+        const targetElFound = !!lineEl;
+        console.log(
+          `[ASR_DRIVER] driveToLine best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=transcript fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
+        );
+      } catch {}
       const intendedTargetTop = pursuitTargetTop ?? currentTop;
       try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
@@ -2340,7 +2892,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relock: !!relockOverride,
         relockReason: relockReason || undefined,
       });
-      ensurePursuitActive();
+      if (!didGlide) {
+        ensurePursuitActive();
+      }
       try {
         const forcedCount = getForcedCount(now);
         const forcedCooldown = getForcedCooldownRemaining(now);
@@ -2397,6 +2951,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    const incomingIdx = Number((detail as any)?.currentIdx);
+    if (Number.isFinite(incomingIdx)) {
+      const nextIdx = Math.max(0, Math.floor(incomingIdx));
+      if (nextIdx !== lastLineIndex) {
+        lastLineIndex = nextIdx;
+        matchAnchorIdx = nextIdx;
+      }
+    }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     const rawMatchId = (detail as any)?.matchId;
     const noMatch = detail?.noMatch === true;
@@ -2517,17 +3079,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     maybeBumpForStall(now);
     if (now - lastForwardCommitAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS && now - lastStuckDumpAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS) {
       lastStuckDumpAt = now;
-      clearEvidenceBuffer('stuck');
-      const anchorForStuck =
-        lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
-      activateStuckResync(anchorForStuck, now);
-      emitHudStatus('resync', 'Resyncing...');
-      dumpRecentEvents('stuck');
-      logThrottled('ASR_GUARD:stuck', 'warn', 'ASR_GUARD', {
-        reason: 'stuck',
-        lastLineIndex,
-        lastForwardCommitAt,
-      });
+      if (stallRescueRequested) {
+        stallRescueRequested = false;
+        clearEvidenceBuffer('stuck');
+        const anchorForStuck =
+          lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0);
+        activateStuckResync(anchorForStuck, now);
+        emitHudStatus('resync', 'Resyncing...');
+        dumpRecentEvents('stuck');
+        logThrottled('ASR_GUARD:stuck', 'warn', 'ASR_GUARD', {
+          reason: 'stuck',
+          lastLineIndex,
+          lastForwardCommitAt,
+        });
+      }
     }
 
     const anchorIdx = matchAnchorIdx >= 0
@@ -3447,6 +4012,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const behindBy = cursorLine - rawIdx;
     if (behindBy > 0) {
+      recordBehindRecoveryHit(rawIdx, conf, isFinal, now);
+      if (tryBehindRecovery(cursorLine, now, conf, rawIdx, isFinal)) {
+        return;
+      }
       if (!isFinal) {
         behindStrongCount = 0;
         lastBehindStrongIdx = -1;
@@ -3493,6 +4062,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const scrollTopBefore = scroller?.scrollTop ?? 0;
         const targetTop = scroller ? resolveTargetTop(scroller, rawIdx) : null;
         if (scroller && targetTop != null) {
+          stopGlide('behind-reanchor');
           const applied = applyScrollWithHybridGuard(targetTop, {
             scroller,
             reason: 'asr-behind-reanchor',
@@ -3511,6 +4081,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongSince = 0;
         behindStrongCount = 0;
         lastBehindRecoveryAt = now;
+        microPursuitUntil = 0;
         resetLookahead('behind-reanchor');
         setCurrentIndex(lastLineIndex, 'behind-reanchor');
         logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
@@ -3664,6 +4235,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     try { window.removeEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
     try { window.removeEventListener('tp:script:reset', resetHandler as EventListener); } catch {}
+    try { window.removeEventListener('tp:asr:rescue', rescueHandler as EventListener); } catch {}
     detachManualScrollWatcher();
     manualAnchorPending = null;
     updateManualAnchorGlobalState();
@@ -3681,11 +4253,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastIngestAt = 0;
     lastCommitAt = Date.now();
     lastStallLogAt = 0;
+    stallHudEmitted = false;
+    stallRescueRequested = false;
     matchAnchorIdx = lastLineIndex;
     pursuitTargetTop = null;
     pursuitVel = 0;
     pursuitActive = false;
     lastEvidenceAt = 0;
+    lastCommitDeltaPx = 0;
+    stopGlide('sync-index');
+    microPursuitUntil = 0;
     lastBackRecoverAt = 0;
     lastBackRecoverIdx = -1;
     lastBackRecoverHitAt = 0;
@@ -3707,6 +4284,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     behindStrongSince = 0;
     behindStrongCount = 0;
     lastBehindRecoveryAt = 0;
+    overshootRiskUntil = 0;
+    largeDeltaConfirm = null;
+    behindRecoveryHits.length = 0;
     lagRelockHits = 0;
     lagRelockWindowStart = 0;
     lastForwardCommitAt = Date.now();

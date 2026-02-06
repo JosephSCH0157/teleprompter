@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 import { broadcastRehearsal } from './rehearsal-bus';
 // Guarded preventDefault to satisfy lint rule and avoid redundant calls
 function safePreventDefault(e) {

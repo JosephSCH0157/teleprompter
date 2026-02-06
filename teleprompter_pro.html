@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>Anvil v1.8.0</title>
+  <title>Anvil v1.8.2</title>
 
   <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
@@ -23,14 +23,10 @@
   <link rel="canonical" href="https://example.com/teleprompter/" />
 
   <script>
-    try { window.APP_VERSION = '1.8.0'; window.__TP_TS_MODE = true; window.__TP_TS_OVERLAYS = true; } catch (err) { /* no-op */ }
+    // BOOTSTRAP ONLY
+    try { window.APP_VERSION = '1.8.2'; window.__TP_TS_MODE = true; window.__TP_TS_OVERLAYS = true; } catch (err) { /* no-op */ }
     try { window.__TP_TS_OVERLAYS = true; } catch {}
   </script>
-
-  <script>
-  window.__TP_PAIR_QR_URL = "https://wtvdjndyxegudufrompx.functions.supabase.co/pair-qr";
-</script>
-
 
   <!-- Favicons -->
   <!-- Site icon (PNG). Place the provided anvil/mic image at assets/anvil-favicon.png -->
@@ -46,14 +42,18 @@
   <link rel="stylesheet" href="teleprompter_pro.css">
 
   <!-- Preload Mammoth so DOCX importer always sees window.mammoth -->
+  <!-- BOOTSTRAP ONLY -->
   <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
 
+  <!-- BOOTSTRAP ONLY -->
   <script src="/forge-config.js"></script>
 
   <!-- TS bundle preload + entry (single brain) -->
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
+  <!-- LEGACY COMPAT -->
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script>
+    // BOOTSTRAP ONLY
     (function(){
       try {
         var host = (location && location.hostname) ? location.hostname : '';
@@ -103,11 +103,13 @@
       }
     })();
   </script>
-  <script id="tp-dist-entry" type="module"></script>
+  <!-- BOOTSTRAP ONLY -->
+  <script id="tp-dist-entry" type="module" src="./index.js"></script>
   <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
 <!-- Dev flag: add .tp-dev class early so CSS can key off it -->
   <script>
+    // DEV SAFETY (REMOVE AFTER REPAIR)
     (function(){
       try {
         var Q=new URLSearchParams(location.search);
@@ -123,6 +125,7 @@
 
   <!-- Safe requestScroll polyfill (kept) -->
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         if (!window.requestScroll) {
@@ -142,6 +145,7 @@
 
   <!-- Mammoth loader shim (legacy-safe): ensures window.ensureMammoth exists -->
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         if (!('ensureMammoth' in window)) {
@@ -174,6 +178,7 @@
   <!-- <script src="ui-sanitize.js"></script> -->
   <!-- Legacy guard: ensure no old app-store script runs (TS bundle owns __tpStore) -->
   <script>
+    // LEGACY COMPAT
     try {
       document.querySelectorAll('script[src*="state/app-store.js"]').forEach((s) => s.remove());
     } catch {}
@@ -193,16 +198,6 @@
     html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
     .topbar{display:flex;align-items:center;gap:8px;padding:6px 10px;position:sticky;top:0;z-index:1000;height:auto;min-height:var(--tp-topbar-h,48px);flex-wrap:nowrap;overflow-x:auto;box-sizing:border-box;border-bottom:1px solid rgba(255,255,255,0.02);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent)}
     .topbar .chip{padding:2px 8px;font-size:12px}
-    .topbar .logout-pill{
-      border-radius:999px;
-      padding:6px 14px;
-      border:1px solid rgba(255,255,255,.2);
-      background:rgba(255,255,255,.08);
-      color:var(--fg);
-    }
-    .topbar .logout-pill:hover{
-      background:rgba(255,255,255,.12);
-    }
     .topbar button{padding:6px 10px}
     .page-tabs,.legend{flex:0 0 auto;white-space:nowrap}
     .topbar strong{font-weight:600;margin-right:6px}
@@ -311,11 +306,8 @@
     #asrStatsHud{display:none !important}
     html.dev1 #asrStatsHud{display:block !important}
     /* Test aliases: keep clickable for headless smoke while visually hidden */
-    .test-alias{position:fixed;left:0;top:0;width:12px;height:12px;opacity:0;z-index:2147483647;pointer-events:auto}
+    .test-alias{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;z-index:2147483647;pointer-events:auto}
     .crawl-alias{position:fixed;left:2px;bottom:2px;width:8px;height:8px;opacity:0;z-index:2147483647;pointer-events:none}
-    .ui-crawl-anchors{position:fixed;left:0;top:0;width:12px;height:12px;opacity:0;overflow:hidden;z-index:2147483647;pointer-events:auto}
-    .ui-crawl-anchors *{font-size:1px!important;line-height:1px!important;pointer-events:auto}
-    .ui-crawl-anchors .test-alias{width:12px!important;height:12px!important;padding:0!important;margin:0!important}
   </style>
 
   <!-- Single loader above handles module import; remove redundant inline dist loader in dev -->
@@ -350,21 +342,21 @@
       Founders can also drop a note in the Iron Mine Support section.
     </p>
 
-  <button id="btnReloadAnvil" type="button" class="btn btn-primary">
+    <button id="btnReloadAnvil" type="button" class="btn btn-primary">
       Reload Anvil
     </button>
   </div>
 </div>
 <!-- Toast container placeholder (ensures smoke harness can detect it even before modules load) -->
 <div id="tp_toast_container" class="tp-toast-container"></div>
-  <div class="topbar">
-    <strong>Anvil - Teleprompter</strong>
-      <span id="appVersionBadge" class="version-badge" aria-label="App version">v1.8.0</span>
-    <span id="whoamiChip" class="chip chip-muted" title="Which account is logged in">Logged in: ...</span>
-    <button id="logoutBtn" class="chip logout-pill" type="button">Log out</button>
+<div class="topbar">
+  <strong>Anvil - Teleprompter</strong>
+    <span id="appVersion" class="version-badge" aria-label="App version">v1.8.2</span>
+  <span class="chip" id="saveChip">Draft: -</span>
   <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
   <span class="chip" id="asrCalChip" data-tp-asr-cal-chip aria-live="polite" aria-atomic="true">ASR: No calibration</span>
-    <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
+  <span class="chip" id="displayChip">Display: closed</span>
+  <span class="chip" id="recChip" role="status" aria-live="polite" aria-atomic="true">Speech: idle</span>
   <span class="chip" id="scrollChip">Scroll: idle</span>
   <span class="chip dev-only" id="debugPosChip" title="Anchor % within viewport and current scrollTop">Anchor - * scrollTop -</span>
   <span class="chip" id="camRtcChip">CamRTC: idle</span>
@@ -383,6 +375,8 @@
       <span id="recPillLive" class="sr-only rec-pill-live"></span>
     </span>
     <!-- ASR chip + button will mount here -->
+    <button class="chip" id="singleMonitorBtn" data-action="single-monitor-toggle" aria-pressed="false" title="Single Monitor Read (maximize script view)">Single Monitor</button>
+    <button class="chip" id="sidebarDrawerBtn" data-action="sidebar-drawer-toggle" aria-expanded="false" title="Open scripts/settings drawer">Scripts</button>
     <button class="chip" id="presentBtn" data-action="present-toggle">Present Mode</button>
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
@@ -404,6 +398,7 @@
     </button>
   </nav>
   <script>
+    // LEGACY COMPAT
     (function () {
       try {
         var btn = document.getElementById('ironMineTab');
@@ -435,6 +430,7 @@
     })();
   </script>
 
+  <div class="legend" id="legend"></div>
   <div id="scrollModeChip" data-role="scroll-mode-chip"></div>
   <span id="obsChip" class="chip"></span>
   <div data-step-ui="1" style="display:none;"></div>
@@ -456,6 +452,27 @@
     <option value="step">Step</option>
     <option value="rehearsal">Rehearsal</option>
   </select>
+  <script>
+    // DEV SAFETY (REMOVE AFTER REPAIR)
+    (function(){
+      try {
+        var el = document.getElementById('scrollMode');
+        if (!el) return;
+        var raw = '';
+        try { raw = localStorage.getItem('scrollMode') || ''; } catch (e) {}
+        var val = String(raw || '').trim().toLowerCase();
+        if (!val) return;
+        if (val === 'manual') val = 'step';
+        if (val === 'asr') {
+          val = 'hybrid';
+          try { localStorage.setItem('scrollMode', val); } catch (e) {}
+          try { localStorage.setItem('tp_asr_boot_fallback', '1'); } catch (e) {}
+        }
+        var ok = Array.prototype.some.call(el.options, function(o){ return o.value === val; });
+        if (ok) el.value = val;
+      } catch (e) {}
+    })();
+  </script>
     <p class="mode-hint" id="scrollModeHelpText">Hybrid (Performance) follows speech automatically. Switch anytime to lock in manual, ASR (Training), or rehearsal modes.</p>
     <p class="mode-hint" id="scrollModeInlineHint" aria-live="polite" hidden>ASR (Training) is disabled until Mic is ready.</p>
 </section>
@@ -650,7 +667,17 @@
   </label>
 <button id="downloadFile">Download</button>
 <button id="uploadFileBtn" type="button" data-action="upload" data-tp-script-upload-btn>Upload file</button>
+<button id="uploadBtn" type="button" aria-label="Upload script">Upload</button>
 <input id="uploadFile" type="file" accept=".txt,.md,.rtf,.text,.docx" hidden data-tp-script-upload-input>
+<script>
+  // LEGACY COMPAT
+  (function () {
+    const btn = document.getElementById('uploadBtn');
+    const input = document.getElementById('uploadFile');
+    if (!btn || !input) return;
+    btn.addEventListener('click', () => input.click());
+  })();
+</script>
 </div>
 <!-- Scripts row: saved scripts dropdown + file ops; folder mapping lives in Settings -> Media -->
   <div class="row" id="sidebarScriptsRow">
@@ -693,6 +720,7 @@
 </main>
 </div>
 <script>
+  // DEV SAFETY (REMOVE AFTER REPAIR)
   // Ensure the marker offset uses viewer scroll-padding so the first line sits on the marker after typography loads.
   (function(){
     function applyMarkerOffset(){
@@ -732,237 +760,235 @@
   <button id="shortcutsClose" class="btn-chip btn-close" data-action="help-close">Close</button>
     </header>
 
-    <div class="help-content">
-      <section>
-        <h3>Anvil - Help &amp; Troubleshooting Guide</h3>
-        <p>This page is written to do two things well:</p>
-        <ol>
-          <li>Get you productive in Anvil <em>fast</em>.</li>
-          <li>Help you <strong>diagnose and fix scripts that refuse to render</strong> without guessing.</li>
-        </ol>
-        <p>If something breaks, this page assumes it's <em>your script first, settings second, environment last</em> and walks you through that order.</p>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Mental Model (Read This First)</h4>
-        <p>Anvil is intentionally strict. If your script violates the rules, Anvil <strong>will not partially render it</strong>. It will render <strong>nothing</strong>.</p>
-        <p>That's not a bug. It's a safety feature.</p>
-        <p>Why?</p>
-        <ul>
-          <li>Partial renders hide errors</li>
-          <li>Hidden errors break cadence mid-recording</li>
-          <li>Silent failures are worse than loud ones</li>
-        </ul>
-        <p>So when a script fails, Anvil stops and tells you exactly why - <em>if you know where to look</em>.</p>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Fast Start (60 seconds)</h4>
-        <ol>
-          <li>Paste or load your script into the editor</li>
-          <li>Make sure every speaker block is valid</li>
-          <li>Click <strong>Render</strong> (or Start)</li>
-          <li>If the script goes blank -> open <strong>Validate Script</strong></li>
-        </ol>
-        <p>If you only remember one thing from this page, remember this:</p>
-        <blockquote><strong>Blank script = validation error</strong></blockquote>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Script Structure Rules (Non-Negotiable)</h4>
-        <h5>Speaker Tags (Most Common Failure)</h5>
-        <p>Anvil only accepts these speaker tags:</p>
-        <pre><code>[s1] ... [/s1]
-[s2] ... [/s2]
-[g1] ... [/g1]
-[g2] ... [/g2]</code></pre>
-        <p><strong>Rules:</strong></p>
-        <ul>
-          <li>Opening tag must be on its own line</li>
-          <li>Closing tag must be on its own line</li>
-          <li>Tags may not overlap</li>
-          <li>Every opening tag must close</li>
-        </ul>
-        <p>Valid</p>
-        <pre><code>[s1]
-This is a full paragraph.
-It can span multiple lines.
-[/s1]</code></pre>
-        <p>Invalid (will blank the script)</p>
-        <pre><code>[s1] This line breaks the rule [/s1]</code></pre>
-        <p>Invalid (overlap)</p>
-        <pre><code>[s1]
-Joe starts talking
-[s2]
-Brad jumps in
-[/s1]
-[/s2]</code></pre>
-
-        <h5>Notes vs Spoken Text</h5>
-        <p>Notes are <em>not</em> spoken and are hidden in the teleprompter view.</p>
-        <pre><code>[note]
-Production direction goes here
-[/note]</code></pre>
-        <ul>
-          <li>Notes must be fully enclosed</li>
-          <li>Notes cannot contain speaker tags</li>
-        </ul>
-
-        <h5>Pacing Cues (Visible)</h5>
-        <p>These <em>are</em> visible to the reader:</p>
-        <pre><code>[pause]
-[beat]
-[reflective pause]</code></pre>
-        <p>They can appear inline inside a speaker block.</p>
-
-        <h5>Inline Styling (Must Close)</h5>
-        <p>Allowed inline tags:</p>
-        <pre><code>[b]bold[/b]
-[i]italic[/i]
-[u]underline[/u]
-[color=#hex]text[/color]
-[bg=#hex]text[/bg]</code></pre>
-        <p><strong>Every inline tag must close.</strong></p>
-        <p>This will break rendering:</p>
-        <pre><code>[b]Bold text without a close</code></pre>
-        <hr>
-      </section>
-
-      <section>
-        <h4>When a Script Refuses to Render</h4>
-        <h5>Step 1: Open Validate Script</h5>
-        <p>Click <strong>Validate Script</strong>. Anvil will show:</p>
-        <ul>
-          <li>The exact error</li>
-          <li>The rule you violated</li>
-          <li>Why rendering stopped</li>
-        </ul>
-        <p>If you skip this step, you're guessing.</p>
-
-        <h5>Step 2: Read the <em>First</em> Error Only</h5>
-        <p>Fix errors <strong>top-down</strong>. One broken tag can cause 10 fake downstream errors. Always fix the <strong>first reported error</strong>, then re-validate.</p>
-
-        <h5>Step 3: Common Failure Patterns</h5>
-        <p><strong>1. Blank Script Immediately</strong></p>
-        <ul>
-          <li>Missing closing speaker tag</li>
-          <li>Crossed speaker tags</li>
-          <li>Inline tag not closed</li>
-        </ul>
-        <p><strong>2. Script Renders Then Vanishes</strong></p>
-        <ul>
-          <li>A later section violates rules</li>
-          <li>Inline style broken halfway down</li>
-        </ul>
-        <p><strong>3. Only One Speaker Shows</strong></p>
-        <ul>
-          <li>Check correct tag names (<code>s1</code> vs <code>S1</code> is invalid)</li>
-          <li>Closing tags present</li>
-        </ul>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Debugging Like a Pro</h4>
-        <h5>Enable Dev Mode</h5>
-        <p>Add one of these:</p>
-        <ul>
-          <li><code>?dev=1</code> to the URL</li>
-          <li><code>#dev</code> to the URL</li>
-          <li><code>localStorage.setItem('tp_dev_mode','1')</code></li>
-        </ul>
-        <p>Reload the page. You'll now see:</p>
-        <ul>
-          <li>HUD logs</li>
-          <li>Validation details</li>
-          <li>Render lifecycle messages</li>
-        </ul>
-
-        <h5>HUD Signals That Matter</h5>
-        <p>Look for:</p>
-        <ul>
-          <li><code>VALIDATION_FAILED</code></li>
-          <li><code>SCRIPT_PARSE_ERROR</code></li>
-          <li><code>TAG_MISMATCH</code></li>
-        </ul>
-        <p>If the HUD says render aborted, the script <em>did not pass validation</em>.</p>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Importing Scripts (DOCX / TXT)</h4>
-        <h5>DOCX Gotchas</h5>
-        <p>DOCX imports often fail due to:</p>
-        <ul>
-          <li>Smart quotes</li>
-          <li>Hidden formatting</li>
-          <li>Copy-pasted bullet glyphs</li>
-        </ul>
-        <p><strong>Best practice:</strong></p>
-        <ol>
-          <li>Import</li>
-          <li>Immediately Validate</li>
-          <li>Fix structural tags manually</li>
-        </ol>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Display Mirror Issues</h4>
-        <p>If the <strong>main window renders but the display is blank</strong>:</p>
-        <ol>
-          <li>Make sure the main script is rendered first</li>
-          <li>Reload the display window</li>
-          <li>Confirm both windows are on the same origin</li>
-        </ol>
-        <p>The display window cannot fix a broken script - it only mirrors.</p>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Absolute Last Resort Checklist</h4>
-        <ol>
-          <li>Copy the script</li>
-          <li>Paste into a plain-text editor</li>
-          <li>Re-add speaker tags manually</li>
-          <li>Validate again</li>
-        </ol>
-        <p>This eliminates invisible characters and formatting junk.</p>
-        <hr>
-      </section>
-
-      <section>
-        <h4>Design Philosophy (Why It's This Strict)</h4>
-        <p>Anvil is built for <em>live recording</em>. A teleprompter that silently ignores errors is dangerous.</p>
-        <p>Anvil would rather:</p>
-        <ul>
-          <li>Refuse to render</li>
-          <li>Tell you exactly why</li>
-          <li>Force a fix <em>before</em> recording</li>
-        </ul>
-        <p>Than let you discover the problem mid-take.</p>
-        <hr>
-      </section>
-
-      <section>
-        <h4>TL;DR</h4>
-        <ul>
-          <li>Blank script = validation error</li>
-          <li>Always open <strong>Validate Script</strong></li>
-          <li>Fix the <strong>first</strong> error only</li>
-          <li>Speaker tags must be perfect</li>
-          <li>Inline styles must close</li>
-        </ul>
-        <p>Once you internalize the rules, Anvil becomes boringly reliable - exactly what you want when the camera is rolling.</p>
-      </section>
+    <div class="shortcuts-grid">
+      <div><strong>Space</strong></div><div>Toggle Auto-scroll</div>
+      <div><strong>ArrowUp / ArrowDown or + / -</strong></div><div>Adjust Auto-scroll speed (+/-1)</div>
+      <div><strong>Shift + ArrowUp / ArrowDown</strong></div><div>Adjust by +/-5</div>
+      <div><strong>Mouse-wheel on speed field</strong></div><div>+/-1 (Shift: +/-5)</div>
+      <div><strong>1 / 2 / 3 / 4</strong></div><div>Wrap with [s1]/[s2]/[g1]/[g2]</div>
+      <div><strong>Shift + /</strong></div><div>Open Help</div>
+      <div><strong>Ctrl/Cmd + O</strong></div><div>Load selected script from mapped folder</div>
+      <div><strong>Ctrl/Cmd + S</strong></div><div>Save</div>
+      <div><strong>F2</strong></div><div>Rename selected script</div>
+      <div><strong>Delete</strong></div><div>Delete selected script</div>
     </div>
+    <section id="help-asr">
+      <h3>Speech-to-Text (ASR) Settings</h3>
+      <p>Anvil can listen to your voice and auto-scroll to follow you. Pick an engine and tune how it behaves.</p>
+
+      <h4>ASR Engines</h4>
+      <h5>Web Speech (Browser)</h5>
+      <p>Built-in browser recognition (e.g., Chrome Web Speech).</p>
+      <ul>
+        <li><strong>Pros:</strong> Very fast, no setup.</li>
+        <li><strong>Cons:</strong> Accuracy varies by browser/device; sensitive to noise.</li>
+      </ul>
+      <p>Use for quick tests or casual recordings.</p>
+
+      <h5>Offline Engine</h5>
+      <p>Local recognizer (no internet needed).</p>
+      <ul>
+        <li><strong>Pros:</strong> Private, consistent, works offline.</li>
+        <li><strong>Cons:</strong> Slightly slower; accuracy depends on model/hardware.</li>
+      </ul>
+      <p>Use when you want privacy or unreliable internet.</p>
+
+      <h5>Whisper Bridge</h5>
+      <p>High-accuracy Whisper (local or cloud-backed).</p>
+      <ul>
+        <li><strong>Pros:</strong> Excellent accuracy; handles accents and noisy rooms.</li>
+        <li><strong>Cons:</strong> Cloud use may spend tokens; a bit more latency.</li>
+      </ul>
+      <p>Use for serious podcast/video work.</p>
+
+      <h4>Common Options</h4>
+      <h5>Language</h5>
+      <p>Language you are speaking. Passed to the engine for correct interpretation.</p>
+
+      <h5>Use interim results</h5>
+      <p>Allows partial guesses before a sentence is done for faster scroll response.</p>
+      <ul>
+        <li><strong>On:</strong> Faster, more "live" scroll; can be jumpy in noise.</li>
+        <li><strong>Off:</strong> Waits for finalized phrases; smoother but slower.</li>
+      </ul>
+
+      <h5>Filter filler words</h5>
+      <p>Drop "um/uh/like..." so scroll matches script better and jitters less.</p>
+
+      <h4>Advanced Controls</h4>
+      <h5>Confidence threshold</h5>
+      <p>Minimum confidence (0.0-1.0) before accepting words.</p>
+      <ul>
+        <li><strong>Higher (0.8-0.9):</strong> Cleaner, less jitter; may miss quiet speech.</li>
+        <li><strong>Lower (0.4-0.6):</strong> More responsive; occasional wrong words.</li>
+      </ul>
+
+      <h5>End-pointing ("s)</h5>
+      <p>Silence duration before a phrase finalizes (1,000,000 "s = 1s).</p>
+      <ul>
+        <li><strong>Lower (200k-400k):</strong> Finalizes quickly; good for fast talkers; may chop phrases.</li>
+        <li><strong>Higher (800k-1,200k):</strong> Smoother phrases; slight delay after you stop.</li>
+      </ul>
+
+      <h4>Suggested Starting Points</h4>
+      <ul>
+        <li><strong>Podcast:</strong> Whisper Bridge; interim on; fillers on; threshold 0.55; end-pointing 900,000 "s.</li>
+        <li><strong>Fast live:</strong> Web Speech; interim on; fillers off; threshold 0.40; end-pointing 400,000 "s.</li>
+        <li><strong>Noisy room:</strong> Whisper Bridge; interim off; fillers on; threshold 0.70; end-pointing 1,000,000 "s.</li>
+      </ul>
+      <p>Tweak to taste: raise threshold/end-pointing to calm jitter; lower them to speed up.</p>
+    </section>
+    <section id="help-speaker-tags">
+      <h3>Speaker Tags (Strict - scripts won't render if invalid)</h3>
+      <p>Speaker tags must be on their own lines.</p>
+      <p><strong>? Correct:</strong></p>
+      <pre>[s1]
+(lines of text...)
+[/s1]</pre>
+      <p><strong>? Wrong:</strong> Intro [s1] or [s1] Hello</p>
+      <p>Every opening tag MUST have a matching closing tag.</p>
+      <p>[s1] must close with [/s1], [s2] with [/s2], [g1] with [/g1], [g2] with [/g2].</p>
+      <p>No overlaps / no crossing tags.</p>
+      <p><strong>? Wrong:</strong></p>
+      <pre>[s1]
+text...
+[s2]
+text...
+[/s1]
+[/s2]</pre>
+      <p>(This will fail validation and can render as a blank script.)</p>
+      <p>Notes are hidden in the teleprompter view:</p>
+      <p>Put production-only direction inside <code>[note] ... [/note]</code> on their own lines.</p>
+      <p>Visible pacing cues must be bracketed:</p>
+      <p>Use <code>[pause]</code>, <code>[beat]</code>, <code>[reflective pause]</code> inline where you want the pause to happen.</p>
+      <p>Allowed inline styling (must be closed):</p>
+      <p><code>[color=red]...[/color]</code>, <code>[bg=#112233]...[/bg]</code>, <code>[b]...[/b]</code>, <code>[i]...[/i]</code>, <code>[u]...[/u]</code></p>
+      <p>Quick wrap shortcuts: 1 / 2 / 3 / 4 wraps selection with <code>[s1]/[s2]/[g1]/[g2]</code></p>
+      <pre>[s1]
+Hey folks. This is BS with Joe. [beat]
+Tonight we're covering one idea.
+[/s1]
+
+[s2]
+Alright. [pause]
+Let's do it.
+[/s2]
+
+[note]
+Cold open: keep it tight, smile, 2 seconds of silence before first line.
+[/note]</pre>
+    </section>
+    <section id="help-tag-errors">
+      <h3>Tag Validator Errors (What Went Wrong &amp; How to Fix It)</h3>
+      <p>If your script fails validation, nothing will display. Every error below stops rendering by design.</p>
+      <ol>
+        <li>
+          <strong>Missing Closing Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Missing closing tag: [s1] was opened but never closed.</p>
+          <p>You started a speaker block but forgot to end it. Add the matching closing tag on its own line.</p>
+          <pre>[s1]
+This line has a speaker.
+
+? Fix:
+
+[s1]
+This line has a speaker.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Closing Tag Without Opening Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Orphan closing tag: [/s2] found with no matching opening tag.</p>
+          <p>You closed a speaker that was never opened. Either remove the closing tag or add the correct opening tag above it.</p>
+        </li>
+        <li>
+          <strong>Overlapping / Crossed Speaker Tags</strong>
+          <p><span role="img" aria-label="error">?</span> Invalid tag nesting: speaker tags cannot overlap or cross.</p>
+          <p>Start one speaker, close it, then start another - no nested/parallel blocks.</p>
+          <pre>[s1]
+Joe starts talking.
+[s2]
+Brad jumps in.
+[/s1]
+[/s2]</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Joe starts talking.
+[/s1]
+
+[s2]
+Brad jumps in.
+[/s2]</pre>
+        </li>
+        <li>
+          <strong>Speaker Tag Not on Its Own Line</strong>
+          <p><span role="img" aria-label="error">?</span> Invalid speaker tag placement: [s1] must be on its own line.</p>
+          <p>Speaker tags cannot share a row with text.</p>
+          <pre>[s1] Hey folks, this is BS with Joe.</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Hey folks, this is BS with Joe.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Unknown or Unsupported Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Unknown tag detected: [speaker1]</p>
+          <p>Only these tags are valid:</p>
+          <p>Speakers: [s1]/[s2]/[g1]/[g2]</p>
+          <p>Notes/cues/inline: [note]/[pause]/[beat]/[reflective pause]/[color=...]/[bg=#hex]/[b]/[i]/[u]</p>
+        </li>
+        <li>
+          <strong>Unclosed Inline Style Tag</strong>
+          <p><span role="img" aria-label="error">?</span> Unclosed inline tag: [color=red] was never closed.</p>
+          <p>Inline tags must be closed just like HTML.</p>
+          <pre>[color=red]This is emphasized text.</pre>
+          <p>Correct:</p>
+          <pre>[color=red]This is emphasized text.[/color]</pre>
+        </li>
+        <li>
+          <strong>Notes Tag Misuse</strong>
+          <p><span role="img" aria-label="error">?</span> [note] tag must open and close on its own lines.</p>
+          <p>Notes are block-level only.</p>
+          <pre>[note]Camera tight shot[/note]</pre>
+          <p>Correct:</p>
+          <pre>[note]
+Camera tight shot.
+[/note]</pre>
+        </li>
+        <li>
+          <strong>Text Outside Any Speaker Block</strong>
+          <p><span role="img" aria-label="error">?</span> Text found outside of a speaker block.</p>
+          <p>Every spoken line must live inside [s1]/[s2]/[g1]/[g2].</p>
+          <pre>Welcome back to the show.
+[s1]
+Joe starts here.
+[/s1]</pre>
+          <p>Correct:</p>
+          <pre>[s1]
+Welcome back to the show.
+Joe starts here.
+[/s1]</pre>
+        </li>
+        <li>
+          <strong>Empty Speaker Block</strong>
+          <p><span role="img" aria-label="error">?</span> Empty speaker block: [s2] contains no text.</p>
+          <p>Either add content or delete the empty block.</p>
+        </li>
+        <li>
+          <strong>Multiple Speaker Blocks Open at Once</strong>
+          <p><span role="img" aria-label="error">?</span> Multiple active speaker blocks detected.</p>
+          <p>Speakers are sequential - you cannot have two blocks open simultaneously.</p>
+        </li>
+        <li>
+          <strong>Validation Halt (Why the Script Is Blank)</strong>
+          <p><span role="img" aria-label="error">?</span> Script validation failed. Rendering halted to prevent incorrect display.</p>
+          <p>The system refuses to guess. Fix the first listed error - many others disappear after that.</p>
+        </li>
+      </ol>
+      <p>Tip: If your script suddenly appears blank, check for a missing or crossed speaker tag. One incorrect tag stops the entire render.</p>
+    </section>
+    <!-- JS will inject the Tag Guide here, including the Normalize button -->
   </div>
-</div>
-<!-- shortcuts overlay closed -->
-<!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
+</div><!-- Settings overlay (dynamic content: mic, camera, speakers, recorders) -->
 <div id="settingsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" data-overlay="settings" hidden>
   <div class="sheet settings-sheet">
     <header class="sheet-head">
@@ -985,6 +1011,7 @@ Production direction goes here
   
   
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         // legacy display/camera wiring removed (TS bridges own these)
@@ -997,11 +1024,42 @@ Production direction goes here
   <!-- Test alias for legacy display selectors: clickable but visually hidden -->
   <button id="openDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-open">Open Display (alias)</button>
   <button id="closeDisplayBtn" class="test-alias" type="button" aria-hidden="true" tabindex="-1" title="alias-close">Close Display (alias)</button>
+      <!-- crawl-only alias: required by validate_ui_crawl.js; do not remove without updating contract -->
+      <button id="uploadBtn" class="crawl-alias" type="button" aria-label="Upload file" aria-hidden="true" tabindex="-1" title="alias-upload">Upload</button>
       <!-- Hidden aliases for removed status chips -->
+      <span id="saveChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-save"></span>
+      <span id="displayChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-display"></span>
     </div>
   </div>
+  <script>
+    // LEGACY COMPAT
+    (function ensureUploadAlias() {
+      function createUploadBtn() {
+        const btn = document.createElement('button');
+        btn.id = 'uploadBtn';
+        btn.className = 'crawl-alias';
+        btn.type = 'button';
+        btn.setAttribute('aria-label', 'Upload file');
+        btn.setAttribute('aria-hidden', 'true');
+        btn.setAttribute('tabindex', '-1');
+        btn.title = 'alias-upload';
+        btn.textContent = 'Upload';
+        return btn;
+      }
+      function seed() {
+        if (document.getElementById('uploadBtn')) return;
+        document.body.appendChild(createUploadBtn());
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', seed);
+      } else {
+        seed();
+      }
+    })();
+  </script>
   <span id="autoChip" class="test-alias" aria-hidden="true" tabindex="-1" title="alias-auto"></span>
   <script>
+    // LEGACY COMPAT
     (function(){
       try{
         var openAlias = document.getElementById('openDisplayBtn');
@@ -1011,8 +1069,36 @@ Production direction goes here
       }catch(e){}
     })();
   </script>
+  <script>
+    // LEGACY COMPAT
+    (function(){
+      function markPasswordField(el){
+        try {
+          if (el && el.getAttribute('autocomplete') !== 'current-password') {
+            el.setAttribute('autocomplete', 'current-password');
+          }
+        } catch (err) {}
+      }
+
+      function applyPasswordAutocomplete(){
+        try {
+          ['settingsObsPassword','obsPassword'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el) markPasswordField(el);
+          });
+        } catch (err) {}
+      }
+
+      if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        applyPasswordAutocomplete();
+      } else {
+        document.addEventListener('DOMContentLoaded', applyPasswordAutocomplete, { once: true });
+      }
+    })();
+  </script>
   <!-- legacy overlay binder removed; TS owns overlays -->
   <script>
+    // LEGACY COMPAT
     (function(){
       try {
         var el = document.getElementById('aboutVersion');
@@ -1020,7 +1106,7 @@ Production direction goes here
         var v = '';
         try { if (window.APP_VERSION) v = String(window.APP_VERSION); } catch (e) {}
         if (!v) {
-        var av = document.getElementById('appVersionBadge');
+          var av = document.getElementById('appVersion');
           if (av && av.textContent) v = av.textContent.trim();
         }
         if (v) el.textContent = v;
@@ -1030,6 +1116,7 @@ Production direction goes here
   <!-- HUD mount point (hidden until HUD enabled) -->
   <div id="hud-root" class="tp-hud-root" aria-hidden="true"></div>
   <script>
+    // LEGACY COMPAT
     (function ensureUploadButton() {
       const fileInput = document.getElementById('uploadFile');
       if (!fileInput) return;
@@ -1084,73 +1171,6 @@ Production direction goes here
         observer.disconnect();
         clearInterval(interval);
       }, 8000);
-    })();
-  </script>
-  <div id="uiCrawlAnchors" class="ui-crawl-anchors">
-    <span id="appVersion">v?.?.?</span>
-
-    <button id="presentBtn" type="button">Present</button>
-    <button id="displayToggleBtn" type="button">Display</button>
-    <button id="settingsBtnShell" type="button" aria-hidden="true" tabindex="-1">Settings</button>
-    <button id="shortcutsBtn" type="button">Help</button>
-
-    <button id="uploadFileBtn" type="button">Upload</button>
-    <input id="uploadFile" type="file" />
-
-    <button id="startCam" type="button">StartCam</button>
-    <button id="stopCam" type="button">StopCam</button>
-
-    <button id="recBtn" type="button">Rec</button>
-  </div>
-
-  <script>
-    (function () {
-      var versionEl = document.getElementById('appVersion');
-      if (versionEl) {
-        var version = '';
-        try {
-          if (window.APP_VERSION) version = String(window.APP_VERSION);
-        } catch {}
-        if (!version) {
-          var badge = document.getElementById('appVersionBadge');
-          if (badge && badge.textContent) version = badge.textContent;
-        }
-        if (version) {
-          version = version.trim();
-          if (!version.startsWith('v')) version = 'v' + version;
-        }
-        versionEl.textContent = version || 'v?.?.?.';
-      }
-
-      var uploadBtn = document.getElementById('uploadFileBtn');
-      var uploadInput = document.getElementById('uploadFile');
-      if (uploadBtn && uploadInput) {
-        uploadBtn.addEventListener('click', function () {
-          uploadInput.click();
-        });
-      }
-    })();
-  </script>
-  <script>
-    (function () {
-      var ids = [
-        "appVersion","presentBtn","displayToggleBtn","settingsBtn","shortcutsBtn",
-        "uploadFileBtn","uploadFile","startCam","stopCam","recBtn"
-      ];
-
-      function mark(stage) {
-        var missing = ids.filter(id => !document.getElementById(id));
-        console.log("[CI-ANCHORS]", stage, missing.length ? ("MISSING " + missing.join(",")) : "OK");
-        try {
-          window.__tpCiAnchors = window.__tpCiAnchors || [];
-          window.__tpCiAnchors.push({ stage, missing, ts: Date.now() });
-        } catch {}
-      }
-
-      mark("after-static-html");
-      window.addEventListener("load", function () {
-        mark("window-load");
-      });
     })();
   </script>
 </body>

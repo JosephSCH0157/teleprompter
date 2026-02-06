@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 import { getTypography, onTypography } from '../settings/typographyStore';
 export function applyTypographyTo(win, id) {
     const doc = win.document;

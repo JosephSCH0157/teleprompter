@@ -4,6 +4,7 @@
   <title>Display</title>
   <!-- Force display window into passive mirror mode before any bundles run -->
   <script>
+    // LEGACY COMPAT
     try {
       // Mark as display explicitly (belt + suspenders)
       window.__TP_FORCE_DISPLAY = true;
@@ -33,6 +34,7 @@
     } catch {}
   </script>
   <script>
+    // LEGACY COMPAT
     (function () {
       const selectorFix = /(?:^|,)\\s*:x/g;
       const wrap = (proto, original) => {
@@ -60,6 +62,7 @@
     })();
   </script>
   <script>
+    // LEGACY COMPAT
     (function () {
       const locks = window?.navigator?.locks;
       if (!locks || locks.__tpPatched) return;
@@ -77,7 +80,9 @@
       } catch {}
     })();
   </script>
+  <!-- BOOTSTRAP ONLY -->
   <script type="module" src="./dist/display-renderer.js"></script>
+  <!-- BOOTSTRAP ONLY -->
   <script type="module" src="./dist/net/display-ws-display-client.js"></script>
   <!-- TS bundle intentionally omitted in display window to keep it mirror-only and avoid double wiring -->
   <style>
@@ -217,6 +222,7 @@
           </div>
           <div id="preRoll"><div class="card"><div class="hint">Begin speaking in</div><div class="num" id="preRollNum">3</div></div></div>
           <script>
+            // LEGACY COMPAT
             // Expose our scroll root to the opener so main can target the right viewer
             try {
               const setOpenerRoot = () => {

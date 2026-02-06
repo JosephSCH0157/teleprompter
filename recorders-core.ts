@@ -24,6 +24,7 @@ export type RecorderMode = 'single' | 'multi';
 export interface RecorderSettings {
   mode: RecorderMode;
   selected: string[];
+  recordingMode: 'av' | 'audio';
   preferObsHandoff: boolean;
   configs: Record<string, Record<string, unknown>>;
   timeouts: { start: number; stop: number };
@@ -303,8 +304,9 @@ const LS_KEY = 'tp_rec_settings_v1';
  */
 
 const defaultSettings: RecorderSettings = {
-  mode: 'multi',
-  selected: ['obs', 'descript'],
+  mode: 'single',
+  selected: ['core'],
+  recordingMode: 'av',
   preferObsHandoff: false,
   configs: {
     obs: { url: 'ws://127.0.0.1:4455', password: '' },
@@ -356,6 +358,9 @@ export function setSettings(next: Partial<RecorderSettings> | null | undefined) 
     ...('selected' in next
       ? { selected: Array.isArray(next.selected) ? next.selected.slice() : prev.selected }
       : {}),
+    ...('recordingMode' in next
+      ? { recordingMode: next.recordingMode === 'audio' ? 'audio' : 'av' }
+      : {}),
     ...('preferObsHandoff' in next ? { preferObsHandoff: !!next.preferObsHandoff } : {}),
     ...('configs' in next ? { configs: { ...prev.configs, ...(next.configs || {}) } } : {}),
     ...('timeouts' in next ? { timeouts: { ...prev.timeouts, ...(next.timeouts || {}) } } : {}),
@@ -374,6 +379,12 @@ export function setSelected(ids: string[] | null | undefined) {
 }
 export function setMode(mode: RecorderMode | undefined) {
   setSettings({ mode });
+}
+export function setRecordingMode(mode: RecorderSettings['recordingMode']) {
+  setSettings({ recordingMode: mode });
+}
+export function getRecordingMode(): RecorderSettings['recordingMode'] {
+  return settings.recordingMode === 'audio' ? 'audio' : 'av';
 }
 export function setTimeouts(t: RecorderSettings['timeouts']) {
   setSettings({ timeouts: t });

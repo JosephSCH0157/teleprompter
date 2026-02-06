@@ -1,4 +1,4 @@
-# Teleprompter Pro (v1.8)
+# Teleprompter Pro (v1.8.2)
 
 Browser-based teleprompter with mirrored display, speech/scroll helpers, recording pills, and a TS-only runtime (`dist/index.js`).
 

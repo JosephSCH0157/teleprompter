@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { DEFAULT_SCRIPT_FONT_PX } from './typography-ssot';
 export {};
 
 // Typography bridge for modular dev path
@@ -16,7 +17,7 @@ export {};
       try {
         const root = document.documentElement;
         const cs = getComputedStyle(root);
-        const curFS = Number.parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+        const curFS = Number.parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX;
         const curLH = Number.parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
         const fs = Number.isFinite(fontPx) ? clamp(fontPx, 18, 120) : curFS;
         const lh = Number.isFinite(lineH) ? clamp(lineH, 1.1, 2.0) : curLH;
@@ -99,7 +100,7 @@ export {};
           e.preventDefault();
           const root = document.documentElement;
           const cs = getComputedStyle(root);
-          const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+          const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX;
           const next = clamp(curPx + (e.deltaY < 0 ? 2 : -2), 18, 120);
           const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
           applyTypographyVars(next, lh);
@@ -119,7 +120,7 @@ export {};
             e.preventDefault();
             const root = document.documentElement;
             const cs = getComputedStyle(root);
-            const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+            const curPx = parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX;
             const next = clamp(curPx + (e.deltaY < 0 ? 2 : -2), 18, 120);
             const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
             applyTypographyVars(next, lh);

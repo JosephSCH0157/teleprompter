@@ -1,4 +1,5 @@
 import { isSessionRecording, startSessionRecording, stopSessionRecording } from '../recording/recorderRegistry';
+import { getRecordingEngine } from '../recording/recording-settings';
 import type { AppStore } from '../state/app-store';
 
 export interface WireRecordButtonsOptions {
@@ -65,7 +66,7 @@ export function wireRecordButtons(store?: AppStore | null, opts: WireRecordButto
       if (startBtn.disabled) return;
       startBtn.disabled = true;
       try {
-        await startSessionRecording({ obsEnabled: getObsEnabled() });
+        await startSessionRecording({ obsEnabled: getObsEnabled(), engine: getRecordingEngine() });
       } catch (err) {
         console.warn('[recording] manual start failed', err);
       } finally {

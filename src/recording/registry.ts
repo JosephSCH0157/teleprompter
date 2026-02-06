@@ -13,6 +13,7 @@ export type RecorderAdapter = {
 export type RecorderSettings = {
   mode: 'single' | 'multi';
   selected: string[];
+  recordingMode: 'av' | 'audio';
   configs: Record<string, any>;
   timeouts: { start: number; stop: number };
   failPolicy: 'continue' | 'abort-on-first-fail';
@@ -21,8 +22,9 @@ export type RecorderSettings = {
 const registry = new Map<string, RecorderAdapter>();
 
 const DEFAULTS: RecorderSettings = {
-  mode: 'multi',
-  selected: ['obs', 'descript'],
+  mode: 'single',
+  selected: ['core'],
+  recordingMode: 'av',
   configs: {
     obs: { url: 'ws://192.168.1.196:4455', password: '' },
     companion: { url: 'http://127.0.0.1:8000', buttonId: '1.1' },
@@ -101,6 +103,7 @@ export function setSettings(next: Partial<RecorderSettings>) {
     ...prev,
     ...( 'mode' in next ? { mode: next.mode as any } : {} ),
     ...( 'selected' in next ? { selected: Array.isArray(next.selected) ? next.selected.slice() : prev.selected } : {} ),
+    ...( 'recordingMode' in next ? { recordingMode: next.recordingMode === 'audio' ? 'audio' : 'av' } : {} ),
     ...( 'configs' in next ? { configs: { ...prev.configs, ...(next.configs || {}) } } : {} ),
     ...( 'timeouts' in next ? { timeouts: { ...prev.timeouts, ...(next.timeouts || {}) } } : {} ),
     ...( 'failPolicy' in next ? { failPolicy: next.failPolicy as any } : {} ),

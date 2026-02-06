@@ -1,4 +1,4 @@
-import { getNetworkDisplayStatus, onNetworkDisplayStatus } from '../net/display-ws-client';
+import { enableNetworkDisplayRelay, getNetworkDisplayStatus, onNetworkDisplayStatus } from '../net/display-ws-client';
 import type { PairQrPayload } from '../pairing/pairing-api';
 import { pairingApiUrl, requestPairQr } from '../pairing/pairing-api';
 
@@ -224,6 +224,7 @@ function toggleModal(on: boolean) {
   if (!elements) return;
   elements.mask.classList.toggle('is-visible', on);
   if (on) {
+    enableNetworkDisplayRelay();
     refreshStatus();
     ensurePairingToken();
   } else {

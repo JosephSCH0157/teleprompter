@@ -35,9 +35,10 @@ describe('Settings recording UI (TS overlay)', () => {
     jest.mocked(AutoSsot.setAutoRecordEnabled).mockImplementation(() => true);
     jest
       .mocked(RecorderApi.getSettings)
-      .mockReturnValue({ selected: ['core'], mode: 'multi' } as any);
+      .mockReturnValue({ selected: ['core'], mode: 'single', recordingMode: 'av' } as any);
     jest.mocked(RecorderApi.setSelected).mockImplementation();
     jest.mocked(RecorderApi.setMode).mockImplementation();
+    jest.mocked(RecorderApi.setRecordingMode).mockImplementation();
     document.body.innerHTML = `
       <div id="settingsOverlay">
         <div id="settingsBody"></div>
@@ -60,8 +61,10 @@ describe('Settings recording UI (TS overlay)', () => {
     const root = document.getElementById('settingsBody') as HTMLElement;
     expect(root.querySelector('#settingsAutoRecord')).toBeTruthy();
     expect(root.querySelector('#autoRecordFolderName')).toBeTruthy();
-    expect(root.querySelector('#recAdapterCore')).toBeTruthy();
-    expect(root.querySelector('#recAdapterObs')).toBeTruthy();
+    expect(root.querySelector('#recEngineCore')).toBeTruthy();
+    expect(root.querySelector('#recEngineObs')).toBeTruthy();
+    expect(root.querySelector('#recModeAv')).toBeTruthy();
+    expect(root.querySelector('#recModeAudio')).toBeTruthy();
     expect(root.querySelector('#btnExportSettings')).toBeTruthy();
     expect(root.querySelector('#btnImportSettings')).toBeTruthy();
   });
@@ -106,15 +109,15 @@ describe('Settings recording UI (TS overlay)', () => {
     mountSettingsOverlay();
     const root = document.getElementById('settingsBody') as HTMLElement;
     wireSettingsDynamic(root);
-    const obsCb = root.querySelector('#recAdapterObs') as HTMLInputElement;
-    const modeCb = root.querySelector('#recModeSingle') as HTMLInputElement;
+    const audioBtn = root.querySelector('#recModeAudio') as HTMLButtonElement;
+    const obsBtn = root.querySelector('#recEngineObs') as HTMLButtonElement;
 
-    obsCb.checked = true;
-    obsCb.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(RecorderApi.setSelected).toHaveBeenCalledWith(expect.arrayContaining(['core', 'obs']));
+    audioBtn.click();
+    expect(RecorderApi.setRecordingMode).toHaveBeenCalledWith('audio');
 
-    modeCb.checked = true;
-    modeCb.dispatchEvent(new Event('change', { bubbles: true }));
+    obsBtn.click();
     expect(RecorderApi.setMode).toHaveBeenCalledWith('single');
+    expect(RecorderApi.setSelected).toHaveBeenCalledWith(['obs']);
+    expect(RecorderApi.setRecordingMode).toHaveBeenCalledWith('av');
   });
 });

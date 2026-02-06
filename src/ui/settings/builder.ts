@@ -76,6 +76,32 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <button class="chip" data-typo-preset data-display="display" data-typo-preset-name="bigroom">Big Room</button>
           </div>
         </div>
+
+        <div class="settings-card anim-in" id="uiScaleCard">
+          <h4>UI Scale</h4>
+          <div class="settings-inline-row">
+            <label class="tp-field">
+              <span>Scale</span>
+              <input id="uiScaleRange" type="range" min="0.55" max="1.10" step="0.01" />
+            </label>
+            <label class="tp-field">
+              <span>Value</span>
+              <input id="uiScaleNumber" type="number" min="0.55" max="1.10" step="0.01" />
+            </label>
+            <span id="uiScaleValue" class="settings-small">0.67</span>
+          </div>
+          <div class="settings-small">Applies to UI chrome only. Script text stays on --tp-font-size.</div>
+        </div>
+
+        <div class="settings-card anim-in" id="singleMonitorCard">
+          <h4>Reading Layout</h4>
+          <div class="row" style="gap:10px;align-items:center">
+            <label><input id="singleMonitorReadToggle" type="checkbox"> Single Monitor Read</label>
+            <span class="microcopy" style="color:#9fb4c9;font-size:12px">
+              Maximize script space and add look-ahead without shrinking text.
+            </span>
+          </div>
+        </div>
       </div>
       <div class="settings-small">Changes apply live to the selected display and are persisted.</div>
       </section>
@@ -123,6 +149,10 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
             <input id="asrEndMs" type="number" min="200" step="50" title="How long ASR waits after silence before finalizing a phrase. Lower reacts faster; higher is smoother but delayed.">
           </label>
         </div>
+        <div class="row" style="margin-top:8px;">
+          <label><input id="asrCalmMode" type="checkbox"> Calm Mode</label>
+          <span class="microcopy" style="color:#9fb4c9;font-size:12px">Smoother, slower ASR scroll. Best for long reads.</span>
+        </div>
         <div class="settings-small asr-status-lines" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
           <span id="asrSaveStatus" aria-live="polite"></span>
           <span id="asrAppliedStatus" aria-live="polite"></span>
@@ -146,6 +176,20 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
         <h4>Recording</h4>
 
       <div class="settings-card anim-in">
+        <h4>Recording Engine</h4>
+        <div class="row settings-inline-row">
+          <button id="recEngineCore" class="chip" type="button" aria-pressed="false">Core Recorder</button>
+          <button id="recEngineObs" class="chip" type="button" aria-pressed="false">OBS</button>
+        </div>
+        <h4 style="margin-top:6px">Recording Mode</h4>
+        <div class="row settings-inline-row">
+          <button id="recModeAv" class="chip" type="button" aria-pressed="false">Video + Audio</button>
+          <button id="recModeAudio" class="chip" type="button" aria-pressed="false">Audio Only</button>
+        </div>
+        <span id="recModeHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Audio-only records WAV and skips camera capture.</span>
+      </div>
+
+      <div class="settings-card anim-in">
         <h4>Auto-record</h4>
         <div class="row">
           <label><input type="checkbox" id="settingsAutoRecord"/> Auto-save camera + mic when Speech Sync runs</label>
@@ -154,21 +198,6 @@ export function buildSettingsContent(rootEl: HTMLElement | null) {
           <span class="microcopy" style="color:#9fb4c9;font-size:12px" data-test-id="rec-folder-label">Folder: <span id="autoRecordFolderName">Not set</span></span>
           <button id="autoRecordPickBtn" class="chip" type="button">Change auto-save folder</button>
           <button id="autoRecordClearBtn" class="chip" type="button">Clear</button>
-        </div>
-      </div>
-
-      <div class="settings-card anim-in">
-        <h4>Recorder integrations</h4>
-        <div class="row settings-inline-row" id="recAdaptersRow">
-          <div class="rec-list" style="display:flex;flex-wrap:wrap;gap:10px">
-            <label class="tp-check"><input type="checkbox" id="recAdapterCore" checked/> Core recorder</label>
-            <label class="tp-check"><input type="checkbox" id="recAdapterObs"/> OBS (WebSocket)</label>
-          </div>
-        </div>
-        <div class="row settings-inline-row">
-          <label class="tp-check"><input type="checkbox" id="recModeSingle"/> Single mode (one adapter at a time)</label>
-          <button id="recAdaptersRefresh" class="chip btn-chip" type="button">Refresh status</button>
-          <span id="recAdaptersHint" class="microcopy" style="color:#9fb4c9;font-size:12px">Pick which integrations to trigger when Auto-record is on.</span>
         </div>
       </div>
 

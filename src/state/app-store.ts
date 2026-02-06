@@ -1,6 +1,7 @@
 // Minimal app store for centralizing Settings and small app state.
 // Exposes window.__tpStore with get/set/subscribe and automatic persistence for a few keys.
 import { loadScrollPrefs, saveScrollPrefs } from '../features/scroll/scroll-prefs';
+import { getScrollModeAuditContext, recordScrollModeWrite } from '../scroll/audit';
 
 const IS_TEST = typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'test';
 
@@ -24,9 +25,10 @@ const ASR_THRESHOLD_KEY = 'tp_asr_threshold_v1';
 const ASR_ENDPOINT_KEY = 'tp_asr_endpoint_v1';
 const ASR_PROFILES_KEY = 'tp_asr_profiles_v1';
 const ASR_ACTIVE_PROFILE_KEY = 'tp_asr_active_profile_v1';
+const SINGLE_MONITOR_READ_KEY = 'tp_single_monitor_read_v1';
+const ASR_CALM_MODE_KEY = 'tp_asr_calm_mode_v1';
 const ASR_TUNING_PROFILES_KEY = 'tp_asr_tuning_profiles_v1';
 const ASR_TUNING_ACTIVE_PROFILE_KEY = 'tp_asr_tuning_active_profile_v1';
-const RECORD_AUDIO_ONLY_KEY = 'tp_record_audio_only';
 
 // Scroll router keys
 const SCROLL_MODE_KEY = 'scrollMode';
@@ -66,7 +68,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   hudSpeechNotesEnabledByUser: HUD_SPEECH_NOTES_KEY,
   overlay: OVERLAY_KEY,
   cameraEnabled: CAMERA_KEY,
-  recordAudioOnly: RECORD_AUDIO_ONLY_KEY,
+  singleMonitorReadEnabled: SINGLE_MONITOR_READ_KEY,
   // Scroll router persistence
   scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
@@ -87,6 +89,7 @@ const persistMap: Partial<Record<keyof AppStoreState, string>> = {
   'asr.threshold': ASR_THRESHOLD_KEY,
   'asr.endpointMs': ASR_ENDPOINT_KEY,
   'asr.filterFillers': ASR_FILTER_KEY,
+  asrCalmModeEnabled: ASR_CALM_MODE_KEY,
   asrProfiles: ASR_PROFILES_KEY,
   asrActiveProfileId: ASR_ACTIVE_PROFILE_KEY,
   asrTuningProfiles: ASR_TUNING_PROFILES_KEY,
@@ -124,13 +127,13 @@ export type AppStoreState = {
   obsEnabled: boolean;
   micGranted: boolean;
   cameraEnabled: boolean;
+  singleMonitorReadEnabled: boolean;
   cameraAvailable: boolean;
   obsScene: string;
   obsReconnect: boolean;
   obsHost: string;
   obsPassword: string;
   autoRecord: boolean;
-  recordAudioOnly: boolean;
   prerollSeconds: number;
   devHud: boolean;
   hudSupported: boolean;
@@ -145,6 +148,7 @@ export type AppStoreState = {
   'asr.filterFillers': boolean;
   'asr.threshold': number;
   'asr.endpointMs': number;
+  asrCalmModeEnabled: boolean;
   asrProfiles: Record<string, unknown>;
   asrActiveProfileId: string | null;
   asrTuningProfiles: Record<string, unknown>;
@@ -325,13 +329,6 @@ function buildInitialState(): AppStoreState {
         return false;
       }
     })(),
-    recordAudioOnly: (() => {
-      try {
-        return localStorage.getItem(RECORD_AUDIO_ONLY_KEY) === '1';
-      } catch {
-        return false;
-      }
-    })(),
     prerollSeconds: (() => {
       try {
         const n = parseInt(localStorage.getItem(PREROLL_SEC_KEY) || '3', 10);
@@ -358,6 +355,13 @@ function buildInitialState(): AppStoreState {
     hudSpeechNotesEnabledByUser: (() => {
       try {
         return localStorage.getItem(HUD_SPEECH_NOTES_KEY) === '1';
+      } catch {
+        return false;
+      }
+    })(),
+    singleMonitorReadEnabled: (() => {
+      try {
+        return localStorage.getItem(SINGLE_MONITOR_READ_KEY) === '1';
       } catch {
         return false;
       }
@@ -416,6 +420,13 @@ function buildInitialState(): AppStoreState {
         if (legacyAsrSettings?.endpointMs !== undefined) return Number(legacyAsrSettings.endpointMs) || 700;
       } catch {}
       return 700;
+    })(),
+    asrCalmModeEnabled: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_CALM_MODE_KEY);
+        if (raw !== null) return raw === '1';
+      } catch {}
+      return false;
     })(),
     asrProfiles: (() => {
       try {
@@ -665,9 +676,6 @@ function sanitizeState(state: AppStoreState): AppStoreState {
   if (!state.settingsSaveStatus || typeof state.settingsSaveStatus !== 'object') {
     state.settingsSaveStatus = { state: 'idle', at: 0 };
   }
-  if (typeof state.recordAudioOnly !== 'boolean') {
-    state.recordAudioOnly = false;
-  }
   return state;
 }
 
@@ -714,6 +722,20 @@ export function createAppStore(initial?: Partial<AppStoreState>): AppStore {
       const prev = state[key];
       if (prev === value) return value;
       state[key] = value;
+      if (key === 'scrollMode') {
+        try {
+          const ctx = getScrollModeAuditContext();
+          recordScrollModeWrite({
+            writer: ctx?.writer || 'unknown',
+            from: prev as any,
+            to: value as any,
+            phase: (state as any)['session.phase'],
+            source: ctx?.meta?.source,
+            via: ctx?.meta?.via,
+            stack: !!ctx?.meta?.stack,
+          });
+        } catch {}
+      }
       try {
         const storageKey = persistMap[key];
       if (storageKey) {

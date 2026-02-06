@@ -1,3 +1,5 @@
+import { DEFAULT_SCRIPT_FONT_PX } from '../ui/typography-ssot';
+
 const MAX_ERR_ABS = 2400;
 let cachedPxPerLine = 0;
 let cachedAt = 0;
@@ -10,15 +12,15 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function measurePxPerLine(): number {
-  if (typeof window === 'undefined') return 56 * 1.4;
+  if (typeof window === 'undefined') return DEFAULT_SCRIPT_FONT_PX * 1.4;
   try {
     const doc = document.documentElement;
     const cs = getComputedStyle(doc);
-    const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || 56;
+    const fs = parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX;
     const lh = parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4;
     return fs * lh;
   } catch {
-    return 56 * 1.4;
+    return DEFAULT_SCRIPT_FONT_PX * 1.4;
   }
 }
 

@@ -1,46 +1,19 @@
 // Lightweight auto-record stub (browser MediaRecorder-based).
 // Mirrors the legacy JS behavior but typed for the TS runtime.
+import { getRecordingMode } from './recording-settings';
 
 (() => {
   let mediaRecorder: MediaRecorder | null = null;
   let chunks: Blob[] = [];
   let active = false;
+  let activeMode: 'av' | 'audio' | null = null;
   let currentStream: MediaStream | null = null;
-  const AUDIO_ONLY_KEY = 'tp_record_audio_only';
-  const VIDEO_MIME_CANDIDATES = [
-    'video/webm;codecs=vp9,opus',
-    'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm',
-  ];
-  const AUDIO_MIME_CANDIDATES = ['audio/webm;codecs=opus', 'audio/webm'];
-  function isAudioOnlyEnabled(): boolean {
-    try {
-      const store = (window as any).__tpStore;
-      const stored = store?.get?.('recordAudioOnly');
-      if (typeof stored === 'boolean') return stored;
-    } catch {}
-    try {
-      return localStorage.getItem(AUDIO_ONLY_KEY) === '1';
-    } catch {}
-    return false;
-  }
-  function chooseSupportedMime(candidates: string[], fallback: string): string {
-    try {
-      for (const candidate of candidates) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidate)) {
-          return candidate;
-        }
-      }
-    } catch {}
-    return fallback;
-  }
-  const pickMime = (audioOnly: boolean): string => {
-    const list = audioOnly ? AUDIO_MIME_CANDIDATES : VIDEO_MIME_CANDIDATES;
-    const fallback = audioOnly ? 'audio/webm' : 'video/webm';
-    return chooseSupportedMime(list, fallback);
-  };
+  let audioCtx: AudioContext | null = null;
+  let audioSource: MediaStreamAudioSourceNode | null = null;
+  let audioProcessor: ScriptProcessorNode | null = null;
+  let audioGain: GainNode | null = null;
+  let audioChunks: Float32Array[] = [];
+  let audioSampleRate = 48000;
 
   const pad = (n: number) => String(n).padStart(2, '0');
   function formatTimestamp(date: Date): string {
@@ -76,15 +49,68 @@
     return 'Script';
   }
 
-  const nowName = (): string => {
+  const nowName = (mode: 'av' | 'audio'): string => {
     try {
       const date = new Date();
       const title = sanitizeTitle(getActiveScriptTitle());
       const ts = formatTimestamp(date);
+      if (mode === 'audio') return `${title}_${ts}_audio.wav`;
       return `${title}_${ts}.webm`;
     } catch {
-      return `Script_${formatTimestamp(new Date())}.webm`;
+      const fallback = formatTimestamp(new Date());
+      return mode === 'audio' ? `Script_${fallback}_audio.wav` : `Script_${fallback}.webm`;
     }
+  };
+
+  const pickMime = (): string => {
+    try {
+      const cand = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+      for (const t of cand) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
+      }
+    } catch {}
+    return 'video/webm';
+  };
+
+  const encodeWav = (buffers: Float32Array[], sampleRate: number): ArrayBuffer => {
+    const numChannels = 1;
+    const bytesPerSample = 2;
+    const totalSamples = buffers.reduce((sum, b) => sum + b.length, 0);
+    const dataSize = totalSamples * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+
+    let offset = 0;
+    writeString(offset, 'RIFF'); offset += 4;
+    view.setUint32(offset, 36 + dataSize, true); offset += 4;
+    writeString(offset, 'WAVE'); offset += 4;
+    writeString(offset, 'fmt '); offset += 4;
+    view.setUint32(offset, 16, true); offset += 4; // PCM chunk size
+    view.setUint16(offset, 1, true); offset += 2; // audio format = PCM
+    view.setUint16(offset, numChannels, true); offset += 2;
+    view.setUint32(offset, sampleRate, true); offset += 4;
+    view.setUint32(offset, sampleRate * numChannels * bytesPerSample, true); offset += 4;
+    view.setUint16(offset, numChannels * bytesPerSample, true); offset += 2;
+    view.setUint16(offset, 16, true); offset += 2; // bits per sample
+    writeString(offset, 'data'); offset += 4;
+    view.setUint32(offset, dataSize, true); offset += 4;
+
+    let dataOffset = 44;
+    for (const chunk of buffers) {
+      for (let i = 0; i < chunk.length; i++) {
+        let s = chunk[i];
+        if (s > 1) s = 1;
+        else if (s < -1) s = -1;
+        const v = s < 0 ? s * 0x8000 : s * 0x7fff;
+        view.setInt16(dataOffset, v, true);
+        dataOffset += 2;
+      }
+    }
+    return buffer;
   };
 
   const getVideoStream = async (): Promise<MediaStream> => {
@@ -131,6 +157,75 @@
     }
   };
 
+  const startAudioOnly = async (): Promise<void> => {
+    const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AC) throw new Error('AudioContext not available');
+
+    const stream = await getAudioStream();
+    currentStream = stream;
+    const ctx = new AC({ sampleRate: 48000 });
+    audioCtx = ctx as AudioContext;
+    try {
+      if (typeof ctx.resume === 'function' && (ctx as AudioContext).state === 'suspended') {
+        await (ctx as AudioContext).resume();
+      }
+    } catch {}
+    audioSampleRate = (ctx as AudioContext).sampleRate || 48000;
+    audioChunks = [];
+
+    audioSource = (ctx as AudioContext).createMediaStreamSource(stream);
+    audioProcessor = (ctx as AudioContext).createScriptProcessor(4096, 1, 1);
+    audioGain = (ctx as AudioContext).createGain();
+    audioGain.gain.value = 0;
+
+    audioProcessor.onaudioprocess = (e: AudioProcessingEvent) => {
+      try {
+        const input = e.inputBuffer;
+        const channelCount = input.numberOfChannels || 1;
+        const length = input.length;
+        if (channelCount === 1) {
+          const data = input.getChannelData(0);
+          audioChunks.push(new Float32Array(data));
+          return;
+        }
+        const mixed = new Float32Array(length);
+        for (let c = 0; c < channelCount; c++) {
+          const data = input.getChannelData(c);
+          for (let i = 0; i < length; i++) mixed[i] += data[i] / channelCount;
+        }
+        audioChunks.push(mixed);
+      } catch {}
+    };
+
+    audioSource.connect(audioProcessor);
+    audioProcessor.connect(audioGain);
+    audioGain.connect((ctx as AudioContext).destination);
+  };
+
+  const stopAudioOnly = async (): Promise<void> => {
+    try {
+      if (audioProcessor) audioProcessor.disconnect();
+    } catch {}
+    try {
+      if (audioSource) audioSource.disconnect();
+    } catch {}
+    try {
+      if (audioGain) audioGain.disconnect();
+    } catch {}
+    try {
+      if (audioCtx && typeof audioCtx.close === 'function') await audioCtx.close();
+    } catch {}
+    audioCtx = null;
+    audioSource = null;
+    audioProcessor = null;
+    audioGain = null;
+
+    const wavBuffer = encodeWav(audioChunks, audioSampleRate);
+    audioChunks = [];
+    const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+    await saveBlob(blob, nowName('audio'));
+  };
+
   async function start(): Promise<void> {
     if (active) return;
     try {
@@ -139,32 +234,36 @@
         return;
       }
 
+      const recordingMode = getRecordingMode();
       try {
         console.log('[core-recorder] start', {
           mode: (window as any).__tpStore?.get?.('scrollMode') || null,
+          recordingMode,
         });
       } catch {}
 
-      const audioOnly = isAudioOnlyEnabled();
+      if (recordingMode === 'audio') {
+        await startAudioOnly();
+        active = true;
+        activeMode = 'audio';
+        try {
+          window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'recording', adapter: 'local-auto' } }));
+        } catch {}
+        return;
+      }
+
+      const v = await getVideoStream();
       const a = await getAudioStream();
       const mix = new MediaStream();
       try {
         a.getAudioTracks().forEach((t) => mix.addTrack(t));
       } catch {}
-      if (!audioOnly) {
-        try {
-          const v = await getVideoStream();
-          v.getVideoTracks().forEach((t) => mix.addTrack(t));
-        } catch (err) {
-          try { console.warn('[core-recorder] video capture failed', err); } catch {}
-        }
-      }
+      try {
+        v.getVideoTracks().forEach((t) => mix.addTrack(t));
+      } catch {}
       currentStream = mix;
-      const mime = pickMime(audioOnly);
-      const options = audioOnly
-        ? { mimeType: mime, audioBitsPerSecond: 128_000 }
-        : { mimeType: mime, videoBitsPerSecond: 5_000_000, audioBitsPerSecond: 128_000 };
-      mediaRecorder = new MediaRecorder(mix, options);
+      const mime = pickMime();
+      mediaRecorder = new MediaRecorder(mix, { mimeType: mime, videoBitsPerSecond: 5_000_000, audioBitsPerSecond: 128_000 });
       chunks = [];
       mediaRecorder.ondataavailable = (e: BlobEvent) => {
         try {
@@ -181,7 +280,7 @@
           try {
             console.log('[core-recorder] about to save blob', { size: blob.size, type: blob.type });
           } catch {}
-          await saveBlob(blob, nowName());
+          await saveBlob(blob, nowName('av'));
         } catch (e) {
           try {
             console.warn('[auto-rec] save failed', e);
@@ -190,6 +289,7 @@
       };
       mediaRecorder.start();
       active = true;
+      activeMode = 'av';
       try {
         window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'recording', adapter: 'local-auto' } }));
       } catch {}
@@ -204,7 +304,11 @@
     try { console.log('[core-recorder] stop called'); } catch {}
     if (!active) return;
     try {
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+      if (activeMode === 'audio') {
+        await stopAudioOnly();
+      } else if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
     } catch {}
     try {
       if (currentStream) currentStream.getTracks().forEach((t) => {
@@ -216,6 +320,7 @@
     currentStream = null;
     mediaRecorder = null;
     active = false;
+    activeMode = null;
     try {
       window.dispatchEvent(new CustomEvent('rec:state', { detail: { state: 'idle', adapter: 'local-auto' } }));
     } catch {}

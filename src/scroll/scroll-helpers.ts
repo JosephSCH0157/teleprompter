@@ -1,4 +1,5 @@
 import { requestWrite } from '../boot/scheduler';
+import { DEFAULT_SCRIPT_FONT_PX } from '../ui/typography-ssot';
 
 export interface ViewportMetrics {
   scrollTop: number;
@@ -259,7 +260,7 @@ export function getViewportMetrics(getScroller = defaultViewer): ViewportMetrics
   const sc = getScroller();
   const root = document.documentElement;
   const cs = root ? getComputedStyle(root) : null;
-  const fontSize = cs ? parseFloat(cs.getPropertyValue('--tp-font-size')) || 56 : 56;
+  const fontSize = cs ? parseFloat(cs.getPropertyValue('--tp-font-size')) || DEFAULT_SCRIPT_FONT_PX : DEFAULT_SCRIPT_FONT_PX;
   const lineHeight = cs ? parseFloat(cs.getPropertyValue('--tp-line-height')) || 1.4 : 1.4;
   const pxPerLine = fontSize * lineHeight;
   const pxPerWord = pxPerLine / 6; // coarse default; refined later by typography integration

@@ -1,9 +1,15 @@
 // @ts-nocheck
 export {};
 
-import { getScrollWriter } from '../../../scroll/scroll-writer';
+import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-writer';
+import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
-import { getScrollEl, writeScrollTop } from '../../../scroll/scroller';
+import { getAsrBlockElements } from '../../../scroll/asr-block-store';
+import {
+  DEFAULT_COMPLETION_POLICY,
+  decideBlockCompletion,
+  type CompletionEvidence,
+} from '../../../scroll/asr-block-completion';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -16,6 +22,7 @@ import { supabase, hasSupabaseConfig } from '../../../forge/supabaseClient';
 import { hasActiveAsrProfile } from '../../../asr/store';
 import { focusSidebarCalibrationSelect } from '../../../media/calibration-sidebar';
 import { showToast } from '../../../ui/toasts';
+import { DEFAULT_SCRIPT_FONT_PX } from '../../../ui/typography-ssot';
 
 const isDevMode = (() => {
   let cache: boolean | null = null;
@@ -52,6 +59,19 @@ const isDevMode = (() => {
     return cache;
   };
 })();
+const ASR_COMPLETION_GATE_KEY = 'tp_asr_completion_gate';
+let asrCompletionGateBypassLogged = false;
+function isAsrCompletionGateEnabled(): boolean {
+  if (!isDevMode()) return false;
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    const devParam = params.has('dev') || params.get('dev') === '1';
+    if (!devParam) return false;
+    return localStorage.getItem(ASR_COMPLETION_GATE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 // --- Hybrid Aggro flag -------------------------------------------------------
 function isHybridAggroEnabled(): boolean {
@@ -112,10 +132,336 @@ let autoIntentListenerWired = false;
 let autoIntentProcessor: ((detail: any) => void) | null = null;
 let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
+let auto: any | null = null;
+let scrollIntentListenerWired = false;
+const ASR_INTENT_DEBOUNCE_MS = 450;
+const ASR_INTENT_STABLE_MS = 250;
+const ASR_INTENT_FIRST_STABLE_MS = 600;
+const ASR_INTENT_WARMUP_MS = 1400;
+const ASR_INTENT_MIN_CONF = 0.5;
+const ASR_TELEMETRY_MAX_REJECTS = 200;
+const ASR_TELEMETRY_WINDOW_MS = 15000;
+const ASR_MATCH_WINDOW_MS = 3000;
+const ASR_MATCH_MAX = 120;
+let asrIntentLiveSince = 0;
+let committedBlockIdx = -1;
+let lastCommitAt = 0;
+let lastCandidate = -1;
+let stableSince = 0;
+let asrMotorConflictLogged = false;
 let scrollWriteWarned = false;
 let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
+let hybridModeMismatchLogged = false;
+let recentAsrMatches: Array<{
+  ts: number;
+  blockIdx: number;
+  lineIdx: number | null;
+  isFinal: boolean;
+  confidence: number | null;
+}> = [];
+let asrBlockLineCacheRef: HTMLElement[] | null = null;
+const asrBlockLineCache = new Map<number, number[]>();
+function logHybridModeMismatch(source: string) {
+  if (!isDevMode()) return;
+  if (hybridModeMismatchLogged) return;
+  hybridModeMismatchLogged = true;
+  try {
+    console.warn('[HYBRID] activity blocked (mode mismatch)', {
+      source,
+      mode: getScrollMode(),
+    });
+  } catch {}
+}
+
+type AsrTelemetryDecision = 'accept' | 'reject';
+type AsrRejectEvent = { ts: number; reason: string };
+type AsrTelemetryLast = {
+  ts: number;
+  mode: string;
+  phase: string;
+  currentBlockIdx: number;
+  candidateBlockIdx: number;
+  decision: AsrTelemetryDecision;
+  rejectReason?: string;
+  completionEvidenceSummary?: string;
+  completionOk?: boolean;
+  completionReason?: string;
+  completionConfidence?: number;
+};
+type AsrTelemetry = {
+  intentsSeen: number;
+  finalSeen: number;
+  interimSeen: number;
+  commitAccepted: number;
+  commitRejected: number;
+  rejectReasons: Record<string, number>;
+  last: AsrTelemetryLast;
+  last15sRejectTop3: Array<{ reason: string; count: number }>;
+  completionEvidence: CompletionEvidence | null;
+  completionEvidenceSummary: string;
+  _rejectEvents: AsrRejectEvent[];
+};
+
+function getAsrTelemetry(): AsrTelemetry | null {
+  if (!isDevMode()) return null;
+  if (typeof window === 'undefined') return null;
+  const w = window as any;
+  if (!w.__tpAsrTelemetry) {
+    w.__tpAsrTelemetry = {
+      intentsSeen: 0,
+      finalSeen: 0,
+      interimSeen: 0,
+      commitAccepted: 0,
+      commitRejected: 0,
+      rejectReasons: {},
+      last: {
+        ts: 0,
+        mode: 'unknown',
+        phase: 'unknown',
+        currentBlockIdx: -1,
+        candidateBlockIdx: -1,
+        decision: 'reject',
+        rejectReason: 'init',
+        completionEvidenceSummary: '',
+      },
+      last15sRejectTop3: [],
+      completionEvidence: null,
+      completionEvidenceSummary: '',
+      _rejectEvents: [],
+    } as AsrTelemetry;
+  }
+  return w.__tpAsrTelemetry as AsrTelemetry;
+}
+
+function resolveAsrIntentCandidateBlockIdx(intent: any): number {
+  const raw = Number(intent?.target?.blockIdx);
+  if (!Number.isFinite(raw)) return -1;
+  return Math.max(0, Math.floor(raw));
+}
+
+function updateAsrTelemetryTopRejects(telemetry: AsrTelemetry, now: number) {
+  const cutoff = now - ASR_TELEMETRY_WINDOW_MS;
+  const events = telemetry._rejectEvents;
+  let pruneCount = 0;
+  while (pruneCount < events.length && events[pruneCount].ts < cutoff) {
+    pruneCount += 1;
+  }
+  if (pruneCount) {
+    events.splice(0, pruneCount);
+  }
+  const counts = new Map<string, number>();
+  for (const entry of events) {
+    counts.set(entry.reason, (counts.get(entry.reason) || 0) + 1);
+  }
+  telemetry.last15sRejectTop3 = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([reason, count]) => ({ reason, count }));
+}
+
+function recordAsrIntentTelemetry(telemetry: AsrTelemetry | null, intentReason: string) {
+  if (!telemetry) return;
+  telemetry.intentsSeen += 1;
+  if (intentReason.includes('final')) telemetry.finalSeen += 1;
+  else if (intentReason.includes('interim')) telemetry.interimSeen += 1;
+}
+
+function recordAsrMatchEvent(now: number, intent: any, intentReason: string) {
+  const rawBlockIdx = Number(intent?.target?.blockIdx);
+  if (!Number.isFinite(rawBlockIdx) || rawBlockIdx < 0) return;
+  const rawLineIdx = Number(intent?.target?.lineIdx);
+  const lineIdx = Number.isFinite(rawLineIdx) ? Math.max(0, Math.floor(rawLineIdx)) : null;
+  const confidence = Number.isFinite(intent?.confidence) ? Number(intent.confidence) : null;
+  const isFinal = intentReason.includes('final');
+  recentAsrMatches.push({
+    ts: now,
+    blockIdx: Math.max(0, Math.floor(rawBlockIdx)),
+    lineIdx,
+    isFinal,
+    confidence,
+  });
+  const cutoff = now - ASR_MATCH_WINDOW_MS;
+  let pruneCount = 0;
+  while (pruneCount < recentAsrMatches.length && recentAsrMatches[pruneCount].ts < cutoff) {
+    pruneCount += 1;
+  }
+  if (pruneCount) {
+    recentAsrMatches.splice(0, pruneCount);
+  }
+  if (recentAsrMatches.length > ASR_MATCH_MAX) {
+    recentAsrMatches.splice(0, recentAsrMatches.length - ASR_MATCH_MAX);
+  }
+}
+
+function parseLineIndexFromEl(el: HTMLElement): number | null {
+  if (!el) return null;
+  const raw =
+    el.dataset.i ||
+    el.dataset.index ||
+    el.dataset.line ||
+    el.dataset.lineIdx ||
+    el.getAttribute('data-line') ||
+    el.getAttribute('data-line-idx');
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
+}
+
+function getBlockLineIndices(blockIdx: number): number[] | null {
+  const blockEls = getAsrBlockElements();
+  if (!blockEls || !blockEls.length) return null;
+  if (asrBlockLineCacheRef !== blockEls) {
+    asrBlockLineCacheRef = blockEls;
+    asrBlockLineCache.clear();
+  }
+  const cached = asrBlockLineCache.get(blockIdx);
+  if (cached) return cached;
+  const blockEl = blockEls[blockIdx];
+  if (!blockEl) return null;
+  const lineEls = Array.from(blockEl.querySelectorAll<HTMLElement>('.line, .tp-line'));
+  if (!lineEls.length) return null;
+  const indices: number[] = [];
+  for (const lineEl of lineEls) {
+    const idx = parseLineIndexFromEl(lineEl);
+    if (idx == null) continue;
+    indices.push(idx);
+  }
+  if (!indices.length) return null;
+  indices.sort((a, b) => a - b);
+  asrBlockLineCache.set(blockIdx, indices);
+  return indices;
+}
+
+function buildCompletionEvidence(
+  currentBlockIdx: number,
+  candidateBlockIdx: number,
+  now = Date.now(),
+): CompletionEvidence | null {
+  if (!Number.isFinite(candidateBlockIdx) || candidateBlockIdx < 0) return null;
+  const blockLineIndices = getBlockLineIndices(currentBlockIdx);
+  if (!blockLineIndices || !blockLineIndices.length) return null;
+  const totalLinesInBlock = blockLineIndices.length;
+  if (totalLinesInBlock <= 0) return null;
+  const lastLineIdx = blockLineIndices[blockLineIndices.length - 1];
+  if (!Number.isFinite(lastLineIdx)) return null;
+  const cutoff = now - ASR_MATCH_WINDOW_MS;
+  const windowMatches = recentAsrMatches.filter((entry) => entry.ts >= cutoff);
+  const hasFinal = windowMatches.some((entry) => entry.isFinal);
+  const blockLineSet = new Set(blockLineIndices);
+  const matchedLineSet = new Set<number>();
+  for (const entry of windowMatches) {
+    if (entry.lineIdx == null) continue;
+    if (blockLineSet.has(entry.lineIdx)) {
+      matchedLineSet.add(entry.lineIdx);
+    }
+  }
+  const matchedLineIds = Array.from(matchedLineSet).sort((a, b) => a - b);
+  const coverageRatio =
+    totalLinesInBlock > 0 ? Math.min(1, matchedLineIds.length / totalLinesInBlock) : 0;
+  const matchedLastLine = matchedLineSet.has(lastLineIdx);
+  const trailingWindow = Math.max(1, DEFAULT_COMPLETION_POLICY.trailingLinesWindow);
+  const trailingStart = Math.max(0, blockLineIndices.length - trailingWindow);
+  const trailingLineSet = new Set(blockLineIndices.slice(trailingStart));
+  let matchedTrailingLines = 0;
+  for (const idx of matchedLineSet) {
+    if (trailingLineSet.has(idx)) matchedTrailingLines += 1;
+  }
+  const boundaryCrossed = windowMatches.some((entry) => {
+    if (entry.blockIdx < candidateBlockIdx) return false;
+    if (entry.isFinal) return true;
+    if (Number.isFinite(entry.confidence) && (entry.confidence as number) >= 0.6) return true;
+    return false;
+  });
+
+  return {
+    currentBlockIdx,
+    candidateBlockIdx,
+    matchedLineIds,
+    totalLinesInBlock,
+    matchedLastLine,
+    matchedTrailingLines,
+    coverageRatio: Math.min(1, Math.max(0, coverageRatio)),
+    boundaryCrossed,
+    hasFinal,
+  };
+}
+
+function formatCompletionEvidenceSummary(evidence: CompletionEvidence | null): string {
+  if (!evidence) return 'evidence_missing_block_index';
+  const cov = Number.isFinite(evidence.coverageRatio) ? evidence.coverageRatio : 0;
+  const covText = cov.toFixed(2);
+  const last = evidence.matchedLastLine ? 1 : 0;
+  const trail = Number.isFinite(evidence.matchedTrailingLines) ? evidence.matchedTrailingLines : 0;
+  const finalFlag = evidence.hasFinal ? 1 : 0;
+  const boundary = evidence.boundaryCrossed ? 1 : 0;
+  return `cov=${covText} last=${last} trail=${trail} final=${finalFlag} bndry=${boundary}`;
+}
+
+function recordAsrReject(
+  telemetry: AsrTelemetry | null,
+  now: number,
+  reasonKey: string,
+  mode: string,
+  phase: string,
+  currentBlockIdx: number,
+  candidateBlockIdx: number,
+  completionEvidenceSummary?: string,
+) {
+  if (!telemetry) return;
+  telemetry.commitRejected += 1;
+  telemetry.rejectReasons[reasonKey] = (telemetry.rejectReasons[reasonKey] || 0) + 1;
+  telemetry._rejectEvents.push({ ts: now, reason: reasonKey });
+  if (telemetry._rejectEvents.length > ASR_TELEMETRY_MAX_REJECTS) {
+    telemetry._rejectEvents.splice(0, telemetry._rejectEvents.length - ASR_TELEMETRY_MAX_REJECTS);
+  }
+  updateAsrTelemetryTopRejects(telemetry, now);
+  telemetry.last = {
+    ts: now,
+    mode,
+    phase,
+    currentBlockIdx,
+    candidateBlockIdx,
+    decision: 'reject',
+    rejectReason: reasonKey,
+    completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
+    completionOk: reasonKey.startsWith('reject_completion_') ? false : telemetry.last?.completionOk,
+    completionReason: reasonKey.startsWith('reject_completion_')
+      ? reasonKey.replace('reject_completion_', '')
+      : telemetry.last?.completionReason,
+  };
+}
+
+function recordAsrAccept(
+  telemetry: AsrTelemetry | null,
+  now: number,
+  mode: string,
+  phase: string,
+  currentBlockIdx: number,
+  candidateBlockIdx: number,
+  completionEvidenceSummary?: string,
+  completionConfidence?: number,
+  completionStatus?: 'complete' | 'unknown',
+  completionReason?: string,
+) {
+  if (!telemetry) return;
+  telemetry.commitAccepted += 1;
+  const resolvedStatus = completionStatus || 'complete';
+  telemetry.last = {
+    ts: now,
+    mode,
+    phase,
+    currentBlockIdx,
+    candidateBlockIdx,
+    decision: 'accept',
+    completionEvidenceSummary: completionEvidenceSummary || telemetry.completionEvidenceSummary || '',
+    completionOk: resolvedStatus === 'complete',
+    completionReason: completionReason || (resolvedStatus === 'complete' ? 'complete' : 'unknown'),
+    completionConfidence: Number.isFinite(completionConfidence as number)
+      ? (completionConfidence as number)
+      : telemetry.last?.completionConfidence,
+  };
+}
 const hybridSilence = {
   lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
   pausedBySilence: false,
@@ -123,13 +469,70 @@ const hybridSilence = {
   erroredOnce: false,
   offScriptActive: false,
 };
+let offScriptSinceMs: number | null = null;
+let offScriptDurationMs = 0;
 let hybridSilence2 = 0;
 const HYBRID_CTRL_DEBUG_THROTTLE_MS = 500;
 let lastHybridCtrlDebugTs = 0;
 const HYBRID_TRUTH_THROTTLE_MS = 350;
 let lastHybridTruthAt = 0;
+const HYBRID_OFFSCRIPT_HUD_THROTTLE_MS = 350;
+let lastHybridOffScriptHudAt = 0;
 function setHybridSilence2(v: number) {
   hybridSilence2 = Number.isFinite(v) ? v : 0;
+}
+
+function resetOffScriptDuration() {
+  offScriptSinceMs = null;
+  offScriptDurationMs = 0;
+}
+
+function syncOffScriptDuration(now = nowMs()) {
+  if (hybridSilence.offScriptActive) {
+    if (offScriptSinceMs == null) {
+      offScriptSinceMs = now;
+      offScriptDurationMs = 0;
+      return;
+    }
+    offScriptDurationMs = Math.max(0, now - offScriptSinceMs);
+    return;
+  }
+  resetOffScriptDuration();
+}
+
+function computeOffScriptDecay(durationMs: number) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return 1;
+  if (durationMs < OFFSCRIPT_DECAY_T1_MS) return 1;
+  if (durationMs < OFFSCRIPT_DECAY_T2_MS) return 0.5;
+  if (durationMs < OFFSCRIPT_DECAY_T3_MS) return 0.25;
+  if (durationMs < OFFSCRIPT_DECAY_T4_MS) return OFFSCRIPT_DECAY_CRAWL;
+  return 0;
+}
+
+function logHybridOffScriptHud(payload: {
+  bestSim: number | null;
+  inBand: boolean;
+  offScriptEvidence: number;
+  offScriptActive: boolean;
+  offScriptDurationMs: number;
+  nextScale: number;
+  effectiveScale: number;
+}) {
+  const now = nowMs();
+  if (now - lastHybridOffScriptHudAt < HYBRID_OFFSCRIPT_HUD_THROTTLE_MS) return;
+  lastHybridOffScriptHudAt = now;
+  try { (window as any)?.HUD?.log?.('HYBRID_OFFSCRIPT', payload); } catch {}
+}
+
+function resetAsrIntentState(reason?: string) {
+  committedBlockIdx = -1;
+  lastCommitAt = 0;
+  lastCandidate = -1;
+  stableSince = 0;
+  asrMotorConflictLogged = false;
+  if (reason) {
+    try { console.debug('[ASR_INTENT] reset', { reason }); } catch {}
+  }
 }
 
 const profileStore = hasSupabaseConfig ? new ProfileStore(supabase) : null;
@@ -176,6 +579,44 @@ const nowMs = () =>
     ? performance.now()
     : Date.now();
 
+const KNOWN_SCROLL_MODES = new Set([
+  'hybrid',
+  'timed',
+  'wpm',
+  'asr',
+  'step',
+  'rehearsal',
+]);
+
+function normalizeScrollModeValue(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === 'manual' || raw === 'off') return 'step';
+  if (raw === 'auto') return 'timed';
+  return KNOWN_SCROLL_MODES.has(raw) ? raw : null;
+}
+
+function getScrollMode(): string {
+  try {
+    const w = typeof window !== 'undefined' ? (window as any) : null;
+    const override = normalizeScrollModeValue(w?.__tpModeOverride);
+    if (override) return override;
+    const store = w?.__tpStore || appStore;
+    const storeMode = normalizeScrollModeValue(store?.get?.('scrollMode'));
+    if (storeMode) return storeMode;
+    const uiMode = normalizeScrollModeValue(w?.__tpUiScrollMode);
+    if (uiMode) return uiMode;
+    const legacyMode = normalizeScrollModeValue(w?.__tpScrollMode);
+    if (legacyMode) return legacyMode;
+    const mode = normalizeScrollModeValue((state2 as any)?.mode);
+    if (mode) return mode;
+  } catch {
+    // ignore
+  }
+  return 'hybrid';
+}
+
 function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
   const perfNow = Number.isFinite(referenceNow) ? referenceNow : nowMs();
   if (typeof candidate !== "number" || !Number.isFinite(candidate) || candidate < 0) {
@@ -187,7 +628,29 @@ function normalizePerfTimestamp(candidate?: number, referenceNow = nowMs()) {
   return candidate;
 }
 
+function resolveCurrentBlockIdx(): number | null {
+  try {
+    const anchorIdx = computeAnchorLineIndex(scrollerEl || undefined);
+    if (!Number.isFinite(anchorIdx as number)) return null;
+    const idx = Math.max(0, Math.floor(anchorIdx as number));
+    const selector = `.line[data-i="${idx}"], .line[data-index="${idx}"], .line[data-line="${idx}"], .line[data-line-idx="${idx}"]`;
+    const lineEl =
+      (document.getElementById(`tp-line-${idx}`) as HTMLElement | null) ||
+      (document.querySelector<HTMLElement>(selector) as HTMLElement | null);
+    const blockEl = lineEl?.closest?.('.tp-asr-block') as HTMLElement | null;
+    const raw = blockEl?.dataset?.tpBlock;
+    const blockIdx = Number(raw);
+    return Number.isFinite(blockIdx) ? blockIdx : null;
+  } catch {
+    return null;
+  }
+}
+
 function runHybridVelocity(silence = hybridSilence) {
+  if (state2.mode !== 'hybrid') {
+    assertHybridStoppedIfNotHybrid('runHybridVelocity');
+    return;
+  }
   const target = typeof window !== 'undefined' ? window : globalThis;
   const fn = (target as any).__tpApplyHybridVelocity;
   if (typeof fn === 'function') {
@@ -494,15 +957,15 @@ function renderHybridCtrlHud(state: HybridCtrlHudState) {
     hud = document.createElement('div');
     hud.id = 'tpHybridHud';
     hud.style.position = 'fixed';
-    hud.style.bottom = '8px';
-    hud.style.right = '8px';
+    hud.style.bottom = 'var(--tp-ui-pad-sm)';
+    hud.style.right = 'var(--tp-ui-pad-sm)';
     hud.style.zIndex = '2147483647';
-    hud.style.padding = '6px 8px';
-    hud.style.fontSize = '11px';
+    hud.style.padding = 'calc(6px * var(--tp-ui-scale)) calc(8px * var(--tp-ui-scale))';
+    hud.style.fontSize = 'var(--tp-ui-font-xs)';
     hud.style.fontFamily = 'system-ui, sans-serif';
     hud.style.background = 'rgba(0, 0, 0, 0.65)';
     hud.style.color = '#fff';
-    hud.style.borderRadius = '4px';
+    hud.style.borderRadius = 'calc(4px * var(--tp-ui-scale))';
     hud.style.pointerEvents = 'none';
     hud.style.whiteSpace = 'nowrap';
     container.appendChild(hud);
@@ -777,6 +1240,11 @@ export function triggerWireAutoIntentListener(): void {
       ];
       console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
     } catch {}
+    try {
+      window.dispatchEvent(
+        new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'wire-selftest' } }),
+      );
+    } catch {}
     try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window+document)'); } catch {}
   }
   try {
@@ -1011,7 +1479,7 @@ function createAutoMotor() {
     const dtSec = lastTs ? Math.max(0, (now - lastTs) / 1000) : 0;
     lastTs = now;
     const pxPerSec = currentSpeed;
-    const el = getScrollEl();
+    const el = scrollerEl;
     if (!el) {
       logAutoTick('tick', el, pxPerSec, dtSec, 'no-element');
       scheduleTick();
@@ -1046,8 +1514,8 @@ function createAutoMotor() {
     const before = el.scrollTop || 0;
     const next = Math.min(room, before + step);
     markHybridProgrammaticScroll();
-    const actualTop = writeScrollTop(next, { scroller: el, reason: 'auto-motor' });
-    const after = el.scrollTop || actualTop;
+    el.scrollTop = next;
+    const after = el.scrollTop || 0;
     if (after > before) {
       lastTickMoved = true;
       logAutoTick('tick', el, pxPerSec, dtSec, 'moved', { delta: after - before });
@@ -1243,7 +1711,7 @@ function convertWpmToPxPerSec(targetWpm: number) {
   try {
     const doc = document.documentElement;
     const cs = getComputedStyle(doc);
-    const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+    const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || DEFAULT_SCRIPT_FONT_PX;
     const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
     const lineHeightPx = fsPx * lhScale;
     const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
@@ -1290,14 +1758,14 @@ function createPaceEngine() {
   function mapWpmToPxPerSec(wpm, doc) {
     try {
       const cs = getComputedStyle(doc.documentElement);
-      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || 56;
+      const fsPx = parseFloat(cs.getPropertyValue("--tp-font-size")) || DEFAULT_SCRIPT_FONT_PX;
       const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
       const lineHeightPx = fsPx * lhScale;
       const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
       const linesPerSec = wpm / 60 / wpl;
       return linesPerSec * lineHeightPx;
     } catch {
-      return wpm / 60 / 8 * (56 * 1.4);
+      return wpm / 60 / 8 * (DEFAULT_SCRIPT_FONT_PX * 1.4);
     }
   }
   function setMode(m) {
@@ -1504,23 +1972,6 @@ var DEFAULTS = {
 };
 var state2 = { ...DEFAULTS };
 var viewer = null;
-const ALLOWED_MODES = new Set(["timed", "wpm", "hybrid", "asr", "step", "rehearsal"]);
-function normalizeRouterMode(raw) {
-  const v = String(raw ?? "").trim().toLowerCase();
-  if (!v) return null;
-  if (v === "manual") return "step";
-  if (v === "auto") return "hybrid";
-  return ALLOWED_MODES.has(v) ? v : null;
-}
-function readModeFromStore() {
-  try {
-    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
-    const raw = store?.get?.("scrollMode");
-    return normalizeRouterMode(raw);
-  } catch {
-    return null;
-  }
-}
 function ensureViewerElement() {
   if (!viewer) {
     try {
@@ -1652,6 +2103,11 @@ const HYBRID_ASSIST_DEFAULT_TTL = 320;
 const HYBRID_ASSIST_MAX_BOOST = 420;
 const OFFSCRIPT_EVIDENCE_THRESHOLD = 4;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
+const OFFSCRIPT_DECAY_T1_MS = 2000;
+const OFFSCRIPT_DECAY_T2_MS = 6000;
+const OFFSCRIPT_DECAY_T3_MS = 10000;
+const OFFSCRIPT_DECAY_T4_MS = 12000;
+const OFFSCRIPT_DECAY_CRAWL = 0.1;
 const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
@@ -1857,14 +2313,6 @@ let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
 let lastHybridCtrlLogAt = 0;
-let userEnabled = false;
-let userIntentOn = false;
-let dbGate = false;
-let vadGate = false;
-let gatePref = getUiPrefs().hybridGate;
-let speechActive = false;
-let sessionIntentOn = false;
-let sessionPhase = 'idle';
 const hybridCtrl = {
   mult: 1,
   lastTs: 0,
@@ -1878,26 +2326,6 @@ const hybridCtrl = {
 let hybridSessionPhase = 'idle';
 function getHybridSessionPhase() {
   return hybridSessionPhase;
-}
-function syncDebugState() {
-  if (typeof window === 'undefined') return;
-  try {
-    const win = window as any;
-    win.__tpSessionPhase = sessionPhase;
-    win.__tpSessionIntent = sessionIntentOn;
-    win.__tpSessionIntentOn = sessionIntentOn;
-    win.__tpIntentActive = sessionIntentOn;
-    win.__tpModeCurrent = state2.mode;
-    const globalMode = win.__tpMode;
-    if (globalMode && typeof globalMode === 'object') {
-      try {
-        globalMode.current = state2.mode;
-        globalMode.mode = state2.mode;
-      } catch {}
-    } else {
-      win.__tpMode = state2.mode;
-    }
-  } catch {}
 }
 function isPauseTokenText(text?: string | null) {
   if (!text) return false;
@@ -2003,15 +2431,7 @@ function scheduleHybridVelocityRefresh() {
       return;
     }
       try {
-        if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-          console.warn('[HYBRID_CALLSITE]', {
-            mode: String(state2.mode),
-            sessionPhase: String(sessionPhase),
-            sessionIntent: Boolean(sessionIntentOn),
-            userEnabled: Boolean(userEnabled),
-          });
-          runHybridVelocity(hybridSilence);
-        }
+        runHybridVelocity(hybridSilence);
       } catch (err) {
       if (isDevMode()) {
         try {
@@ -2083,15 +2503,7 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     reason,
   };
   scheduleHybridVelocityRefresh();
-  if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-    console.warn('[HYBRID_CALLSITE]', {
-      mode: String(state2.mode),
-      sessionPhase: String(sessionPhase),
-      sessionIntent: Boolean(sessionIntentOn),
-      userEnabled: Boolean(userEnabled),
-    });
-    runHybridVelocity(hybridSilence);
-  }
+  runHybridVelocity(hybridSilence);
   if (isDevMode()) {
     let shouldLogBrake = true;
     if (reason === 'manual-scroll') {
@@ -2164,6 +2576,7 @@ function startHybridGrace(reason: string) {
   hybridSilence.pausedBySilence = false;
   hybridSilence.lastSpeechAtMs = now;
   hybridSilence.offScriptActive = false;
+  resetOffScriptDuration();
   const timeoutId = hybridSilence.timeoutId;
   if (timeoutId != null) {
     try {
@@ -2227,12 +2640,6 @@ function persistMode() {
 }
 function restoreMode() {
   try {
-    const storeMode = readModeFromStore();
-    if (storeMode) {
-      state2.mode = storeMode;
-      syncDebugState();
-      return;
-    }
     const legacy = LEGACY_LS_KEYS.map((k) => {
       try {
         return localStorage.getItem(k);
@@ -2242,10 +2649,10 @@ function restoreMode() {
     }).find(Boolean);
     const m = localStorage.getItem(LS_KEY) || legacy;
     if (m) {
-      state2.mode = m;
-      syncDebugState();
+      const normalized = normalizeScrollModeValue(m) || m;
+      state2.mode = normalized;
       try {
-        localStorage.setItem(LS_KEY, m);
+        localStorage.setItem(LS_KEY, normalized);
         LEGACY_LS_KEYS.forEach((k) => {
           try {
             localStorage.removeItem(k);
@@ -2257,24 +2664,6 @@ function restoreMode() {
     }
   } catch {
   }
-}
-let scrollModeStoreWired = false;
-function wireScrollModeStore() {
-  if (scrollModeStoreWired) return;
-  scrollModeStoreWired = true;
-  try {
-    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
-    if (typeof store?.subscribe !== "function") return;
-    store.subscribe("scrollMode", (next) => {
-      const normalized = normalizeRouterMode(next);
-      if (!normalized || normalized === state2.mode) return;
-      applyMode(normalized);
-      emitScrollModeSnapshot("mode-change");
-      if (normalized === "hybrid" || normalized === "wpm") {
-        seedHybridBaseSpeed();
-      }
-    });
-  } catch {}
 }
 function findNextLine(offsetTop, dir) {
   if (!viewer) return null;
@@ -2311,6 +2700,17 @@ function stepOnce(dir) {
 var creepRaf = 0;
 var creepLast = 0;
 let enabledNow = false;
+let activeMotorBrain: 'auto' | 'hybrid' | 'asr' | null = null;
+
+function setActiveMotor(brain: 'auto' | 'hybrid' | 'asr', _mode: string) {
+  activeMotorBrain = brain;
+}
+
+function clearActiveMotor(brain?: 'auto' | 'hybrid' | 'asr') {
+  if (!brain || activeMotorBrain === brain) {
+    activeMotorBrain = null;
+  }
+}
 
 function holdCreepStart(pxPerSec = DEFAULTS.step.holdCreep, dir = 1) {
   if (!viewer) viewer = document.getElementById("viewer");
@@ -2334,44 +2734,77 @@ function holdCreepStop() {
 }
 var speaking = false;
 var gateTimer;
+function stopAutoMotor(reason?: string): boolean {
+  const wasRunning =
+    !!enabledNow || (typeof auto?.isRunning === 'function' ? !!auto.isRunning() : false);
+  if (wasRunning) {
+    try {
+      auto.setEnabled?.(false);
+      auto.stop?.();
+    } catch {}
+    enabledNow = false;
+    clearActiveMotor('auto');
+    try { emitMotorState("auto", false); } catch {}
+    if (isDevMode() && reason) {
+      try { console.info('[AUTO] forced stop', { reason }); } catch {}
+    }
+    return true;
+  }
+  enabledNow = false;
+  clearActiveMotor('auto');
+  return false;
+}
+function stopHybridMotor(reason?: string) {
+  try {
+    const wasHybridRunning = hybridMotor.isRunning();
+    hybridMotor.stop();
+    cancelHybridVelocityRefresh();
+    hybridGraceUntil = 0;
+    hybridSilence.pausedBySilence = false;
+    hybridSilence.offScriptActive = false;
+    resetOffScriptDuration();
+    hybridSilence.lastSpeechAtMs = nowMs();
+    pauseAssistTailBoost = 0;
+    pauseAssistTailUntil = 0;
+    clearHybridSilenceTimer();
+    if (wasHybridRunning) {
+      clearActiveMotor('hybrid');
+      emitMotorState("hybridWpm", false);
+      try {
+        if (reason) console.debug("[HYBRID] forced stop", { reason });
+      } catch {}
+    }
+  } catch (err) {
+    if (isDevMode()) {
+      try {
+        console.warn("[HYBRID] stop failed", { reason, err });
+      } catch {}
+    }
+  }
+}
 function stopAllMotors(reason: string) {
   try {
     if (reason) {
       try { console.debug("[ScrollRouter] stopAllMotors", reason); } catch {}
     }
   } catch {}
-  const wasHybridRunning = hybridMotor.isRunning();
-  const activeMotorIds: string[] = [];
-  if (enabledNow) activeMotorIds.push("auto");
-  if (wasHybridRunning) activeMotorIds.push("hybrid");
+  stopAutoMotor(reason);
+  stopHybridMotor(reason);
+}
+function stopAllMotorsExcept(mode: string, reason: string) {
+  // For now, we stop all motors on mode change; motors re-arm based on mode.
+  stopAllMotors(reason);
+}
+function assertHybridStoppedIfNotHybrid(reason: string) {
+  if (state2.mode === 'hybrid') return;
+  if (!hybridMotor.isRunning()) return;
   try {
-    console.debug("[ScrollRouter] stopAllMotors active", {
-      reason: reason || "unknown",
-      motorCount: activeMotorIds.length,
-      motorIds: activeMotorIds,
+    console.error('[HYBRID_ASSERT] motor running outside hybrid mode', {
+      reason,
+      mode: state2.mode,
     });
   } catch {}
-  if (enabledNow) {
-    try {
-      auto.setEnabled?.(false);
-      auto.stop?.();
-    } catch {}
-    enabledNow = false;
-    emitMotorState("auto", false);
-  }
-  hybridMotor.stop();
-  cancelHybridVelocityRefresh();
-  hybridGraceUntil = 0;
-  hybridSilence.pausedBySilence = false;
-  hybridSilence.offScriptActive = false;
-  hybridSilence.lastSpeechAtMs = nowMs();
-  pauseAssistTailBoost = 0;
-  pauseAssistTailUntil = 0;
-  clearHybridSilenceTimer();
-  speechActive = false;
-  if (wasHybridRunning) {
-    emitMotorState("hybridWpm", false);
-  }
+  stopHybridMotor(`assert:${reason}`);
 }
 function setSpeaking(on, auto) {
   if (on === speaking) return;
@@ -2387,15 +2820,32 @@ function hybridHandleDb(db, auto) {
   else gateTimer = setTimeout(() => setSpeaking(false, auto), releaseMs);
 }
 function applyMode(m) {
+  const normalized = normalizeScrollModeValue(m) || m;
   try {
-    try { console.debug("[ScrollRouter] stopAllMotors", `mode switch to ${m}`); } catch {}
+    try { console.debug("[ScrollRouter] stopAllMotors", `mode switch to ${normalized}`); } catch {}
   } catch {}
-  stopAllMotors("mode switch");
-  if (m !== 'auto') {
+  stopAllMotorsExcept(normalized, `mode switch to ${normalized}`);
+  if (normalized !== 'auto') {
     persistStoredAutoEnabled(false);
   }
-  state2.mode = m;
-  syncDebugState();
+  state2.mode = normalized;
+  if (normalized === 'asr') {
+    stopAutoMotor('enter-asr');
+    try { (window as any).__tpScrollWriteActive = false; } catch {}
+    resetAsrIntentState('mode-enter');
+    try {
+      const phase = String(appStore.get?.('session.phase') || '');
+      if (phase === 'live') {
+        asrIntentLiveSince = Date.now();
+      } else {
+        asrIntentLiveSince = 0;
+      }
+    } catch {}
+  } else {
+    asrIntentLiveSince = 0;
+    resetAsrIntentState('mode-exit');
+  }
+  assertHybridStoppedIfNotHybrid('mode-change');
   persistMode();
   viewer = document.getElementById("viewer");
   refreshHybridWriter();
@@ -2409,7 +2859,7 @@ function applyMode(m) {
     const speedInput = document.getElementById('autoSpeed') as HTMLInputElement | null;
     const modeExplain = document.querySelector('[data-scroll-mode-explain]') as HTMLElement | null;
 
-    const isWpmLike = m === 'wpm' || m === 'hybrid';
+    const isWpmLike = normalized === 'wpm' || normalized === 'hybrid';
     if (isWpmLike) {
       if (wpmRow) {
         wpmRow.classList.remove('visually-hidden');
@@ -2419,14 +2869,14 @@ function applyMode(m) {
         autoRow.classList.add('visually-hidden');
         autoRow.setAttribute('aria-hidden', 'true');
       }
-      if (m === 'wpm') {
+      if (normalized === 'wpm') {
         if (speedLabel) speedLabel.textContent = 'Target speed (WPM)';
         if (speedHint) speedHint.textContent = 'Scroll speed is driven purely by this WPM value.';
       } else {
         if (speedLabel) speedLabel.textContent = 'Baseline speed (WPM)';
         if (speedHint) speedHint.textContent = 'Hybrid (Performance): uses this WPM as a floor while ASR (Training) can pull the text ahead as you speak.';
       }
-      if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = m; }
+      if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = normalized; }
     } else {
       if (wpmRow) {
         wpmRow.classList.add('visually-hidden');
@@ -2437,20 +2887,20 @@ function applyMode(m) {
         autoRow.removeAttribute('aria-hidden');
       }
 
-      if (m === 'asr') {
+      if (normalized === 'asr') {
         if (speedLabel) speedLabel.textContent = 'Scroll speed';
         if (speedHint) speedHint.textContent = 'ASR (Training)-only: scroll position is driven by your voice; speed slider is ignored.';
         if (speedInput) { speedInput.disabled = true; speedInput.dataset.mode = 'asr'; }
       } else {
         if (speedLabel) speedLabel.textContent = 'Scroll speed';
         if (speedHint) speedHint.textContent = '';
-        if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = m; }
+        if (speedInput) { speedInput.disabled = false; speedInput.dataset.mode = normalized; }
       }
     }
 
     // Mode explanation text
     if (modeExplain) {
-      switch (m) {
+      switch (normalized) {
         case 'wpm':
           modeExplain.textContent = 'WPM: scrolls at a fixed words-per-minute target; good for solo reads.';
           break;
@@ -2472,7 +2922,8 @@ function applyMode(m) {
   }
 }
 function installScrollRouter(opts) {
-  const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  const { auto: autoMotor, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  auto = autoMotor || auto || null;
   if (!viewer && hostEl) {
     viewer = hostEl;
   }
@@ -2540,12 +2991,27 @@ function installScrollRouter(opts) {
   } catch {
   }
   restoreMode();
+  try {
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    const storeMode = normalizeScrollModeValue(store?.get?.("scrollMode"));
+    if (storeMode && storeMode !== state2.mode) {
+      state2.mode = storeMode;
+    }
+  } catch {}
   applyMode(state2.mode);
   emitScrollModeSnapshot("mode-change");
+  try {
+    const store = (typeof window !== "undefined" ? (window as any).__tpStore : null) || appStore;
+    store?.subscribe?.("scrollMode", (next) => {
+      const normalized = normalizeScrollModeValue(next);
+      if (!normalized || normalized === state2.mode) return;
+      applyMode(normalized);
+      emitScrollModeSnapshot("store-change");
+    });
+  } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     seedHybridBaseSpeed();
   }
-  wireScrollModeStore();
   const orch = createOrchestrator();
   let orchRunning = false;
   let wpmUpdateInterval = null;
@@ -2621,16 +3087,15 @@ function installScrollRouter(opts) {
   } catch {
   }
   
-  userEnabled = false;
-  userIntentOn = false;
-  dbGate = false;
-  vadGate = false;
-  gatePref = getUiPrefs().hybridGate;
-  speechActive = false;
-  sessionIntentOn = false;
-  sessionPhase = 'idle';
+  let userEnabled = false;
+  let userIntentOn = false;
+  let dbGate = false;
+  let vadGate = false;
+  let gatePref = getUiPrefs().hybridGate;
+  let speechActive = false;
+  let sessionIntentOn = false;
+  let sessionPhase = 'idle';
   hybridSessionPhase = sessionPhase;
-  syncDebugState();
   const HYBRID_AUTO_STOP_FATAL_REASONS = new Set(['session', 'session-stop', 'user-toggle']);
   function isFatalAutoStopReason(reason?: string | null): boolean {
     if (!reason) return false;
@@ -2651,10 +3116,330 @@ function installScrollRouter(opts) {
     if (storedPhase) {
       sessionPhase = String(storedPhase);
       hybridSessionPhase = sessionPhase;
-      syncDebugState();
     }
   } catch {
     // ignore
+  }
+  if (!scrollIntentListenerWired) {
+    scrollIntentListenerWired = true;
+    // TODO (ARCHITECTURE):
+    // Forward ASR block commits must be gated on *block completion*, not mere detection.
+    // “Completion” is a semantic invariant (e.g. last-line confirmation, coverage threshold,
+    // boundary crossing, or post-line silence), not a heuristic.
+    // Until this is implemented, first ASR commits may feel eager but remain truthful.
+    // Do NOT implement completion logic in ASR; router is the commit authority (SSOT).
+    onScrollIntent((intent) => {
+      try {
+        if (!intent || intent.source !== 'asr') return;
+        const telemetry = getAsrTelemetry();
+        const intentReason = typeof intent.reason === 'string' ? intent.reason : '';
+        recordAsrIntentTelemetry(telemetry, intentReason);
+        const now = Date.now();
+        const mode = getScrollMode();
+        recordAsrMatchEvent(now, intent, intentReason);
+        if (telemetry) {
+          telemetry.completionEvidence = null;
+          telemetry.completionEvidenceSummary = 'evidence_missing_block_index';
+        }
+        if (intent.kind !== 'seek_block') {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_kind',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (mode !== 'asr') {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_mode',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (sessionPhase !== 'live') {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_phase',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (isDevMode()) {
+          const autoEnabled = !!(auto?.getState?.().enabled || enabledNow);
+          const autoRunning = !!auto?.isRunning?.();
+          const hybridRunning = !!hybridMotor?.isRunning?.();
+          if (autoEnabled || autoRunning || hybridRunning) {
+            if (!asrMotorConflictLogged) {
+              asrMotorConflictLogged = true;
+              try {
+                console.error('[ASR_ASSERT] motor running in ASR mode', {
+                  autoEnabled,
+                  autoRunning,
+                  hybridRunning,
+                  mode,
+                  phase: sessionPhase,
+                });
+              } catch {}
+            }
+            stopAllMotors('asr-assert-motor-running');
+          }
+        }
+
+        if (committedBlockIdx < 0) {
+          const seed = resolveCurrentBlockIdx();
+          if (seed != null) {
+            committedBlockIdx = seed;
+          }
+        }
+        if (telemetry && committedBlockIdx >= 0) {
+          const candidateIdx = resolveAsrIntentCandidateBlockIdx(intent);
+          const evidence = buildCompletionEvidence(committedBlockIdx, candidateIdx, now);
+          telemetry.completionEvidence = evidence;
+          telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(evidence);
+        } else if (telemetry) {
+          telemetry.completionEvidence = null;
+          telemetry.completionEvidenceSummary = 'evidence_missing_block_index';
+        }
+        if (asrIntentLiveSince && now - asrIntentLiveSince < ASR_INTENT_WARMUP_MS) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_warmup',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        const rawBlockIdx = Number(intent?.target?.blockIdx);
+        if (!Number.isFinite(rawBlockIdx) || rawBlockIdx < 0) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_invalid_target',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            resolveAsrIntentCandidateBlockIdx(intent),
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        const blockIdx = Math.min(rawBlockIdx, committedBlockIdx + 1);
+        if (blockIdx <= committedBlockIdx) {
+          const reasonKey = rawBlockIdx === committedBlockIdx ? 'reject_same_block' : 'reject_backward';
+          recordAsrReject(
+            telemetry,
+            now,
+            reasonKey,
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (now - lastCommitAt < ASR_INTENT_DEBOUNCE_MS) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_debounce',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (Number.isFinite(intent.confidence) && intent.confidence < ASR_INTENT_MIN_CONF) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_low_confidence',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+
+        const isFinal = intentReason.includes('final');
+        const isInterim = intentReason.includes('interim') && !isFinal;
+        const isRescue = intentReason.includes('rescue');
+        if (isInterim) {
+          if (blockIdx !== lastCandidate) {
+            lastCandidate = blockIdx;
+            stableSince = now;
+          }
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_not_final',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (isRescue) {
+          recentAsrMatches = [];
+          lastCandidate = -1;
+          stableSince = now;
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_rescue',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        if (blockIdx !== lastCandidate) {
+          lastCandidate = blockIdx;
+          stableSince = now;
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_stability',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+        const requiredStable = committedBlockIdx < 0 ? ASR_INTENT_FIRST_STABLE_MS : ASR_INTENT_STABLE_MS;
+        if (now - stableSince < requiredStable) {
+          recordAsrReject(
+            telemetry,
+            now,
+            'reject_stability',
+            mode,
+            sessionPhase,
+            committedBlockIdx,
+            blockIdx,
+            telemetry?.completionEvidenceSummary,
+          );
+          return;
+        }
+
+        const completionGateEnabled = isAsrCompletionGateEnabled();
+        let completionDecisionConfidence: number | undefined;
+        let completionStatus: 'complete' | 'unknown' = 'complete';
+        let completionReason: string | undefined;
+        if (completionGateEnabled) {
+          let completionEvidence = telemetry?.completionEvidence ?? null;
+          if (!completionEvidence) {
+            try {
+              completionEvidence = buildCompletionEvidence(committedBlockIdx, blockIdx, now);
+            } catch (err) {
+              if (isDevMode()) {
+                try {
+                  console.warn('[ASR_COMPLETION] evidence build failed', { err });
+                } catch {}
+              }
+              completionStatus = 'unknown';
+              completionReason = 'exception';
+            }
+          }
+          if (telemetry) {
+            telemetry.completionEvidence = completionEvidence;
+            telemetry.completionEvidenceSummary = formatCompletionEvidenceSummary(completionEvidence);
+          }
+          if (completionStatus === 'unknown' && completionReason === 'exception') {
+            // fall through: unknown should not block
+          } else if (!completionEvidence) {
+            completionStatus = 'unknown';
+            completionReason = 'insufficient_evidence';
+          } else {
+            let completionDecision;
+            try {
+              completionDecision = decideBlockCompletion(completionEvidence);
+            } catch (err) {
+              if (isDevMode()) {
+                try {
+                  console.warn('[ASR_COMPLETION] decision failed', { err });
+                } catch {}
+              }
+              completionStatus = 'unknown';
+              completionReason = 'exception';
+            }
+            if (completionDecision) {
+              if (completionDecision.ok) {
+                completionDecisionConfidence = completionDecision.confidence;
+                completionStatus = 'complete';
+                completionReason = completionDecision.reason;
+              } else if (completionDecision.status === 'incomplete') {
+                recordAsrReject(
+                  telemetry,
+                  now,
+                  `reject_completion_${completionDecision.reason}`,
+                  mode,
+                  sessionPhase,
+                  committedBlockIdx,
+                  blockIdx,
+                  telemetry?.completionEvidenceSummary,
+                );
+                return;
+              } else {
+                completionStatus = 'unknown';
+                completionReason = completionDecision.reason;
+              }
+            }
+          }
+        } else if (isDevMode() && !asrCompletionGateBypassLogged) {
+          asrCompletionGateBypassLogged = true;
+          try {
+            console.debug('[ASR_COMPLETION] gate bypassed (flag off)');
+          } catch {}
+        }
+
+        seekToBlockAnimated(blockIdx, 'asr_commit');
+        committedBlockIdx = blockIdx;
+        lastCommitAt = now;
+        recordAsrAccept(
+          telemetry,
+          now,
+          mode,
+          sessionPhase,
+          committedBlockIdx,
+          blockIdx,
+          telemetry?.completionEvidenceSummary,
+          completionDecisionConfidence,
+          completionStatus,
+          completionReason,
+        );
+      } catch {}
+    });
+    try { console.info('[scroll-router] tp:scroll:intent listener installed'); } catch {}
   }
   type AutoIntentDecision = 'motor-start-request' | 'motor-stop-request';
   interface AutoIntentPayload {
@@ -2671,24 +3456,8 @@ function installScrollRouter(opts) {
   function resolveAutoIntentReason(detail: any): string | undefined {
     return typeof detail.reason === 'string' ? detail.reason : undefined;
   }
-  const SESSION_INTENT_ALLOWED_OFF_REASONS = new Set([
-    'user',
-    'sessionstop',
-    'sessionintent',
-    'scriptend',
-  ]);
-  function normalizeSessionReason(reason?: string): string {
-    return (reason || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-  }
-  function canDisableSessionIntent(reason?: string): boolean {
-    if (!reason) return false;
-    return SESSION_INTENT_ALLOWED_OFF_REASONS.has(normalizeSessionReason(reason));
-  }
 
   function setAutoIntentState(on: boolean, _reason?: string) {
-    try {
-      console.trace('[probe] setAutoIntentState', { on, reason: _reason });
-    } catch {}
     if (on && state2.mode === "hybrid" && !hasActiveAsrProfile()) {
       try { showToast('Select a saved mic calibration to use ASR/Hybrid.', { type: 'warning' }); } catch {}
       try { focusSidebarCalibrationSelect(); } catch {}
@@ -2697,15 +3466,7 @@ function installScrollRouter(opts) {
     userIntentOn = on;
     userEnabled = on;
     hybridWantedRunning = on;
-    if (on) {
-      sessionIntentOn = true;
-    } else if (canDisableSessionIntent(_reason)) {
-      sessionIntentOn = false;
-    } else {
-      try {
-        console.info('[AUTO_INTENT] denying sessionIntent disable', { reason: _reason });
-      } catch {}
-    }
+    sessionIntentOn = on;
     if (hybridWantedRunning && state2.mode === "hybrid") {
       seedHybridBaseSpeed();
       ensureOrchestratorForMode();
@@ -2715,7 +3476,6 @@ function installScrollRouter(opts) {
       clearHybridSilenceTimer();
     }
     persistStoredAutoEnabled(on);
-    syncDebugState();
     try { applyGate(); } catch {}
   }
   function handleAutoIntent(detail: any): AutoIntentPayload | null {
@@ -2723,15 +3483,6 @@ function installScrollRouter(opts) {
       const enabled = resolveAutoIntentEnabled(detail);
       if (typeof enabled !== 'boolean') return null;
       const reasonRaw = resolveAutoIntentReason(detail);
-      if (enabled && state2.mode !== 'timed') {
-        try {
-          console.info('[AUTO_INTENT] ignored start for non-timed mode', {
-            mode: state2.mode,
-            reason: reasonRaw ?? 'unknown',
-          });
-        } catch {}
-        return null;
-      }
       if (shouldIgnoreHybridStop(reasonRaw, enabled)) {
         try {
           console.info('[AUTO_INTENT] hybrid stop ignored (live, non-fatal reason)', { reason: reasonRaw });
@@ -2739,8 +3490,11 @@ function installScrollRouter(opts) {
         return null;
       }
       setAutoIntentState(enabled, reasonRaw);
+      const mode = getScrollMode();
+      const allowAutoMotor = mode !== 'asr';
       const brain = String(appStore.get('scrollBrain') || 'auto');
-      const decision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
+      const baseDecision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
+      const decision: AutoIntentDecision = allowAutoMotor ? baseDecision : 'motor-stop-request';
       const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
       const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       try {
@@ -2758,6 +3512,9 @@ function installScrollRouter(opts) {
       } catch {}
       const pxs = Number(pxPerSec) || 0;
       enabledNow = decision === 'motor-start-request';
+      if (!allowAutoMotor) {
+        clearActiveMotor('auto');
+      }
       try { emitMotorState('auto', enabledNow); } catch {}
       try { emitAutoState(); } catch {}
       return { enabled, decision, pxs, reason: reasonRaw };
@@ -2769,15 +3526,9 @@ function installScrollRouter(opts) {
     const payload = handleAutoIntent(detail);
     if (!payload) return;
     const { enabled, decision, pxs, reason } = payload;
-    const mode = state2.mode;
-    if (decision === 'motor-start-request' && mode !== 'timed') {
-      try {
-        console.info('[AUTO_INTENT] start suppressed (mode not timed)', { mode, reason });
-      } catch {}
-      return;
-    }
-    const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
-    const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
+    const mode = getScrollMode();
+      const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
+      const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
       try {
         console.warn('[AUTO_INTENT] processor RUN', {
           enabled,
@@ -2788,6 +3539,10 @@ function installScrollRouter(opts) {
           lastWpm: lastWpmIntent?.wpm ?? null,
         });
       } catch {}
+      if (mode === 'asr') {
+        stopAutoMotor('auto-intent:asr');
+        return;
+      }
       if (mode === 'hybrid') {
         if (enabled) {
           if (!ensureMainViewer('hybrid.start')) {
@@ -2824,6 +3579,7 @@ function installScrollRouter(opts) {
             startHybridMotorFromSpeedChange();
             hybridMotor.setEnabled?.(true);
             hybridMotor.start?.();
+            setActiveMotor('hybrid', 'hybrid');
             console.warn('[HYBRID_MOTOR] start/enable ok', {
               reason: reason ?? 'auto-intent',
               phase: sessionPhase,
@@ -2838,6 +3594,7 @@ function installScrollRouter(opts) {
           try {
             if (hybridMotor.isRunning()) {
               hybridMotor.stop();
+              clearActiveMotor('hybrid');
             emitMotorState('hybridWpm', false);
           }
           emitHybridSafety();
@@ -2853,10 +3610,10 @@ function installScrollRouter(opts) {
         }
       } catch {}
       try { auto.setEnabled?.(true); } catch {}
+      setActiveMotor('auto', mode);
       scheduleCiAutoMovement();
     } else {
-      try { auto.setEnabled?.(false); } catch {}
-      try { auto.stop?.(); } catch {}
+      stopAutoMotor('auto-intent:stop');
     }
   }
 
@@ -2899,6 +3656,11 @@ function installScrollRouter(opts) {
       return false;
     }
   })();
+  try {
+    if (enabledNow) {
+      setActiveMotor('auto', getScrollMode());
+    }
+  } catch {}
   let silenceTimer;
   const chipEl = () => document.getElementById("autoChip");
   function emitAutoState(label = "Auto") {
@@ -2907,7 +3669,7 @@ function installScrollRouter(opts) {
       const gate = userEnabled ? enabledNow ? "on" : "paused" : "manual";
       const speed = getCurrentSpeed();
       const payload = {
-        mode: state2.mode,
+        mode: getScrollMode(),
         intentOn: !!userIntentOn,
         gate,
         speed,
@@ -2945,12 +3707,13 @@ function installScrollRouter(opts) {
 
   function emitScrollModeSnapshot(reason: string) {
     try {
+      const mode = getScrollMode();
       const payload = {
         reason: reason || "state",
-        mode: state2.mode,
+        mode,
         phase: sessionPhase,
         brain: String(appStore.get("scrollBrain") || "auto"),
-        clamp: state2.mode === "hybrid" || state2.mode === "asr" ? "follow" : "free",
+        clamp: mode === "hybrid" || mode === "asr" ? "follow" : "free",
         userEnabled: !!userEnabled,
         sessionIntentOn: !!sessionIntentOn,
         autoRunning: typeof auto?.isRunning === "function" ? !!auto.isRunning() : false,
@@ -2998,6 +3761,7 @@ function handleHybridSilenceTimeout() {
   if (!eligible) {
     if (motorRunning) {
       hybridMotor.stop();
+      clearActiveMotor('hybrid');
       emitMotorState("hybridWpm", false);
     }
     hybridSilence.pausedBySilence = false;
@@ -3009,6 +3773,7 @@ function handleHybridSilenceTimeout() {
   if (silentForMs >= hardStopMs) {
     if (motorRunning) {
       hybridMotor.stop();
+      clearActiveMotor('hybrid');
       emitMotorState("hybridWpm", false);
     }
     hybridSilence.pausedBySilence = false;
@@ -3020,15 +3785,7 @@ function handleHybridSilenceTimeout() {
   if (!motorRunning) return;
   hybridSilence.pausedBySilence = true;
   speechActive = false;
-  if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-    console.warn('[HYBRID_CALLSITE]', {
-      mode: String(state2.mode),
-      sessionPhase: String(sessionPhase),
-      sessionIntent: Boolean(sessionIntentOn),
-      userEnabled: Boolean(userEnabled),
-    });
-    runHybridVelocity(hybridSilence);
-  }
+  runHybridVelocity(hybridSilence);
   emitHybridSafety();
   armHybridSilenceTimer(softDelayMs);
   try { applyGate(); } catch {}
@@ -3046,27 +3803,26 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     hybridSilence.timeoutId = window.setTimeout(() => handleHybridSilenceTimeout(), nextDelay);
   }
   function ensureHybridMotorRunningForSpeech() {
-    if (state2.mode !== "hybrid" && state2.mode !== "asr") return;
+    if (getScrollMode() !== "hybrid") {
+      logHybridModeMismatch('ensureHybridMotorRunningForSpeech');
+      return;
+    }
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
-    if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-      console.warn('[HYBRID_CALLSITE]', {
-        mode: String(state2.mode),
-        sessionPhase: String(sessionPhase),
-        sessionIntent: Boolean(sessionIntentOn),
-        userEnabled: Boolean(userEnabled),
-      });
-      runHybridVelocity(hybridSilence);
-    }
+    runHybridVelocity(hybridSilence);
     if (!hybridMotor.isRunning()) {
       const startResult = hybridMotor.start();
       if (startResult.started) {
         emitMotorState("hybridWpm", true);
+        setActiveMotor('hybrid', 'hybrid');
       }
     }
   }
   function startHybridMotorFromSpeedChange() {
-    if (state2.mode !== "hybrid" && state2.mode !== "asr") return;
+    if (getScrollMode() !== "hybrid") {
+      logHybridModeMismatch('startHybridMotorFromSpeedChange');
+      return;
+    }
     if (sessionPhase !== "live") return;
     if (!userEnabled || !hybridWantedRunning) return;
     hybridSilence.pausedBySilence = false;
@@ -3081,6 +3837,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     ts?: number,
     opts?: { source?: string; noMatch?: boolean; resumedFromSilence?: boolean },
   ) {
+    if (getScrollMode() !== "hybrid") {
+      logHybridModeMismatch(opts?.source ?? 'speech');
+      return;
+    }
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(ts, perfNow);
     if (typeof opts?.noMatch === "boolean") {
@@ -3116,7 +3876,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (wasPausedBySilence) {
       emitHybridSafety();
     }
-      if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+      if (!hybridWantedRunning) return;
     ensureHybridMotorRunningForSpeech();
     armHybridSilenceTimer();
     try { applyGate(); } catch {}
@@ -3134,6 +3894,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
   function updateHybridScaleFromDetail(detail: { bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    const now = nowMs();
+    const inBandValue = detail.inBand;
+    const inBand = inBandValue === 1 || inBandValue === true || inBandValue === "1";
     const bestSimRaw = detail.bestSim ?? detail.sim ?? detail.score;
     const bestSim = Number.isFinite(bestSimRaw) ? Number(bestSimRaw) : null;
     if (bestSim !== null && bestSim >= HYBRID_HARD_NOMATCH_SIM_MIN) {
@@ -3142,7 +3905,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const scaleDetail = { ...detail, bestSim, sim: bestSim ?? detail.sim };
     const nextScale = determineHybridScaleFromDetail(scaleDetail);
     if (nextScale == null) return;
-    const now = nowMs();
+    const logHud = () => {
+      syncOffScriptDuration(now);
+      const currentScale = Number.isFinite(hybridScale) ? hybridScale : 1;
+      const decay = hybridSilence.offScriptActive ? computeOffScriptDecay(offScriptDurationMs) : 1;
+      const effectiveScale = currentScale * decay;
+      logHybridOffScriptHud({
+        bestSim,
+        inBand,
+        offScriptEvidence,
+        offScriptActive: hybridSilence.offScriptActive,
+        offScriptDurationMs,
+        nextScale,
+        effectiveScale,
+      });
+    };
     const isNoMatch = detail.noMatch === true;
     const significantNoMatch = isNoMatch && !isWeakNoMatch(detail);
     const goodMatch = nextScale === RECOVERY_SCALE && !significantNoMatch;
@@ -3152,6 +3929,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       lastOffScriptEvidenceTs = 0;
       setHybridScale(RECOVERY_SCALE);
+      logHud();
       return;
     }
     if (significantNoMatch) {
@@ -3159,7 +3937,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     const offscriptCandidate = nextScale < RECOVERY_SCALE;
     const shouldCountOffscript = offscriptCandidate && (significantNoMatch || !isNoMatch);
-    if (!shouldCountOffscript) return;
+    if (!shouldCountOffscript) {
+      logHud();
+      return;
+    }
     onScriptStreak = 0;
     if (lastOffScriptEvidenceTs && now - lastOffScriptEvidenceTs > OFFSCRIPT_EVIDENCE_RESET_MS) {
       offScriptEvidence = 0;
@@ -3170,8 +3951,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       setHybridScale(nextScale);
     }
+    logHud();
   }
   function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
+    if (getScrollMode() !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(detail.timestamp, perfNow);
     const isNoMatch = detail.noMatch === true;
@@ -3209,7 +3992,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     window.addEventListener("tp:asr:sync", (ev) => {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
-      if (state2.mode !== "hybrid") return;
+      if (getScrollMode() !== "hybrid") return;
       try {
         noteHybridSpeechActivity(ts, { source: "sync", noMatch: detail.noMatch === true });
       } catch (err) {
@@ -3311,17 +4094,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     const clamped = Math.max(0, Math.min(nextScale, 1));
     if (hybridScale === clamped) return false;
+    const prevOffScript = hybridSilence.offScriptActive;
     hybridScale = clamped;
-    hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
-    if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-      console.warn('[HYBRID_CALLSITE]', {
-        mode: String(state2.mode),
-        sessionPhase: String(sessionPhase),
-        sessionIntent: Boolean(sessionIntentOn),
-        userEnabled: Boolean(userEnabled),
-      });
-      runHybridVelocity(hybridSilence);
+    const nextOffScript = clamped < RECOVERY_SCALE;
+    hybridSilence.offScriptActive = nextOffScript;
+    if (prevOffScript !== nextOffScript) {
+      if (nextOffScript) {
+        offScriptSinceMs = nowMs();
+        offScriptDurationMs = 0;
+      } else {
+        resetOffScriptDuration();
+      }
     }
+    runHybridVelocity(hybridSilence);
     return true;
   }
   function getActiveBrakeFactor(now = nowMs()) {
@@ -3453,15 +4238,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   pauseAssistTailBoost = 0;
   pauseAssistTailUntil = 0;
   scheduleHybridVelocityRefresh();
-  if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-    console.warn('[HYBRID_CALLSITE]', {
-      mode: String(state2.mode),
-      sessionPhase: String(sessionPhase),
-      sessionIntent: Boolean(sessionIntentOn),
-      userEnabled: Boolean(userEnabled),
-    });
     runHybridVelocity(hybridSilence);
-  }
   }
 
   function handleHybridTargetHintEvent(ev: Event) {
@@ -3509,6 +4286,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     candidateErrorLines?: number | null,
     weakMatch = false,
   ) {
+    syncOffScriptDuration(now);
     const pauseLikely =
       typeof pauseLikelyOverride === "boolean" ? pauseLikelyOverride : isPlannedPauseLikely();
     const scaleFromSilence =
@@ -3518,7 +4296,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         ? SILENCE_SCALE
         : 1;
     const offScriptActive = forceOffScript || silence.offScriptActive;
-    const scaleFromOffscript = offScriptActive ? OFFSCRIPT_SCALE : 1;
+    const offScriptDecay = silence.offScriptActive ? computeOffScriptDecay(offScriptDurationMs) : 1;
+    const scaleFromOffscript = offScriptActive ? OFFSCRIPT_SCALE * offScriptDecay : 1;
     const graceActive = isHybridGraceActive(now);
     const scaleFromGrace = GRACE_MIN_SCALE;
     const nearTarget =
@@ -3542,6 +4321,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         onScriptLocked,
         offScriptActive,
         pausedBySilence: silence.pausedBySilence,
+        offScriptDurationMs: silence.offScriptActive ? offScriptDurationMs : 0,
+        offScriptDecay,
       };
     }
     let chosenScale = 1;
@@ -3570,6 +4351,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       onScriptLocked,
       offScriptActive,
       pausedBySilence: silence.pausedBySilence,
+      offScriptDurationMs: silence.offScriptActive ? offScriptDurationMs : 0,
+      offScriptDecay,
     };
   }
 
@@ -3687,12 +4470,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       onScriptLocked,
       offScriptActive,
       pausedBySilence,
+      offScriptDecay,
     } = hybridScaleDetail;
 
     // --- Hybrid Aggro policy -------------------------------------------------
     const aggro = isHybridAggroEnabled();
     const commitBoost = isHybridCommitBoostActive();
     let effectiveScale = effectiveScaleRaw;
+    const offScriptScale =
+      hybridSilence.offScriptActive && Number.isFinite(hybridScale)
+        ? clamp(hybridScale, 0, 1)
+        : 1;
+    const offScriptMultiplier =
+      offScriptActive && Number.isFinite(offScriptDecay) ? offScriptScale * offScriptDecay : 1;
 
     // Aggro tuning knobs (prove capability first; dial back later)
     const maxScale = aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT;
@@ -3875,9 +4665,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       finalScale = clamp(finalScale, HYBRID_CTRL_ON_TARGET_MULT_MIN, HYBRID_CTRL_ON_TARGET_MULT_MAX);
     }
 
-    const finalPxpsBase = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
+    if (offScriptMultiplier !== 1) {
+      finalScale *= offScriptMultiplier;
+      reasons.push('offscriptDecay');
+    }
+
+    const minPxps = offScriptMultiplier < 1 ? 0 : HYBRID_CTRL_MIN_PXPS;
+    const finalPxpsBase = Math.max(minPxps, baseWithCorrection * finalScale);
     const assistFloorBoostPx = assistEligible && isBehind ? base * HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC : 0;
-    const finalPxps = finalPxpsBase + assistFloorBoostPx;
+    const finalPxps = finalPxpsBase + assistFloorBoostPx * offScriptMultiplier;
     const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
     const targetTopSourceRaw = errorInfo?.targetTopSource ?? null;
     const targetTopAnchor = targetTopSourceRaw === 'anchor';
@@ -3900,22 +4696,6 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       modeHint = 'LETTING YOU CATCH UP';
     }
     const finalReasons = reasons.length > 0 ? reasons : ['base'];
-    if (isDevMode()) {
-      console.warn('[HYBRID_POST_CLAMP]', {
-        deltaLines,
-        reasons: finalReasons,
-        effectiveScaleRaw,
-        reason,
-        scaleFromSilence,
-        scaleFromOffscript,
-        scaleFromGrace,
-        graceActive,
-        pauseLikely,
-        onScriptLocked,
-        offScriptActive,
-        pausedBySilence,
-      });
-    }
     const capReason =
       finalReasons.includes('silence')
         ? 'silence'
@@ -4306,13 +5086,16 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
   function applyGate() {
     try {
-    if (state2.mode !== "hybrid") {
+    const mode = getScrollMode();
+    if (mode !== "hybrid") {
+      assertHybridStoppedIfNotHybrid('applyGate');
       if (silenceTimer) {
         try { clearTimeout(silenceTimer); } catch {}
         silenceTimer = void 0;
       }
       if (hybridMotor.isRunning()) {
         hybridMotor.stop();
+        clearActiveMotor('hybrid');
         emitMotorState("hybridWpm", false);
       }
       clearHybridSilenceTimer();
@@ -4331,11 +5114,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         } catch {}
       }
       const viewerReady = hasScrollableTarget();
-      const isLivePhase = sessionPhase === "live";
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
-      if (!isLivePhase) {
-        autoBlocked = "blocked:phaseNotLive";
+      if (mode === "asr" || mode === "step" || mode === "rehearsal") {
+        autoBlocked = `blocked:mode-${mode}`;
       } else if (sessionBlocked) {
         autoBlocked = "blocked:sessionOff";
       } else if (!userEnabled) {
@@ -4348,7 +5130,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         autoBlocked = "none";
       }
       const want = autoBlocked === "none";
-      const prevEnabled = enabledNow;
+      const prevEnabled = enabledNow && activeMotorBrain === 'auto';
       const action = want
         ? prevEnabled
           ? "MOTOR_ALREADY_RUNNING"
@@ -4358,14 +5140,22 @@ function applyHybridVelocityCore(silence = hybridSilence) {
           : "MOTOR_IGNORED_OFF";
       try {
         console.info(
-          `[scroll-router] ${action} mode=${state2.mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+          `[scroll-router] ${action} mode=${mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
         );
       } catch {}
-      if (typeof auto.setEnabled === "function") auto.setEnabled(want);
-      enabledNow = want;
-      const detail2 = `Mode: ${state2.mode} \u2022 Session:${sessionPhase} \u2022 Intent:${sessionIntentOn ? "on" : "off"} \u2022 User:${userEnabled ? "On" : "Off"}`;
+      let emittedAutoStop = false;
+      if (want) {
+        if (typeof auto.setEnabled === "function") auto.setEnabled(true);
+        enabledNow = true;
+        setActiveMotor('auto', mode);
+      } else {
+        emittedAutoStop = stopAutoMotor(mode === 'asr' ? 'enter-asr' : autoBlocked);
+      }
+      const detail2 = `Mode: ${mode} \u2022 Session:${sessionPhase} \u2022 Intent:${sessionIntentOn ? "on" : "off"} \u2022 User:${userEnabled ? "On" : "Off"}`;
       setAutoChip(userEnabled ? (enabledNow ? "on" : "paused") : "manual", detail2);
-      emitMotorState("auto", enabledNow);
+      if (!emittedAutoStop) {
+        emitMotorState("auto", enabledNow);
+      }
       try { emitAutoState(); } catch {}
       lastHybridGateFingerprint = null;
       return;
@@ -4384,12 +5174,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       }
     };
     if (enabledNow) {
-      try {
-        auto.setEnabled?.(false);
-        auto.stop?.();
-      } catch {}
-      enabledNow = false;
-      emitMotorState("auto", false);
+      stopAutoMotor('hybrid-gate');
     }
     const now = nowMs();
     const gateWanted = computeGateWanted();
@@ -4569,6 +5354,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
           });
         } catch {}
         const startResult = hybridMotor.start();
+        if (startResult.started) {
+          setActiveMotor('hybrid', 'hybrid');
+        }
         if (!startResult.started) {
           try {
             console.debug('[HYBRID] start suppressed', startResult);
@@ -4582,6 +5370,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         silenceTimer = void 0;
       }
       hybridMotor.stop();
+      clearActiveMotor('hybrid');
       emitMotorState("hybridWpm", false);
       clearHybridSilenceTimer();
     }
@@ -4604,14 +5393,20 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       if (typeof appStore.subscribe === "function") {
         appStore.subscribe("session.phase", (phase) => {
           const prevPhase = sessionPhase;
-        sessionPhase = String(phase || "idle");
-        hybridSessionPhase = sessionPhase;
-        syncDebugState();
+          sessionPhase = String(phase || "idle");
+          hybridSessionPhase = sessionPhase;
+        if (sessionPhase === "live" && state2.mode === "asr") {
+          asrIntentLiveSince = Date.now();
+          resetAsrIntentState("session-live");
+          try { (window as any).__tpScrollWriteActive = false; } catch {}
+        }
         if (sessionPhase !== "live") {
           stopAllMotors("phase change");
           liveSessionWpmLocked = false;
           wpmSliderUserTouched = false;
           userWpmLocked = false;
+          asrIntentLiveSince = 0;
+          resetAsrIntentState("session-exit");
         } else if (prevPhase !== "live") {
           liveSessionWpmLocked = true;
           syncSliderWpmBeforeLiveStart();
@@ -4893,15 +5688,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       hybridSilence.pausedBySilence = true;
       speechActive = false;
       clearHybridSilenceTimer();
-      if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-        console.warn('[HYBRID_CALLSITE]', {
-          mode: String(state2.mode),
-          sessionPhase: String(sessionPhase),
-          sessionIntent: Boolean(sessionIntentOn),
-          userEnabled: Boolean(userEnabled),
-        });
-        runHybridVelocity(hybridSilence);
-      }
+      runHybridVelocity(hybridSilence);
       armHybridSilenceTimer();
     } else {
       noteHybridSpeechActivity(normalizedTs, { source: "silence" });
@@ -4922,15 +5709,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         hybridSilence.lastSpeechAtMs = now;
         hybridSilence.pausedBySilence = false;
         setHybridScale(RECOVERY_SCALE);
-        if (state2.mode === "hybrid" /* || state2.mode === "asr" */) {
-          console.warn('[HYBRID_CALLSITE]', {
-            mode: String(state2.mode),
-            sessionPhase: String(sessionPhase),
-            sessionIntent: Boolean(sessionIntentOn),
-            userEnabled: Boolean(userEnabled),
-          });
-          runHybridVelocity(hybridSilence);
-        }
+        runHybridVelocity(hybridSilence);
         if (!hybridMotor.isRunning()) {
           hybridMotor.start();
           emitMotorState("hybridWpm", true);
@@ -5000,6 +5779,14 @@ function applyHybridVelocityCore(silence = hybridSilence) {
   }
   // Allow external intent control (e.g., speech start/stop) to flip user intent deterministically
   try {
+    window.addEventListener("tp:autoIntent", (e) => {
+      try {
+        const detail = (e as CustomEvent)?.detail || {};
+        const on = !!(detail.on ?? detail.enabled);
+        setAutoIntentState(on);
+      } catch {}
+    });
+    try { console.info('[scroll-router] tp:autoIntent listener installed'); } catch {}
     const pending = (window as any).__tpAutoIntentPending;
     if (typeof pending === "boolean") {
       setAutoIntentState(pending);
@@ -5009,7 +5796,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     }
   } catch {}
   try {
-    window.addEventListener("tp:session:intent", (e) => {
+      window.addEventListener("tp:session:intent", (e) => {
       try {
         const detail = (e as CustomEvent)?.detail || {};
         const active = detail.active === true;
@@ -5018,34 +5805,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
             `[scroll-router] tp:session:intent active=${active} mode=${detail.mode || state2.mode} reason=${detail.reason || 'unknown'}`,
           );
         } catch {}
-        setAutoIntentState(active, detail.reason);
+        setAutoIntentState(active);
       } catch {}
     });
     try { console.info('[scroll-router] tp:session:intent listener installed'); } catch {}
-  } catch {}
-  try {
-    const makeTerminalHandler = (name: string) => {
-      return (ev: Event) => {
-        try {
-          const detail = (ev as CustomEvent)?.detail || {};
-          const reason = detail.reason;
-          if (!canDisableSessionIntent(reason)) {
-            try {
-              console.warn('[scroll-router] ignored session termination', {
-                event: name,
-                reason,
-              });
-            } catch {}
-            return;
-          }
-          sessionIntentOn = false;
-          syncDebugState();
-          applyGate();
-        } catch {}
-      };
-    };
-    window.addEventListener('tp:session:stop', makeTerminalHandler('tp:session:stop'));
-    window.addEventListener('tp:session:wrap', makeTerminalHandler('tp:session:wrap'));
   } catch {}
   if (state2.mode === "hybrid" || state2.mode === "wpm") {
     userEnabled = true;

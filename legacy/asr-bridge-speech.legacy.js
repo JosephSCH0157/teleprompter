@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 // asr-bridge-speech.js
 // Legacy stub: real ASR / scroll integration now lives in src/index-hooks/asr.ts.
 // This file remains only to avoid 404s from older HTML/bundles. It does NOT

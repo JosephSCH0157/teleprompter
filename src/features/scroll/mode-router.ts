@@ -1,5 +1,6 @@
 // src/features/scroll/mode-router.ts
 // Central router that turns engines on/off based on scrollMode + session state.
+import { withScrollModeWriter } from '../../scroll/audit';
 
 export type ScrollMode = 'timed' | 'wpm' | 'hybrid' | 'asr' | 'step' | 'rehearsal' | 'auto' | 'off';
 
@@ -54,7 +55,23 @@ let lastAuto = false;
 let lastAsr = false;
 let lastStep = false;
 
+function isDevMode(): boolean {
+  try {
+    const w = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1) return true;
+    const qs = new URLSearchParams(String(location.search || ''));
+    if (qs.get('dev') === '1' || qs.has('dev')) return true;
+    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
+  } catch {}
+  return false;
+}
+
+function shouldDisableAutoMotors(): boolean {
+  return isDevMode();
+}
+
 function shouldAutoRun(mode: ScrollMode, sess: SessionState): boolean {
+  if (shouldDisableAutoMotors()) return false;
   if (sess.state !== 'live') return false;
   if (!sess.scrollAutoOnLive) return false;
   // Auto engine drives px/s in these modes only.
@@ -216,7 +233,9 @@ export function createScrollModeRouter(deps: LegacyDeps): ScrollModeRouter {
 
   return {
     setMode(next: ScrollMode) {
-      try { store?.set?.(key, next); } catch {}
+      withScrollModeWriter('features/scroll/mode-router', () => {
+        try { store?.set?.(key, next); } catch {}
+      }, { source: 'router' });
     },
     getMode() {
       return currentMode;

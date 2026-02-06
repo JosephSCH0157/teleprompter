@@ -1,3 +1,10 @@
+// LEGACY - DO NOT EDIT
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
+// Superseded by TypeScript sources under src/
+// Kept ONLY for backward compatibility
+
 // Debug HUD — Anvil/Teleprompter
 // Toggle: "~" (tilde) — configurable via options.hotkey
 // Exposes: window.__tpInstallHUD(opts), window.HUD.log(tag, payload)
