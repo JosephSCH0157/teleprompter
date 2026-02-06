@@ -431,6 +431,33 @@ export function wireCamera() {
   const size = $('camSize');
   const op = $('camOpacity');
   const mir = $('camMirror');
+  const cameraControls = [camSel, size, op, mir];
+  const store = (window as any).__tpStore;
+  const startLabel = start?.textContent || 'Start Camera';
+  let lastAudioOnlyState: boolean | null = null;
+  const applyAudioOnlyState = (on: boolean) => {
+    const normalized = !!on;
+    if (start) {
+      start.disabled = normalized;
+      start.textContent = normalized ? 'Camera: Disabled (Audio-only)' : startLabel;
+    }
+    if (stop) stop.disabled = normalized;
+    cameraControls.forEach((el) => {
+      if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
+        el.disabled = normalized;
+      }
+    });
+    if (lastAudioOnlyState === normalized) return;
+    lastAudioOnlyState = normalized;
+    if (normalized) {
+      try { window.__tpCamera?.stopCamera?.(); } catch {}
+      try { store?.set?.('cameraEnabled', false); } catch {}
+    }
+  };
+  try {
+    applyAudioOnlyState(!!store?.get?.('recordAudioOnly'));
+    store?.subscribe?.('recordAudioOnly', (value) => applyAudioOnlyState(!!value));
+  } catch {}
   if (start && !start.dataset.captureWired) {
     start.dataset.captureWired = '1';
     start.addEventListener('click', async (e) => {
@@ -501,7 +528,7 @@ function resetRun() {
   try { window.stopAutoScroll && window.stopAutoScroll(); } catch {}
   try { window.__scrollCtl?.stopAutoCatchup?.(); } catch {}
   try { window.resetTimer && window.resetTimer(); } catch {}
-  try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'scriptEnd' } })); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
   try { setSessionPhase('idle'); } catch {}
 
@@ -732,21 +759,36 @@ export function wireOverlays() {
       try {
         window.addEventListener('tp:help:open', () => { try { ensureHelpContents(); } catch {} });
       } catch {}
+      const SETTINGS_BTN_SEL = '#settingsBtn';
+      const SETTINGS_FALLBACK_SEL = '[data-action="settings-open"]';
+      const SETTINGS_OPEN_SEL = `${SETTINGS_BTN_SEL}, ${SETTINGS_FALLBACK_SEL}`;
+      const HANDLED_FLAG = '__tpSettingsHandled';
+
       const open = (name) => {
         try {
           const btn = $id(name + 'Btn');
           const dlg = $id(name + 'Overlay');
           if (!dlg) return;
-          // Ensure settings content is mounted before showing
+
+          // Prevent overlays from stacking
+          if (name === 'settings') {
+            close('shortcuts');
+          } else if (name === 'shortcuts') {
+            close('settings');
+          }
+
+          // Ensure settings content is mounted before showing, but never abort showing
           if (name === 'settings') {
             try {
               const api = (window.__tp && window.__tp.settings) ? window.__tp.settings : null;
               if (api && typeof api.mount === 'function') api.mount();
-            } catch {}
+            } catch (err) {
+              try { console.warn('[settings] mount failed', err); } catch {}
+            }
           } else if (name === 'shortcuts') {
-            // Inject help contents if missing
-            ensureHelpContents();
+            try { ensureHelpContents(); } catch {}
           }
+
           dlg.classList.remove('hidden');
           dlg.removeAttribute('hidden');
           dlg.setAttribute('aria-hidden', 'false');
@@ -773,6 +815,26 @@ export function wireOverlays() {
         } catch {}
       };
 
+      const handleCaptureSettingsClick = (e: Event) => {
+        try {
+          const t = e.target as HTMLElement | null;
+          if (!t || !t.closest) return;
+          const matchesMainBtn = Boolean(t.closest(SETTINGS_BTN_SEL));
+          const matchesFallback = !matchesMainBtn && Boolean(t.closest(SETTINGS_FALLBACK_SEL));
+          if (!matchesMainBtn && !matchesFallback) return;
+          if ((e as any)[HANDLED_FLAG]) return;
+          try { (e as any)[HANDLED_FLAG] = true; } catch {}
+          try { e.preventDefault(); } catch {}
+          try { e.stopPropagation(); } catch {}
+          try { (e as any).stopImmediatePropagation?.(); } catch {}
+          try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+          try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
+          try { open('settings'); } catch {}
+          try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+        } catch {}
+      };
+      try { document.addEventListener('click', handleCaptureSettingsClick, { capture: true }); } catch {}
+
       document.addEventListener('click', (e) => {
         try {
           const t = e.target;
@@ -780,8 +842,8 @@ export function wireOverlays() {
             try { (window as any).__tpStore?.set?.('page', 'help'); } catch {}
             return open('shortcuts');
           }
-          if (t && t.closest && t.closest('#settingsBtn, [data-action="settings-open"]')) {
-            // Ensure Scripts Folder card injected before/after opening
+          if (t && t.closest && t.closest(SETTINGS_OPEN_SEL)) {
+            if ((e as any)?.[HANDLED_FLAG]) return;
             try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
             try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
             open('settings');
@@ -795,7 +857,7 @@ export function wireOverlays() {
           const se = $id('settingsOverlay');
           if (se && t === se) close('settings');
         } catch {}
-      }, { capture: true });
+      }, false);
 
       window.addEventListener('keydown', (e) => {
         try {
@@ -804,6 +866,34 @@ export function wireOverlays() {
           close('settings');
         } catch {}
       });
+
+      const attachSettingsBtn = () => {
+        try {
+          const selector = '#settingsBtn, [data-action="settings-open"]';
+          const buttons = document.querySelectorAll<HTMLElement>(selector);
+          buttons.forEach((btn) => {
+            const bound = (btn as any).__tpSettingsBound;
+            if (bound) return;
+              try {
+                btn.addEventListener('click', (e) => {
+                  try {
+                    (e as any)[HANDLED_FLAG] = true;
+                  } catch {}
+                  try { e.preventDefault(); } catch {}
+                  try { e.stopPropagation(); } catch {}
+                  try { (e as any).stopImmediatePropagation?.(); } catch {}
+                  try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+                  try { (window as any).__tpStore?.set?.('page', 'settings'); } catch {}
+                  try { open('settings'); } catch {}
+                  try { (window.ensureSettingsFolderControls || (()=>{}))(); } catch {}
+                }, { capture: true });
+                (btn as any).__tpSettingsBound = true;
+              } catch {}
+          });
+        } catch {}
+      };
+
+      attachSettingsBtn();
     } catch {}
   });
 }

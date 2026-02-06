@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Anvil - Pricing</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" sizes="512x512" href="assets/anvil-favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: 'Space Grotesk', 'Segoe UI', system-ui, sans-serif;
+        background-color: #05070c;
+        color: #f6f6f6;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at top left, rgba(214,106,46,0.35), transparent 30%),
+          radial-gradient(circle at 80% 25%, rgba(96,165,250,0.28), transparent 30%),
+          #05070c;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 2rem 1rem;
+      }
+      .page {
+        width: min(1100px, 100%);
+        background: rgba(5, 5, 10, 0.88);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 24px;
+        padding: clamp(2rem, 3vw, 3rem);
+        box-shadow: 0 30px 65px rgba(0,0,0,0.65);
+      }
+      .hero {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 2rem;
+      }
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(2.5rem, 4vw, 3rem);
+        font-family: 'UnifrakturCook', 'Cinzel Decorative', serif;
+      }
+      .hero p {
+        margin: 0.5rem 0 0;
+        max-width: 520px;
+        line-height: 1.6;
+        font-size: 1.05rem;
+        color: rgba(246,246,246,0.95);
+      }
+      .tagline {
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        opacity: 0.7;
+      }
+      .pricing-block {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin-bottom: 2rem;
+      }
+      .tier {
+        flex: 1;
+        min-width: 260px;
+        background: rgba(255,255,255,0.03);
+        border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.08);
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.6rem;
+      }
+      .tier span {
+        display: block;
+        font-size: 0.85rem;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        opacity: 0.7;
+      }
+      .tier .price {
+        font-size: 2rem;
+        font-weight: 600;
+      }
+      .tier .notes {
+        font-size: 0.95rem;
+        opacity: 0.8;
+      }
+      .tier .cta {
+        margin-top: 0.5rem;
+        padding: 0.75rem;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, #d66a2e, #f6cba1);
+        color: #121212;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .content {
+        display: grid;
+        gap: 1.5rem;
+      }
+      .content section {
+        background: rgba(255,255,255,0.02);
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.06);
+        padding: 1.5rem;
+        line-height: 1.6;
+      }
+      .content h3 {
+        margin-top: 0;
+        font-size: 1.2rem;
+      }
+      ul {
+        margin: 0.5rem 0 0;
+        padding-left: 1.25rem;
+      }
+      ul li {
+        margin-bottom: 0.35rem;
+      }
+      .cta-footer {
+        margin-top: 2rem;
+        display: flex;
+        justify-content: center;
+      }
+      .cta-footer button {
+        padding: 0.9rem 2.6rem;
+        border-radius: 999px;
+        border: none;
+        background: linear-gradient(135deg, #d66a2e, #f6cba1);
+        font-size: 1.05rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      @media (max-width: 768px) {
+        body {
+          padding: 1rem;
+        }
+        .hero {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .tp-login-video {
+          display: none;
+        }
+        .page {
+          border-radius: 18px;
+          padding: 1.5rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <p class="tagline">Anvil Teleprompter</p>
+      <div class="hero">
+        <h1>Professional teleprompting for podcasters and creators who read out loud.</h1>
+        <p>
+          Anvil is built for real-world recording — not influencer scripts, not AI voices, not gimmicks. It stays with
+          you as you speak, adapts when you pause or speed up, and keeps your delivery natural.
+        </p>
+      </div>
+      <div class="pricing-block">
+        <div class="tier">
+          <span>Anvil — Full Access</span>
+          <div class="price">$15 / month</div>
+          <div class="notes">Cancel anytime</div>
+          <button class="cta" type="button">Get Started</button>
+        </div>
+        <div class="tier">
+          <span>&nbsp;</span>
+          <div class="price">$40 / quarter</div>
+          <div class="notes">3 months · Save $5</div>
+          <button class="cta" type="button">Stack the Savings</button>
+        </div>
+      </div>
+      <div class="content">
+        <section>
+          <h3>What’s included</h3>
+          <ul>
+            <li>Speech-synced & Hybrid scrolling — no rigid pacing; Anvil listens and adapts in real time.</li>
+            <li>Manual, WPM, and Hybrid modes — switch to the workflow that fits you, even mid-session.</li>
+            <li>Mirrored display support — clean, distraction-free views for tablets, monitors, or teleprompter glass.</li>
+            <li>Recording controls & OBS integration — mark takes without breaking your flow.</li>
+            <li>Script formatting & validation — built-in structure, pacing cues, and safety checks.</li>
+            <li>Ongoing updates — every subscription includes improvements as Anvil evolves.</li>
+          </ul>
+        </section>
+        <section>
+          <h3>What this subscription covers</h3>
+          <p>
+            This plan includes Anvil only. Other tools in the Podcaster’s Forge ecosystem (script writing, editing,
+            publishing, etc.) are not included at this time and will be offered separately in the future.
+          </p>
+        </section>
+        <section>
+          <h3>Built for real voices</h3>
+          <p>
+            Anvil doesn’t try to sound like you. It doesn’t replace you. It just helps you deliver — smoothly, confidently,
+            and naturally. If you record podcasts, videos, or long-form spoken content, Anvil is built for the way you actually work.
+          </p>
+        </section>
+      </div>
+      <div class="cta-footer">
+        <button type="button">Start with Anvil</button>
+      </div>
+    </div>
+  </body>
+</html>

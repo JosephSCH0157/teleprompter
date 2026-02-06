@@ -11,7 +11,7 @@ jest.mock('../../recorders');
 
 function setupStore() {
   const subs: Record<string, Array<(v: unknown) => void>> = {};
-  const state: Record<string, unknown> = { autoRecord: false };
+  const state: Record<string, unknown> = { autoRecord: false, recordAudioOnly: false };
   return {
     state,
     set: (key: string, value: unknown) => {
@@ -85,6 +85,24 @@ describe('Settings recording UI (TS overlay)', () => {
     chk.dispatchEvent(new Event('change', { bubbles: true }));
     expect(RecorderApi.setSelected).not.toHaveBeenCalled(); // sanity: only auto toggle here
     expect(AutoSsot.setAutoRecordEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it('syncs audio-only toggle with store and stops the camera', () => {
+    mountSettingsOverlay();
+    const root = document.getElementById('settingsBody') as HTMLElement;
+    (window as any).__tpCamera = { stopCamera: jest.fn() };
+    wireSettingsDynamic(root);
+    const chk = root.querySelector('#settingsAudioOnly') as HTMLInputElement;
+    const hint = root.querySelector('#settingsAudioOnlyHint') as HTMLElement | null;
+
+    store.set('recordAudioOnly', true);
+    expect(chk.checked).toBe(true);
+    expect(hint?.hidden).toBe(false);
+    expect((window as any).__tpCamera.stopCamera).toHaveBeenCalled();
+
+    chk.checked = false;
+    chk.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(store.state.recordAudioOnly).toBe(false);
   });
 
   it('applies recorder adapter selections to registry', () => {

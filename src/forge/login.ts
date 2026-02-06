@@ -36,11 +36,23 @@ async function handleSignup(email: string, password: string): Promise<void> {
 }
 
 function getResetRedirectUrl(): string {
-  try {
-    return new URL('reset', window.location.href).toString();
-  } catch {
-    return '/reset';
+  const override = (window as any).__forgeResetRedirectUrl;
+  if (typeof override === 'string' && override.trim()) {
+    return override;
   }
+
+  const canonicalOrigin = (window as any).__forgeAppOrigin;
+  if (typeof canonicalOrigin === 'string' && canonicalOrigin.trim()) {
+    try {
+      return new URL('reset', canonicalOrigin).toString();
+    } catch {}
+  }
+
+  try {
+    return new URL('reset', window.location.origin).toString();
+  } catch {}
+
+  return '/reset';
 }
 
 async function handleForgotPassword(email: string): Promise<void> {

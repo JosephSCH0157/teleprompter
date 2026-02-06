@@ -1,9 +1,13 @@
 // @ts-nocheck
+import { ensureSpeechGlobals, isSpeechBackendAllowed } from './backend-guard';
 export {};
 
 // Loader for speech recognizer/matcher. Attaches `window.__tpRecognizer` and `window.__tpMatcher`
 // factories to allow gradual adoption by the legacy runtime.
+ensureSpeechGlobals();
 (async function () {
+  if (!isSpeechBackendAllowed()) return;
+
   const isDevMode = (() => {
     try {
       const qs = new URLSearchParams(location.search || '');
@@ -38,10 +42,10 @@ export {};
     };
 
     const recMod = await pick([
-      '/dist/speech/recognizer.js',
+      '/dist/speech/recognizer.real.js',
     ]);
     const matchMod = await pick([
-      '/dist/speech/matcher.js',
+      '/dist/speech/matcher.real.js',
     ]);
 
     if (recMod) {
@@ -59,7 +63,7 @@ export {};
 
     // high-level orchestrator (best-effort)
     const orch = await pick([
-      '/dist/speech/orchestrator.js',
+      '/dist/speech/orchestrator.real.js',
     ]);
     if (orch) {
       (window).__tpSpeech = (window).__tpSpeech || {};

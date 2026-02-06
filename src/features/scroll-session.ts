@@ -42,15 +42,24 @@ type StopAutoScrollContext = {
 
 function dispatchAutoIntent(enabled: boolean): void {
   try {
+    console.trace('[probe] dispatch tp:auto:intent', { enabled });
+  } catch {}
+  try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {
-      detail: { enabled, reason: 'session' },
+      detail: { enabled, reason: 'scriptEnd' },
     }));
   } catch {
     // ignore
   }
 }
 
-function startAutoScroll(): void {
+function startAutoScroll(mode: string): void {
+  if (mode !== 'timed') {
+    try {
+      console.debug('[scroll-session] auto-scroll start ignored (mode not timed)', { mode });
+    } catch {}
+    return;
+  }
   try {
     console.debug('[scroll-session] dispatching tp:auto:intent (start)');
   } catch {}
@@ -134,7 +143,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
   }
 
   if (!session.scrollAutoOnLive) {
-    try { console.debug('[scroll-session] auto-scroll disabled for live phase'); } catch {}
+    try { console.debug('[scroll-session] auto-scroll not starting on live (scrollAutoOnLive=false)'); } catch {}
     return;
   }
   if (!shouldRun) {
@@ -142,7 +151,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     return;
   }
   try { console.debug('[scroll-session] live phase with auto-on-live; starting auto-scroll', { mode: canonicalMode }); } catch {}
-  startAutoScroll();
+  startAutoScroll(canonicalModeStr);
 }
 
 export function initScrollSessionRouter(): void {
@@ -181,7 +190,7 @@ export function initScrollSessionRouter(): void {
         try { console.debug('[scroll-session] auto-scroll disabled for this mode (manual block)', { mode: canonicalMode }); } catch {}
         return;
       }
-      startAutoScroll();
+      startAutoScroll(String(canonicalMode));
     });
   } catch {
     // ignore

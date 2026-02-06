@@ -40,9 +40,6 @@ function dispatchAutoIntent(on: boolean, reason?: string): void {
     // ignore
   }
   try {
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on, reason } }));
-  } catch {}
-  try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason } }));
   } catch {}
 }
@@ -139,7 +136,7 @@ function initAutoControls(): void {
 
   toggleEl?.addEventListener('click', (ev) => {
     try { ev.preventDefault(); } catch {}
-    dispatchAutoIntent(!autoRunning, 'user-toggle');
+    dispatchAutoIntent(!autoRunning, 'user');
   }, { capture: true });
 
   window.addEventListener('tp:motorState', (ev) => {

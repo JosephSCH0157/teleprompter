@@ -29,6 +29,7 @@ try {
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 import './features/speech/speech-store';
+import './features/logout';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
 import { speechStore, type SpeechState } from './state/speech-store';
@@ -63,7 +64,7 @@ import { initDevDrawer } from './dev/dev-drawer';
 import { renderScript } from './render-script';
 import { setRecorderEnabled } from './state/recorder-settings';
 import { ensureUserAndProfile, loadProfileSettings, saveProfileSettings, applySettingsPatch, type PersistedAppKey, type UserSettings } from './forge/authProfile';
-import { hasSupabaseConfig } from './forge/supabaseClient';
+import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 import { bindLoadSample } from './ui/load-sample';
 import { bindObsSettingsUI } from './ui/obs-settings-bind';
 import { bindObsStatusPills } from './ui/obs-status-bind';
@@ -96,6 +97,7 @@ import { hasActiveAsrProfile, onAsr } from './asr/store';
 import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
+import { wireWhoamiChip } from './ui/whoami-chip';
 
 function showFatalFallback(): void {
   try {
@@ -129,13 +131,45 @@ function installFatalGuards(): void {
     if (w.__tpFatalGuards) return;
     w.__tpFatalGuards = true;
 
-    window.onerror = (_msg, _src, _line, _col, err) => {
-      try { console.error('[TP-FATAL:window]', err); } catch {}
+    const isBenignResizeObserverError = (msg?: unknown, err?: unknown) => {
+      const raw =
+        (typeof msg === 'string' && msg) ||
+        (err && typeof (err as any).message === 'string' ? (err as any).message : '') ||
+        '';
+      const lowered = raw.toLowerCase();
+      if (!lowered.includes('resizeobserver')) return false;
+      return lowered.includes('loop limit exceeded') || lowered.includes('undelivered notifications');
+    };
+
+    window.onerror = (msg, src, line, col, err) => {
+      const payload = {
+        msg,
+        src,
+        line,
+        col,
+        errMessage: err?.message,
+        errStack: err?.stack,
+      };
+      if (isBenignResizeObserverError(msg, err)) {
+        try { console.debug('[TP-FATAL:window] ignored ResizeObserver loop error', payload); } catch {}
+        return true;
+      }
+      try { console.error('[TP-FATAL:window]', payload); } catch {}
       showFatalFallback();
     };
 
     window.onunhandledrejection = (event) => {
-      try { console.error('[TP-FATAL:promise]', event?.reason); } catch {}
+      const reason = event?.reason;
+      const payload = {
+        reason,
+        reasonMessage: reason?.message,
+        reasonStack: reason?.stack,
+      };
+      if (isBenignResizeObserverError(undefined, reason)) {
+        try { console.debug('[TP-FATAL:promise] ignored ResizeObserver loop error', payload); } catch {}
+        return;
+      }
+      try { console.error('[TP-FATAL:promise]', payload); } catch {}
       showFatalFallback();
     };
   } catch {
@@ -202,6 +236,11 @@ function attachScrollWriterOnce(): void {
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
+try {
+	if (hasSupabaseConfig) {
+		wireWhoamiChip(supabase);
+	}
+} catch {}
 // Early-safe OBS UI/status wiring: binders are idempotent and will wait for DOM
 try { bindObsSettingsUI(); } catch {}
 try { bindObsStatusPills(); } catch {}
@@ -805,7 +844,10 @@ function applyUiScrollMode(
   };
   const dispatchAutoIntentEvent = (on: boolean) => {
     try {
-      document.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on } }));
+      console.trace('[probe] dispatch tp:auto:intent', { on });
+    } catch {}
+    try {
+      document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));
     } catch {}
   };
   const setScrollModeFromUi = (next: UiScrollMode) => {

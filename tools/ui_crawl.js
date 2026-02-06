@@ -8,6 +8,45 @@ const cp = require('child_process');
   try{
     const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
     const page = await browser.newPage();
+    let displayPage = null;
+    let displayPageUrl = null;
+    const displayPageTracked = new WeakSet();
+    const isDisplayUrl = (u) => {
+      try {
+        const s = String(u || '');
+        return /display\.html/i.test(s) || /[?&]display=1(?!\d)/i.test(s);
+      } catch {
+        return false;
+      }
+    };
+    const markDisplayPage = (p, url) => {
+      if (!p) return;
+      displayPage = p;
+      displayPageUrl = url || null;
+    };
+    const trackDisplayTarget = async (target) => {
+      try {
+        if (!target || target.type() !== 'page') return;
+        let p = null;
+        try { p = await target.page(); } catch {}
+        if (!p) return;
+        let url = '';
+        try { url = target.url(); } catch {}
+        if (url && isDisplayUrl(url)) markDisplayPage(p, url);
+        if (!displayPageTracked.has(p)) {
+          displayPageTracked.add(p);
+          p.on('framenavigated', (frame) => {
+            try {
+              if (frame !== p.mainFrame()) return;
+              const nextUrl = frame.url();
+              if (isDisplayUrl(nextUrl)) markDisplayPage(p, nextUrl);
+            } catch {}
+          });
+        }
+      } catch {}
+    };
+    try { browser.on('targetcreated', trackDisplayTarget); } catch {}
+    try { browser.on('targetchanged', trackDisplayTarget); } catch {}
     // Polyfill waitForTimeout for environments where it's missing
     if (!page.waitForTimeout) {
       page.waitForTimeout = (ms) => new Promise((resolve) => setTimeout(resolve, typeof ms === 'number' ? ms : 0));
@@ -218,6 +257,101 @@ const cp = require('child_process');
         return { before, after, delta: after - before };
       });
     }
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, typeof ms === 'number' ? ms : 0));
+    async function findDisplayPage() {
+      try {
+        if (displayPage && displayPage.isClosed && displayPage.isClosed()) {
+          displayPage = null;
+          displayPageUrl = null;
+        }
+      } catch {}
+      if (displayPage) return displayPage;
+      try {
+        const pages = await browser.pages();
+        for (const p of pages) {
+          let u = '';
+          try { u = p.url(); } catch {}
+          if (isDisplayUrl(u)) {
+            markDisplayPage(p, u);
+            return p;
+          }
+        }
+      } catch {}
+      return null;
+    }
+    async function findDisplaySelector() {
+      const selectors = [
+        '#displayToggleBtn',
+        '#displayToggleBtnSidebar',
+        '#displayWindowBtn',
+        '[data-action="display"]',
+        '[data-action="display-toggle"]',
+      ];
+      for (const sel of selectors) {
+        try {
+          if (await page.$(sel)) return sel;
+        } catch {}
+      }
+      return null;
+    }
+    async function ensureDisplayPage(timeout = 1500) {
+      const existing = await findDisplayPage();
+      if (existing) return existing;
+      const popupPromise = new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(null), timeout);
+        try {
+          page.once('popup', (p) => {
+            try { clearTimeout(timer); } catch {}
+            resolve(p || null);
+          });
+        } catch {
+          resolve(null);
+        }
+      });
+      const targetPromise = browser
+        .waitForTarget((t) => t.type() === 'page' && isDisplayUrl(t.url()), { timeout })
+        .then((t) => (t ? t.page() : null))
+        .catch(() => null);
+      let opened = false;
+      try {
+        opened = await page.evaluate(() => {
+          try {
+            if (window.__tpDisplay && typeof window.__tpDisplay.openDisplay === 'function') {
+              window.__tpDisplay.openDisplay();
+              return true;
+            }
+            if (typeof window.openDisplay === 'function') {
+              window.openDisplay();
+              return true;
+            }
+            window.open('display.html', 'TeleprompterDisplay', 'width=1000,height=700');
+            return true;
+          } catch {
+            return false;
+          }
+        });
+      } catch {}
+      if (!opened) {
+        const sel = await findDisplaySelector();
+        if (!sel) return null;
+        try { await page.click(sel); } catch {}
+      }
+      const popup = await Promise.race([popupPromise, targetPromise]);
+      if (popup) {
+        try { markDisplayPage(popup, popup.url()); } catch { markDisplayPage(popup, null); }
+      }
+      await sleep(120);
+      if (displayPage) {
+        try {
+          await displayPage.waitForFunction(
+            () => location.href.includes('display.html') || /[?&]display=1(?!\d)/.test(location.search || ''),
+            { timeout: 2000 },
+          );
+        } catch {}
+        try { displayPageUrl = displayPage.url(); } catch {}
+      }
+      return displayPage || null;
+    }
     await waitReady(page).catch(()=>{});
     await forceSettingsInject(page).catch(()=>{});
     await forceSample(page).catch(()=>{});
@@ -359,6 +493,24 @@ const cp = require('child_process');
       try { await page.waitForSelector('#script', { timeout: 5000 }); } catch {}
       try { await page.waitForSelector('#legend', { timeout: 5000 }); } catch {}
       await page.waitForTimeout(200);
+      const getLegendProbe = async (targetPage) => {
+        if (!targetPage) return [];
+        try { await targetPage.waitForSelector('#legend', { timeout: 3000 }); } catch {}
+        try { if (targetPage.waitForTimeout) await targetPage.waitForTimeout(120); } catch {}
+        try {
+          return await targetPage.evaluate(() => {
+            try {
+              const items = Array.from(document.querySelectorAll('#legend .tag'));
+              return items.slice(0, 6).map(el => {
+                const dot = el.querySelector('.dot');
+                const color = dot ? getComputedStyle(dot).backgroundColor : null;
+                const txt = (el.textContent || '').trim();
+                return { text: txt, color };
+              });
+            } catch { return []; }
+          });
+        } catch { return []; }
+      };
         // Force Hybrid gate open during probe to make movement deterministic
         try { await page.evaluate(() => localStorage.setItem('tp_hybrid_bypass','1')); } catch {}
       // Ensure long content for stability: load sample twice or inject if needed
@@ -385,17 +537,6 @@ const cp = require('child_process');
             await sleep(200);
           }
         } catch {}
-        const legendProbe = (function() {
-          try {
-            const items = Array.from(document.querySelectorAll('#legend .tag'));
-            return items.slice(0, 6).map(el => {
-              const dot = el.querySelector('.dot');
-              const color = dot ? getComputedStyle(dot).backgroundColor : null;
-              const txt = (el.textContent||'').trim();
-              return { text: txt, color };
-            });
-          } catch { return []; }
-        })();
         // Inject sample and try both input-driven and explicit render if available
         const sample = '[s1]\nHello from S1\n[/s1]\n[s2]\nWorld from S2\n[/s2]\n';
         try {
@@ -495,9 +636,17 @@ const cp = require('child_process');
             return { hasBtn, hasDataAction, hadPillBefore, hasPillAfter, btnId };
           } catch { return { hasBtn:false, hasDataAction:false, hadPillBefore:false, hasPillAfter:false } }
         })();
-        return { legendProbe, renderProbe, hudProbe, lateProbe, settingsProbe, obsTestProbe };
+        return { renderProbe, hudProbe, lateProbe, settingsProbe, obsTestProbe };
       });
-      out.legendProbe = probes.legendProbe;
+      const legendProbeMain = await getLegendProbe(page);
+      const displayPageNow = await ensureDisplayPage(1500).catch(() => null);
+      const legendProbeDisplay = displayPageNow ? await getLegendProbe(displayPageNow) : [];
+      const legendProbeSource = displayPageNow ? 'display' : 'main';
+      out.legendProbeMain = legendProbeMain;
+      out.legendProbeDisplay = legendProbeDisplay;
+      out.legendProbeSource = legendProbeSource;
+      out.legendProbe = displayPageNow ? legendProbeDisplay : legendProbeMain;
+      out.displayWindow = { present: !!displayPageNow, url: displayPageUrl || null };
       out.renderProbe = probes.renderProbe;
       out.hudProbe = probes.hudProbe;
       out.lateProbe = probes.lateProbe;

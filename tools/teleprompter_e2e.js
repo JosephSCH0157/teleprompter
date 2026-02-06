@@ -327,15 +327,26 @@ async function main() {
       return false;
     })();
     if (openedVia) {
-      const ok = await (async () => {
-        const offAt = Date.now() + 2000;
-        while (Date.now() < offAt) {
-          const v = await page.evaluate(() => document.body.getAttribute('data-smoke-open') || '');
-          if (v === 'settings') return true;
-          await page.waitForTimeout(50);
-        }
+      const ok = await page.waitForFunction(() => {
+        try {
+          const attr = document.body && document.body.getAttribute('data-smoke-open');
+          if (attr === 'settings') return true;
+          const overlay = document.querySelector('#settingsOverlay,[data-overlay="settings"]');
+          if (overlay) {
+            const hidden = overlay.classList.contains('hidden') || overlay.hasAttribute('hidden');
+            const style = window.getComputedStyle(overlay);
+            const displayNone = style && style.display === 'none';
+            const visibilityHidden = style && style.visibility === 'hidden';
+            if (!hidden && !displayNone && !visibilityHidden) return true;
+          }
+          const body = document.getElementById('settingsBody');
+          if (body) {
+            const style = window.getComputedStyle(body);
+            if (style && style.display !== 'none' && style.visibility !== 'hidden') return true;
+          }
+        } catch {}
         return false;
-      })();
+      }, { timeout: 2000, polling: 100 }).then(() => true).catch(() => false);
       if (!ok) console.warn('[e2e] settings not observed open (pre-smoke)');
       // Close it back to avoid interfering with later checks
       await clickIf('#settingsClose') || await clickIf('[data-action="settings-close"]');

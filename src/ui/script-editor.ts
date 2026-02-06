@@ -3,6 +3,7 @@
 import { debugLog } from '../env/logging';
 import { ScriptStore } from '../features/scripts-store';
 import { applyScript } from '../features/apply-script';
+import { getLastScriptId } from '../features/script-selection';
 
 declare global {
   interface Window {
@@ -23,6 +24,8 @@ type MappedEntry = { id: string; title: string; handle?: FileSystemFileHandle };
 
 type SelectRole = 'sidebar' | 'settings';
 const SETTINGS_SELECT_ID = 'scriptSelect';
+const OPEN_SETTINGS_COMMAND = '__OPEN_SETTINGS__';
+let lastSidebarValidSelection: string | null = null;
 
 function gatherScriptEntries(): MappedEntry[] {
   const entries = ScriptStore.getMappedEntries ? ScriptStore.getMappedEntries() as MappedEntry[] : [];
@@ -35,13 +38,52 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
     return;
   }
   const previous = select.value;
+
+  const finishSync = () => {
+    try { select.setAttribute('aria-busy', 'false'); } catch {}
+    debugLog('[SCRIPT-EDITOR] syncSelectFromStore', {
+      role,
+      entries: entries.length,
+      value: select.value,
+    });
+    if (role === 'sidebar' && select.value && select.value !== OPEN_SETTINGS_COMMAND) {
+      lastSidebarValidSelection = select.value;
+    }
+  };
+
+  if (role === 'sidebar' && previous === OPEN_SETTINGS_COMMAND) {
+    debugLog('[SCRIPT-EDITOR] syncSelectFromStore: sentinel command consumed, reverting', {
+      role,
+      entries: entries.length,
+      value: previous,
+      revertTo: lastSidebarValidSelection,
+    });
+    if (!entries.length) {
+      finishSync();
+      return;
+    }
+    let nextValue = lastSidebarValidSelection;
+    if (!nextValue) {
+      const lastId = getLastScriptId();
+      if (lastId && entries.some((entry) => entry.id === lastId)) {
+        nextValue = lastId;
+      }
+    }
+    if (!nextValue && entries.length) {
+      nextValue = entries[0].id;
+    }
+    select.value = nextValue || '';
+    finishSync();
+    return;
+  }
+
   select.innerHTML = '';
   if (!entries.length) {
     const placeholderText =
       role === 'sidebar'
         ? 'Map script folder...'
         : 'No existing scripts yet - map folder and save new ones here';
-    const placeholder = new Option(placeholderText, role === 'sidebar' ? '__OPEN_SETTINGS__' : '', true, true);
+    const placeholder = new Option(placeholderText, role === 'sidebar' ? OPEN_SETTINGS_COMMAND : '', true, true);
     if (role === 'sidebar') {
       (placeholder as any).dataset.settingsLink = '1';
       select.disabled = false;
@@ -50,28 +92,25 @@ function syncSelectFromStore(select: HTMLSelectElement | null, role: SelectRole,
     }
     select.append(placeholder);
     select.value = placeholder.value;
-  } else {
-    select.disabled = false;
-    const fragment = document.createDocumentFragment();
-    for (const entry of entries) {
-      const option = document.createElement('option');
-      option.value = entry.id;
-      option.textContent = entry.title || entry.id;
-      fragment.appendChild(option);
-    }
-    select.append(fragment);
-    if (previous && entries.some((entry) => entry.id === previous)) {
-      select.value = previous;
-    } else {
-      select.value = entries[0].id;
-    }
+    finishSync();
+    return;
   }
-  try { select.setAttribute('aria-busy', 'false'); } catch {}
-  debugLog('[SCRIPT-EDITOR] syncSelectFromStore', {
-    role,
-    entries: entries.length,
-    value: select.value,
-  });
+
+  select.disabled = false;
+  const fragment = document.createDocumentFragment();
+  for (const entry of entries) {
+    const option = document.createElement('option');
+    option.value = entry.id;
+    option.textContent = entry.title || entry.id;
+    fragment.appendChild(option);
+  }
+  select.append(fragment);
+  if (previous && entries.some((entry) => entry.id === previous)) {
+    select.value = previous;
+  } else {
+    select.value = entries[0].id;
+  }
+  finishSync();
 }
 
 function syncScriptSelectsFromStore(): void {

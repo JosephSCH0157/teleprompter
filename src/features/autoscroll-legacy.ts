@@ -121,7 +121,7 @@ function dispatchAutoIntent(on: boolean, reason?: string): void {
     if (typeof window !== 'undefined') {
       window.__tpAutoIntentPending = on;
     }
-    window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on, reason } }));
+    window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason } }));
   } catch {}
 }
 
@@ -504,10 +504,10 @@ export function initAutoScroll(viewerGetter: ViewerGetter): AutoScrollController
           toggleEl.addEventListener('click', () => {
             if (active) {
               stop();
-              dispatchAutoIntent(false, 'legacy-toggle');
+              dispatchAutoIntent(false, 'user');
             } else {
               start();
-              dispatchAutoIntent(true, 'legacy-toggle');
+              dispatchAutoIntent(true, 'user');
             }
           });
         }

@@ -958,13 +958,24 @@ html.tp-present .present-exit { display: inline-flex; }
     );
 }
 
-/* overlays must never intercept when hidden */
-.overlay[hidden],
-#settingsOverlay[hidden],
-#shortcutsOverlay[hidden],
-#helpOverlay[hidden] {
-    display: none !important;
-    pointer-events: none !important;
+  /* overlays must never intercept when hidden */
+  .overlay[hidden],
+  #settingsOverlay[hidden],
+  #shortcutsOverlay[hidden],
+  #helpOverlay[hidden] {
+      display: none !important;
+      pointer-events: none !important;
+  }
+
+/* Settings overlay must always have a box before content mounts */
+#settingsOverlay {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    min-width: 100vw;
+    min-height: 100vh;
+    flex: none;
 }
 
 [data-script-view] .line{padding:2px 0;}

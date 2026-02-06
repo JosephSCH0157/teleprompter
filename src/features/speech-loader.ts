@@ -25,6 +25,9 @@ import {
 } from '../ui/speaker-profiles-store';
 import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
 import type { SpeakerSlot } from '../types/speaker-profiles';
+import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
+
+ensureSpeechGlobals();
 
 type AnyFn = (...args: any[]) => any;
 
@@ -125,7 +128,7 @@ function _showToast(msg: string) {
 }
 
 // One entry point for speech. Uses Web Speech by default.
-// If /dist/speech/orchestrator.js exists (built from TS), we load it instead.
+// If /dist/speech/orchestrator.real.js exists (built from TS), we load it instead.
 // Autoscroll is managed externally; buffered stop handled in index listener
 
 let running = false;
@@ -345,7 +348,7 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
   } catch {}
 }
 
-// (dynamic import of '/dist/speech/orchestrator.js' is performed inline where needed)
+// (dynamic import of '/dist/speech/orchestrator.real.js' is performed inline where needed)
 
 // Minimal Web Speech fallback
 function _startWebSpeech(): { stop: () => void } | null {
@@ -1134,8 +1137,19 @@ export function installSpeech(): void {
         () => {
           const session = getSession();
           if (session.phase === 'preroll' || session.phase === 'live') {
+            const mode = getScrollMode();
+            const needsSpeech = mode === 'asr' || mode === 'hybrid';
+            if (needsSpeech && !running) {
+              try {
+                console.warn('[session/stop] ignoring stop click because speech backend never ran', {
+                  mode,
+                  phase: session.phase,
+                });
+              } catch {}
+              return;
+            }
             try { console.debug('[session/stop] click in phase=', session.phase); } catch {}
-            const stopIntent = { source: 'recBtn', phase: session.phase, reason: 'session-stop' };
+            const stopIntent = { source: 'recBtn', phase: session.phase, reason: 'user' };
             dispatchSessionIntent(false, stopIntent);
             try { setSessionPhase('wrap'); } catch {}
             try {
@@ -1148,8 +1162,8 @@ export function installSpeech(): void {
             return;
           }
           try { console.debug('[session/start] phase', session.phase, '→ preroll'); } catch {}
-          const startIntent = { source: 'recBtn', reason: 'session-start' };
-          dispatchSessionIntent(true, startIntent);
+          const startIntent = { source: 'recBtn', reason: 'user' };
+          try { setSessionPhase('preroll'); } catch {}
           try {
             window.dispatchEvent(
               new CustomEvent('tp:session:start', {
@@ -1157,7 +1171,7 @@ export function installSpeech(): void {
               }),
             );
           } catch {}
-          try { setSessionPhase('preroll'); } catch {}
+          dispatchSessionIntent(true, startIntent);
           syncBtnUi('preroll');
         },
         { capture: true },
@@ -1178,7 +1192,7 @@ async function probeUrl(url: string): Promise<boolean> {
 
 async function resolveOrchestratorUrl(): Promise<string> {
   const v = Date.now();
-  const primary = `/dist/speech/orchestrator.js?v=${v}`;
+  const primary = `/dist/speech/orchestrator.real.js?v=${v}`;
   try { console.log('[SPEECH] orchestrator resolved ->', primary); } catch {}
   return primary;
 }
@@ -1203,12 +1217,11 @@ async function resolveOrchestratorUrl(): Promise<string> {
         return false;
       })();
 
-      // Optional probe: only if explicitly opted-in; default avoids 404 noise in dev
-      const probeOptIn = (() => { try { return localStorage.getItem('tp_probe_speech') === '1' || new URLSearchParams(location.search).get('probe') === '1'; } catch { return false; } })();
-        let hasOrchestrator = hasGlobalOrch;
-        if (!hasOrchestrator && !ciGuard && probeOptIn) {
+      const backendAllowed = isSpeechBackendAllowed();
+      let hasOrchestrator = hasGlobalOrch;
+        if (!hasOrchestrator && backendAllowed && !ciGuard) {
           try {
-            hasOrchestrator = await probeUrl('/dist/speech/orchestrator.js');
+            hasOrchestrator = await probeUrl('/dist/speech/orchestrator.real.js');
           } catch {}
         }
 
@@ -1217,7 +1230,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
 
       if (canUse) setReadyUi(); else setUnsupportedUi();
       // Stash a flag for start path to decide whether to attempt dynamic import (no probe by default)
-      try { window.__tpSpeechCanDynImport = !!hasOrchestrator && !ciGuard; } catch {}
+      try { window.__tpSpeechCanDynImport = backendAllowed && !!hasOrchestrator && !ciGuard; } catch {}
 
       async function startBackend(): Promise<boolean> {
         if (isDevMode()) {
@@ -1309,7 +1322,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
               setListeningUi(true);
               try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
               await beginCountdownThen(sec, async () => {
-                try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true, reason: 'speech' } })); } catch {}
                 try {
                   window.dispatchEvent(new CustomEvent('tp:speechSync:ready', {
                     detail: { source: 'auto-only', preroll: sec }
@@ -1349,7 +1362,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
           });
           await beginCountdownThen(sec, async () => {
             // NOW start auto-scroll after countdown completes
-            try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: true } })); } catch {}
+            try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true, reason: 'speech' } })); } catch {}
             const ok = await startBackend();
             console.debug('[ASR] didCallStartRecognizer', { ok });
             console.debug('[ASR] recognizerRef', {
@@ -1416,7 +1429,6 @@ async function resolveOrchestratorUrl(): Promise<string> {
           } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
           // Optionally flip user intent OFF when speech stops
-          try { window.dispatchEvent(new CustomEvent('tp:autoIntent', { detail: { on: false } })); } catch {}
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
         } finally {
         }

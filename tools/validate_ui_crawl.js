@@ -24,6 +24,15 @@ const clicked = Array.isArray(report.clicked) ? report.clicked : [];
 const fileInputs = Array.isArray(report.fileInputs) ? report.fileInputs : [];
 const consoleEntries = Array.isArray(report.console) ? report.console : [];
 const legendProbe = Array.isArray(report.legendProbe) ? report.legendProbe : [];
+const legendProbeMain = Array.isArray(report.legendProbeMain) ? report.legendProbeMain : [];
+const legendProbeDisplay = Array.isArray(report.legendProbeDisplay) ? report.legendProbeDisplay : [];
+const legendProbeSource = typeof report.legendProbeSource === 'string' ? report.legendProbeSource : '';
+const displayWindow = report.displayWindow || {};
+const displayWindowPresent = !!displayWindow.present || legendProbeSource === 'display' || legendProbeDisplay.length > 0;
+const legendProbeUsed = displayWindowPresent
+  ? (legendProbeDisplay.length ? legendProbeDisplay : legendProbe)
+  : (legendProbeMain.length ? legendProbeMain : legendProbe);
+const legendProbeUsedSource = displayWindowPresent ? 'display window' : 'main window';
 const renderProbe = report.renderProbe || {};
 const contentLines = typeof report.contentLines === 'number' ? report.contentLines : null;
 const hudProbe = report.hudProbe || {};
@@ -183,11 +192,15 @@ try {
   if (contentLines !== null && contentLines < 60) {
     console.warn('WARN content-lines — expected >= 60 lines for movement probes (got ' + contentLines + ')');
   }
-  if (legendProbe.length < 2) {
-    const msg = 'legend — expected 2+ legend items, found ' + legendProbe.length;
+  if (!displayWindowPresent) {
+    console.warn('WARN legend — no display window detected; legend validated on main');
+  }
+  console.log(`legend check: ${legendProbeUsedSource} (${legendProbeUsed.length} items)`);
+  if (legendProbeUsed.length < 2) {
+    const msg = 'legend — expected 2+ legend items, found ' + legendProbeUsed.length;
     if (CI_STRICT) { console.error('FAIL ' + msg); allOk = false; } else { console.warn('WARN ' + msg); }
   } else {
-    console.log('PASS legend — items:', legendProbe.length);
+    console.log('PASS legend — items:', legendProbeUsed.length);
   }
   const { lineCount, iHello, iWorld, cHello, cWorld } = renderProbe;
   const colorDist = (a,b) => {
@@ -236,9 +249,11 @@ try {
     } else if (!a.sawEvent) {
       console.error('FAIL auto-state-no-event - router did not emit autoState');
       allOk = false;
-    } else if (!a.intentOn && a.mode !== 'hybrid') {
+    } else if (!a.intentOn && a.mode !== 'hybrid' && a.mode !== 'step') {
       // Accept hybrid if auto normalizes to hybrid in router
       console.warn('WARN auto-state-not-on - intent not ON; mode:', a.mode);
+    } else if (!a.intentOn && a.mode === 'step') {
+      console.log('PASS auto-state — step mode (intent not required)');
     } else if (!!a.intentOn && !(a.delta > 0)) {
       console.error('FAIL auto-state-no-movement - viewport did not move');
       allOk = false;
@@ -343,7 +358,7 @@ try {
     // Minimal summary compare: number of controls and legend/render presence
     const base = JSON.parse(require('fs').readFileSync(BASELINE_FILE, 'utf8'));
     const deltaControls = (clicked.length || 0) - ((base.clicked || []).length || 0);
-    console.log(`Summary: controls now=${clicked.length} (Δ${deltaControls>=0?'+':''}${deltaControls}) legend=${legendProbe.length} lines=${renderProbe.lineCount||0}`);
+    console.log(`Summary: controls now=${clicked.length} (Δ${deltaControls>=0?'+':''}${deltaControls}) legend=${legendProbeUsed.length} (${legendProbeUsedSource}) lines=${renderProbe.lineCount||0}`);
     if (VERBOSE) {
       // print small diff of control ids
       const curIds = new Set(clicked.map(c=>c.id).filter(Boolean));

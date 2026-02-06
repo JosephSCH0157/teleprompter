@@ -212,6 +212,17 @@ export function applyCanonicalScrollTop(
   return target;
 }
 
+export function getScrollEl(): HTMLElement | null {
+  return resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
+}
+
+export function writeScrollTop(
+  topPx: number,
+  opts: { scroller?: HTMLElement | null; reason?: string } = {},
+): number {
+  return applyCanonicalScrollTop(topPx, { scroller: opts.scroller, reason: opts.reason ?? 'writeScrollTop' });
+}
+
 if (typeof window !== 'undefined') {
   try {
     const w = window as any;
