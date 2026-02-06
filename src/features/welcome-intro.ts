@@ -248,6 +248,19 @@ export async function ensureWelcomeScript(): Promise<void> {
   }
 }
 
+export async function loadWelcomeGuide(opts?: { replace?: boolean }): Promise<void> {
+  if (typeof document === 'undefined') return;
+  if ((window as any).__TP_FORCE_DISPLAY) return;
+  const snapshot = captureEditorSnapshot();
+  if (!snapshot.isEmpty && !opts?.replace) {
+    const ok = window.confirm('Replace current script with the Welcome Guide?');
+    if (!ok) return;
+  }
+  const state = await resolveWelcomeState();
+  const script = buildWelcomeScript(state.displayName);
+  applyScript(script, 'load', { updateEditor: true });
+}
+
 export async function devResetWelcomeSeen(): Promise<void> {
   if (typeof window === 'undefined') return;
   if (!isDevMode()) {

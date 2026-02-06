@@ -703,9 +703,12 @@
 <!-- Near the end of <body> -->
 <div id="shortcutsOverlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle" data-overlay="help" hidden>
   <div class="sheet">
-    <header>
+    <header class="sheet-head">
       <h3 id="shortcutsTitle">Shortcuts</h3>
-  <button id="shortcutsClose" class="btn-chip btn-close" data-action="help-close">Close</button>
+      <div class="sheet-actions">
+        <button id="welcomeGuideBtn" class="btn-chip" type="button" data-action="welcome-guide">Welcome Guide</button>
+        <button id="shortcutsClose" class="btn-chip btn-close" data-action="help-close">Close</button>
+      </div>
     </header>
 
     <div class="shortcuts-grid">

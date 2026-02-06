@@ -12,6 +12,7 @@ import {
 } from '../scroll/scroller';
 import { setSessionPhase } from '../state/session';
 import { applyScript } from '../features/apply-script';
+import { loadWelcomeGuide } from '../features/welcome-intro';
 import { getNextSampleScript } from '../content/sample-scripts';
 import { flushPendingSettingsEdits } from '../ui/settings';
 import { initStepControls } from './step-controls';
@@ -838,6 +839,10 @@ export function wireOverlays() {
       document.addEventListener('click', (e) => {
         try {
           const t = e.target;
+          if (t && t.closest && t.closest('#welcomeGuideBtn, [data-action="welcome-guide"]')) {
+            loadWelcomeGuide();
+            return;
+          }
           if (t && t.closest && t.closest('#shortcutsBtn, [data-action="help-open"]')) {
             try { (window as any).__tpStore?.set?.('page', 'help'); } catch {}
             return open('shortcuts');

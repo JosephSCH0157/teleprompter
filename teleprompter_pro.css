@@ -34,6 +34,7 @@
 .tp-toast .tp-toast-action{margin-left:10px;padding:4px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:6px;color:inherit;cursor:pointer}
 .tp-toast .tp-toast-action:hover{background:rgba(255,255,255,.1)}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sheet-actions{display:flex;align-items:center;gap:8px}
 .shortcuts-grid{display:grid;grid-template-columns:180px 1fr;gap:calc(10px * var(--tp-ui-scale)) calc(16px * var(--tp-ui-scale));margin:calc(8px * var(--tp-ui-scale)) 0 calc(12px * var(--tp-ui-scale))}
 .shortcuts-grid .dim,.dim{opacity:.7}
 kbd{display:inline-block;min-width:1.6em;padding:.15em .45em;border:1px solid #374151;border-bottom-width:2px;border-radius:calc(6px * var(--tp-ui-scale));background:#111827;color:#e5e7eb;font:var(--tp-ui-font-sm)/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;text-align:center}
