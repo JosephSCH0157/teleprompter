@@ -241,7 +241,7 @@ async function pickFolder({ force }: { force?: boolean } = {}) {
   await renderFolder();
 }
 
-function wireRecorderAdapters(rootEl: HTMLElement) {
+function _wireRecorderAdapters(rootEl: HTMLElement) {
   const coreCb = rootEl.querySelector('#recAdapterCore') as HTMLInputElement | null;
   const obsCb = rootEl.querySelector('#recAdapterObs') as HTMLInputElement | null;
   const modeCb = rootEl.querySelector('#recModeSingle') as HTMLInputElement | null;
