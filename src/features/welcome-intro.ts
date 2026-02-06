@@ -180,7 +180,7 @@ async function resolveWelcomeState(): Promise<WelcomeState> {
         displayName: name,
         markSeen: async () => {
           writeLocalStorageFlag();
-          if (profile.workflow?.hasSeenWelcome) return;
+          if (profile.workflow?.hasSeenWelcome === true) return;
           try {
             await store.saveProfilePatch({ workflow: { hasSeenWelcome: true } });
             profile.workflow = { ...(profile.workflow ?? {}), hasSeenWelcome: true };

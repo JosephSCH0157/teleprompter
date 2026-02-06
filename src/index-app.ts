@@ -2250,6 +2250,18 @@ try {
 					try { installScriptIngest({}); } catch {}
 					try { installGlobalIngestListener(); } catch {}
 					try { void ensureWelcomeScript(); } catch {}
+					try {
+						window.addEventListener(
+							'tp:script:rendered',
+							() => { try { void ensureWelcomeScript(); } catch {} },
+							{ once: true },
+						);
+						window.addEventListener(
+							'tp:script-rendered',
+							() => { try { void ensureWelcomeScript(); } catch {} },
+							{ once: true },
+						);
+					} catch {}
           // Sidebar scripts refresh (mapped folder) + refresh button wiring
           try {
             (window as any).__tpRefreshScriptsSidebar = refreshScriptsSidebar;
