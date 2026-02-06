@@ -469,13 +469,59 @@ const hybridSilence = {
   erroredOnce: false,
   offScriptActive: false,
 };
+let offScriptSinceMs: number | null = null;
+let offScriptDurationMs = 0;
 let hybridSilence2 = 0;
 const HYBRID_CTRL_DEBUG_THROTTLE_MS = 500;
 let lastHybridCtrlDebugTs = 0;
 const HYBRID_TRUTH_THROTTLE_MS = 350;
 let lastHybridTruthAt = 0;
+const HYBRID_OFFSCRIPT_HUD_THROTTLE_MS = 350;
+let lastHybridOffScriptHudAt = 0;
 function setHybridSilence2(v: number) {
   hybridSilence2 = Number.isFinite(v) ? v : 0;
+}
+
+function resetOffScriptDuration() {
+  offScriptSinceMs = null;
+  offScriptDurationMs = 0;
+}
+
+function syncOffScriptDuration(now = nowMs()) {
+  if (hybridSilence.offScriptActive) {
+    if (offScriptSinceMs == null) {
+      offScriptSinceMs = now;
+      offScriptDurationMs = 0;
+      return;
+    }
+    offScriptDurationMs = Math.max(0, now - offScriptSinceMs);
+    return;
+  }
+  resetOffScriptDuration();
+}
+
+function computeOffScriptDecay(durationMs: number) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return 1;
+  if (durationMs < OFFSCRIPT_DECAY_T1_MS) return 1;
+  if (durationMs < OFFSCRIPT_DECAY_T2_MS) return 0.5;
+  if (durationMs < OFFSCRIPT_DECAY_T3_MS) return 0.25;
+  if (durationMs < OFFSCRIPT_DECAY_T4_MS) return OFFSCRIPT_DECAY_CRAWL;
+  return 0;
+}
+
+function logHybridOffScriptHud(payload: {
+  bestSim: number | null;
+  inBand: boolean;
+  offScriptEvidence: number;
+  offScriptActive: boolean;
+  offScriptDurationMs: number;
+  nextScale: number;
+  effectiveScale: number;
+}) {
+  const now = nowMs();
+  if (now - lastHybridOffScriptHudAt < HYBRID_OFFSCRIPT_HUD_THROTTLE_MS) return;
+  lastHybridOffScriptHudAt = now;
+  try { (window as any)?.HUD?.log?.('HYBRID_OFFSCRIPT', payload); } catch {}
 }
 
 function resetAsrIntentState(reason?: string) {
@@ -2057,6 +2103,11 @@ const HYBRID_ASSIST_DEFAULT_TTL = 320;
 const HYBRID_ASSIST_MAX_BOOST = 420;
 const OFFSCRIPT_EVIDENCE_THRESHOLD = 4;
 const OFFSCRIPT_EVIDENCE_RESET_MS = 2200;
+const OFFSCRIPT_DECAY_T1_MS = 2000;
+const OFFSCRIPT_DECAY_T2_MS = 6000;
+const OFFSCRIPT_DECAY_T3_MS = 10000;
+const OFFSCRIPT_DECAY_T4_MS = 12000;
+const OFFSCRIPT_DECAY_CRAWL = 0.1;
 const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
@@ -2525,6 +2576,7 @@ function startHybridGrace(reason: string) {
   hybridSilence.pausedBySilence = false;
   hybridSilence.lastSpeechAtMs = now;
   hybridSilence.offScriptActive = false;
+  resetOffScriptDuration();
   const timeoutId = hybridSilence.timeoutId;
   if (timeoutId != null) {
     try {
@@ -2710,6 +2762,7 @@ function stopHybridMotor(reason?: string) {
     hybridGraceUntil = 0;
     hybridSilence.pausedBySilence = false;
     hybridSilence.offScriptActive = false;
+    resetOffScriptDuration();
     hybridSilence.lastSpeechAtMs = nowMs();
     pauseAssistTailBoost = 0;
     pauseAssistTailUntil = 0;
@@ -3841,6 +3894,9 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
   function updateHybridScaleFromDetail(detail: { bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
+    const now = nowMs();
+    const inBandValue = detail.inBand;
+    const inBand = inBandValue === 1 || inBandValue === true || inBandValue === "1";
     const bestSimRaw = detail.bestSim ?? detail.sim ?? detail.score;
     const bestSim = Number.isFinite(bestSimRaw) ? Number(bestSimRaw) : null;
     if (bestSim !== null && bestSim >= HYBRID_HARD_NOMATCH_SIM_MIN) {
@@ -3849,7 +3905,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const scaleDetail = { ...detail, bestSim, sim: bestSim ?? detail.sim };
     const nextScale = determineHybridScaleFromDetail(scaleDetail);
     if (nextScale == null) return;
-    const now = nowMs();
+    const logHud = () => {
+      syncOffScriptDuration(now);
+      const currentScale = Number.isFinite(hybridScale) ? hybridScale : 1;
+      const decay = hybridSilence.offScriptActive ? computeOffScriptDecay(offScriptDurationMs) : 1;
+      const effectiveScale = currentScale * decay;
+      logHybridOffScriptHud({
+        bestSim,
+        inBand,
+        offScriptEvidence,
+        offScriptActive: hybridSilence.offScriptActive,
+        offScriptDurationMs,
+        nextScale,
+        effectiveScale,
+      });
+    };
     const isNoMatch = detail.noMatch === true;
     const significantNoMatch = isNoMatch && !isWeakNoMatch(detail);
     const goodMatch = nextScale === RECOVERY_SCALE && !significantNoMatch;
@@ -3859,6 +3929,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       lastOffScriptEvidenceTs = 0;
       setHybridScale(RECOVERY_SCALE);
+      logHud();
       return;
     }
     if (significantNoMatch) {
@@ -3866,7 +3937,10 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     const offscriptCandidate = nextScale < RECOVERY_SCALE;
     const shouldCountOffscript = offscriptCandidate && (significantNoMatch || !isNoMatch);
-    if (!shouldCountOffscript) return;
+    if (!shouldCountOffscript) {
+      logHud();
+      return;
+    }
     onScriptStreak = 0;
     if (lastOffScriptEvidenceTs && now - lastOffScriptEvidenceTs > OFFSCRIPT_EVIDENCE_RESET_MS) {
       offScriptEvidence = 0;
@@ -3877,6 +3951,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       setHybridScale(nextScale);
     }
+    logHud();
   }
   function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (getScrollMode() !== "hybrid") return;
@@ -4019,8 +4094,18 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     const clamped = Math.max(0, Math.min(nextScale, 1));
     if (hybridScale === clamped) return false;
+    const prevOffScript = hybridSilence.offScriptActive;
     hybridScale = clamped;
-    hybridSilence.offScriptActive = clamped < RECOVERY_SCALE;
+    const nextOffScript = clamped < RECOVERY_SCALE;
+    hybridSilence.offScriptActive = nextOffScript;
+    if (prevOffScript !== nextOffScript) {
+      if (nextOffScript) {
+        offScriptSinceMs = nowMs();
+        offScriptDurationMs = 0;
+      } else {
+        resetOffScriptDuration();
+      }
+    }
     runHybridVelocity(hybridSilence);
     return true;
   }
@@ -4201,6 +4286,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     candidateErrorLines?: number | null,
     weakMatch = false,
   ) {
+    syncOffScriptDuration(now);
     const pauseLikely =
       typeof pauseLikelyOverride === "boolean" ? pauseLikelyOverride : isPlannedPauseLikely();
     const scaleFromSilence =
@@ -4210,7 +4296,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         ? SILENCE_SCALE
         : 1;
     const offScriptActive = forceOffScript || silence.offScriptActive;
-    const scaleFromOffscript = offScriptActive ? OFFSCRIPT_SCALE : 1;
+    const offScriptDecay = silence.offScriptActive ? computeOffScriptDecay(offScriptDurationMs) : 1;
+    const scaleFromOffscript = offScriptActive ? OFFSCRIPT_SCALE * offScriptDecay : 1;
     const graceActive = isHybridGraceActive(now);
     const scaleFromGrace = GRACE_MIN_SCALE;
     const nearTarget =
@@ -4234,6 +4321,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
         onScriptLocked,
         offScriptActive,
         pausedBySilence: silence.pausedBySilence,
+        offScriptDurationMs: silence.offScriptActive ? offScriptDurationMs : 0,
+        offScriptDecay,
       };
     }
     let chosenScale = 1;
@@ -4262,6 +4351,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       onScriptLocked,
       offScriptActive,
       pausedBySilence: silence.pausedBySilence,
+      offScriptDurationMs: silence.offScriptActive ? offScriptDurationMs : 0,
+      offScriptDecay,
     };
   }
 
@@ -4379,12 +4470,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       onScriptLocked,
       offScriptActive,
       pausedBySilence,
+      offScriptDecay,
     } = hybridScaleDetail;
 
     // --- Hybrid Aggro policy -------------------------------------------------
     const aggro = isHybridAggroEnabled();
     const commitBoost = isHybridCommitBoostActive();
     let effectiveScale = effectiveScaleRaw;
+    const offScriptScale =
+      hybridSilence.offScriptActive && Number.isFinite(hybridScale)
+        ? clamp(hybridScale, 0, 1)
+        : 1;
+    const offScriptMultiplier =
+      offScriptActive && Number.isFinite(offScriptDecay) ? offScriptScale * offScriptDecay : 1;
 
     // Aggro tuning knobs (prove capability first; dial back later)
     const maxScale = aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT;
@@ -4567,9 +4665,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       finalScale = clamp(finalScale, HYBRID_CTRL_ON_TARGET_MULT_MIN, HYBRID_CTRL_ON_TARGET_MULT_MAX);
     }
 
-    const finalPxpsBase = Math.max(HYBRID_CTRL_MIN_PXPS, baseWithCorrection * finalScale);
+    if (offScriptMultiplier !== 1) {
+      finalScale *= offScriptMultiplier;
+      reasons.push('offscriptDecay');
+    }
+
+    const minPxps = offScriptMultiplier < 1 ? 0 : HYBRID_CTRL_MIN_PXPS;
+    const finalPxpsBase = Math.max(minPxps, baseWithCorrection * finalScale);
     const assistFloorBoostPx = assistEligible && isBehind ? base * HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC : 0;
-    const finalPxps = finalPxpsBase + assistFloorBoostPx;
+    const finalPxps = finalPxpsBase + assistFloorBoostPx * offScriptMultiplier;
     const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
     const targetTopSourceRaw = errorInfo?.targetTopSource ?? null;
     const targetTopAnchor = targetTopSourceRaw === 'anchor';
