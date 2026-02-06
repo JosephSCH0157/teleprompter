@@ -1793,21 +1793,21 @@
       }
     },
     {
-      "type": "warning",
-      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
-      "location": {
-        "url": "http://127.0.0.1:5180/index.js",
-        "lineNumber": 54120,
-        "columnNumber": 14
-      }
-    },
-    {
       "type": "log",
       "text": "[settings-mapped-folder:smoke] JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/index.js",
         "lineNumber": 55361,
         "columnNumber": 16
+      }
+    },
+    {
+      "type": "warning",
+      "text": "[welcome-intro] unable to fetch profile for welcome script JSHandle@error",
+      "location": {
+        "url": "http://127.0.0.1:5180/index.js",
+        "lineNumber": 54120,
+        "columnNumber": 14
       }
     },
     {
@@ -2603,7 +2603,7 @@
       "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
       "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "url": "http://127.0.0.1:5180/index.js",
         "lineNumber": 36035
       }
     },
@@ -2611,7 +2611,7 @@
       "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
       "location": {
-        "url": "http://127.0.0.1:5180/index.js",
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 36035
       }
     },
@@ -3366,6 +3366,14 @@
       "type": "error",
       "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
       "location": {
+        "url": "http://127.0.0.1:5180/index.js",
+        "lineNumber": 36035
+      }
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
+      "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 36035
       }
@@ -3391,14 +3399,6 @@
       "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 36035
-      }
-    },
-    {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
-      "location": {
-        "url": "http://127.0.0.1:5180/index.js",
         "lineNumber": 36035
       }
     },
@@ -3562,6 +3562,22 @@
         "url": "http://127.0.0.1:5180/index.js",
         "lineNumber": 19726,
         "columnNumber": 14
+      }
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
+      "location": {
+        "url": "http://127.0.0.1:5180/index.js",
+        "lineNumber": 36035
+      }
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
+      "location": {
+        "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
+        "lineNumber": 6
       }
     },
     {
@@ -4021,22 +4037,6 @@
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 36035
       }
-    },
-    {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:4455/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED",
-      "location": {
-        "url": "https://cdn.jsdelivr.net/npm/obs-websocket-js@5.0.4/+esm",
-        "lineNumber": 6
-      }
-    },
-    {
-      "type": "error",
-      "text": "WebSocket connection to 'ws://127.0.0.1:5180/ws/display' failed: Error during WebSocket handshake: Unexpected response code: 404",
-      "location": {
-        "url": "http://127.0.0.1:5180/index.js",
-        "lineNumber": 36035
-      }
     }
   ],
   "notes": [
@@ -4050,9 +4050,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "8fefb2ac1927ec099915930bf1773beeb16817cf",
+      "gitSha": "e6576b425fed71893f2989cdaa98ff84f62a44e2",
       "branch": "repair/release-v1.8",
-      "buildTime": "2026-02-06T21:04:52.219Z"
+      "buildTime": "2026-02-06T21:13:54.562Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",
