@@ -218,6 +218,13 @@
   "errors": [],
   "console": [
     {
+      "type": "error",
+      "text": "Failed to load module script: Expected a JavaScript module script but the server responded with a MIME type of \"text/html\". Strict MIME type checking is enforced for module scripts per HTML spec.",
+      "location": {
+        "url": "http://127.0.0.1:5180/index.js"
+      }
+    },
+    {
       "type": "info",
       "text": "[VIEWER_ROLE] JSHandle@object",
       "location": {
@@ -813,6 +820,15 @@
     },
     {
       "type": "log",
+      "text": "[settings-mapped-folder:smoke] JSHandle@object",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 55361,
+        "columnNumber": 16
+      }
+    },
+    {
+      "type": "log",
       "text": "[ASR] legacy state built JSHandle@object",
       "location": {
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
@@ -1151,15 +1167,6 @@
         "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
         "lineNumber": 54120,
         "columnNumber": 14
-      }
-    },
-    {
-      "type": "log",
-      "text": "[settings-mapped-folder:smoke] JSHandle@object",
-      "location": {
-        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
-        "lineNumber": 55361,
-        "columnNumber": 16
       }
     },
     {
@@ -2808,6 +2815,15 @@
       }
     },
     {
+      "type": "warning",
+      "text": "[HYBRID_TRUTH] {\"basePxps\":4,\"finalPxps\":12,\"errorPx\":null,\"errorLines\":null,\"effectiveErrorLines\":null,\"targetMult\":1,\"lineMult\":1,\"capReason\":\"silence\",\"scaleReason\":\"silence\",\"weakMatch\":false,\"driftWeak\":false,\"bestSim\":null,\"offScriptActive\":false,\"noMatch\":null,\"sawNoMatch\":false,\"hardNoMatch\":false,\"targetTopSource\":null}",
+      "location": {
+        "url": "http://127.0.0.1:5180/dist/index.js?v=dev&b=20251227a",
+        "lineNumber": 17474,
+        "columnNumber": 12
+      }
+    },
+    {
       "type": "info",
       "text": "[HYBRID_FINAL_MILE] basePxps=4.00 deltaLines=0.00 errorPx=null reactiveScale=1.000 policyMult=0.850 preClampScale=0.850 scaleAfterCaps=0.850 capMax=2.800 floorMin=0.900 finalScale=0.900 finalPxps=12.00 reasons=deadband|silence|minClamp",
       "location": {
@@ -2927,9 +2943,9 @@
       "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1"
     },
     "build": {
-      "gitSha": "2e8d2dbc2c4e128569ca1dd1fe622bffef8f3415",
+      "gitSha": "bd0e75b96040166c72fef9ccde14b51b09520787",
       "branch": "repair/release-v1.8",
-      "buildTime": "2026-02-06T07:40:12.506Z"
+      "buildTime": "2026-02-06T18:09:41.468Z"
     }
   },
   "url": "http://127.0.0.1:5180/teleprompter_pro.html?ci=1",

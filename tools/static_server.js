@@ -153,6 +153,13 @@ const server = http.createServer((req, res) => {
 
     const u = decodeURI(basePath);
     let file = path.join(ROOT, u);
+    // Map root index.js requests to dist output when present (dist-first runtime).
+    if (u === '/index.js' || u === '/index.js.map') {
+      const distCandidate = path.join(ROOT, 'dist', u.replace(/^\//, ''));
+      if (fs.existsSync(distCandidate)) {
+        file = distCandidate;
+      }
+    }
     // Directory default to teleprompter_pro.html for '/'
     if (u === '/' || u === '') {
       file = path.join(ROOT, 'teleprompter_pro.html');
