@@ -1,4 +1,18 @@
 # Teleprompter Pro — Changelog
+## [1.8.2] - 2026-02-06
+
+Release: v1.8.2
+
+### Added
+
+- Audio-only recording mode (Core Recorder) with WAV output and a `REC - AUDIO` badge.
+- `robots.txt` to discourage indexing and block common AI/bulk crawlers.
+
+### Changed
+
+- Recording settings now split "Recording Engine" and "Recording Mode"; audio-only is disabled when OBS is selected.
+- Camera is only required for Video + Audio; audio-only skips camera validation and hides the camera preview.
+
 ## [1.8.0] - 2026-01-21
 
 Release: v1.8
