@@ -45,7 +45,7 @@ if (!entryPath) {
 
 const relEntry = toPosix(path.relative(DIST, entryPath));
 const manifest = {
-  entry: `./dist/${relEntry}`,
+  entry: `./${relEntry}`,
 };
 
 fs.writeFileSync(path.join(DIST, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');

@@ -54,11 +54,22 @@
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script type="module">
     (async () => {
-      const r = await fetch("./dist/manifest.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("Missing dist/manifest.json");
-      const m = await r.json();
-      if (!m?.entry) throw new Error("manifest.json missing entry");
-      await import(m.entry);
+      const manifestPaths = ["./dist/manifest.json", "./manifest.json"];
+      let manifest = null;
+      let manifestUrl = '';
+      for (const p of manifestPaths) {
+        try {
+          const r = await fetch(p, { cache: "no-store" });
+          if (!r.ok) continue;
+          manifest = await r.json();
+          manifestUrl = r.url || p;
+          break;
+        } catch {}
+      }
+      if (!manifest) throw new Error("Missing manifest.json");
+      if (!manifest?.entry) throw new Error("manifest.json missing entry");
+      const entryUrl = new URL(manifest.entry, manifestUrl).toString();
+      await import(entryUrl);
     })().catch((err) => {
       console.error("[TP-BOOT] failed to load entry from manifest", err);
     });
