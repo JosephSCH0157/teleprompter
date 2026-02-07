@@ -100,6 +100,19 @@
         box-shadow: inset 0 0 6px rgba(0,0,0,0.25);
       }
       .tp-login-button:hover { filter: brightness(1.05); }
+      .tp-login-back {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+        padding: 0.5rem 0.95rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.2);
+        background: rgba(0,0,0,0.35);
+        color: #f5f5f5;
+        cursor: pointer;
+      }
+      .tp-login-back:hover { background: rgba(0,0,0,0.48); }
       .tp-beta-cta {
         margin-top: 1.25rem;
         text-align: center;
@@ -259,6 +272,7 @@
             Forge your voice. Shape your story.<br>
             <span style="font-size:0.8rem; opacity:0.7;">Private beta Â· invite required</span>
           </div>
+          <button type="button" id="loginBackBtn" class="tp-login-back">Back</button>
 
           <div class="tp-beta-cta">
             <a
@@ -362,6 +376,21 @@
         ["uploadBtn", "openFile", "openFileBtn", "chooseFile", "loadFile", "uploadFileBtn"].forEach(wireUpload);
       })();
     </script>
+    <script>
+      (function () {
+        var backBtn = document.getElementById('loginBackBtn');
+        if (!backBtn) return;
+        backBtn.addEventListener('click', function () {
+          try {
+            if (window.history && window.history.length > 1) {
+              window.history.back();
+              return;
+            }
+          } catch (_) {}
+          window.location.href = '/teleprompter_pro.html';
+        });
+      })();
+    </script>
 
     <script src="/forge-config.js"></script>
     <!-- Adjust path if your bundler outputs somewhere else -->
@@ -387,4 +416,3 @@
     </script>
   </body>
 </html>
-
