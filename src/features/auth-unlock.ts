@@ -166,10 +166,17 @@ function maybeTriggerTrialLimit(): void {
 }
 
 function startTrialTimer(): void {
-  if (trialTimerId != null) return;
+  if (trialTimerId) return;
   trialTimerId = window.setInterval(() => {
     maybeTriggerTrialLimit();
   }, 250);
+}
+
+function unlockTrialControls(): void {
+  trialLocked = false;
+  liveStartedAt = 0;
+  stopTrialTimer();
+  syncTrialLockUi();
 }
 
 function clearTrialLimit(): void {
@@ -279,9 +286,8 @@ async function signOutCurrentUser(btn?: HTMLButtonElement | null): Promise<void>
 function applyAuthState(session: Session | null): void {
   currentSession = session;
   if (isAuthed()) {
-    trialLocked = false;
-    liveStartedAt = 0;
-    stopTrialTimer();
+    // Explicitly clear trial runtime state when auth flips on mid-session.
+    unlockTrialControls();
   }
   syncAuthHeader();
   syncIronMineUi();
