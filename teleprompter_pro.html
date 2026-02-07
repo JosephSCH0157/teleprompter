@@ -52,7 +52,17 @@
   <!-- OBS bridge (WebSocket client) must load before TS bundle so window.__obsBridge is available -->
   <!-- LEGACY COMPAT -->
   <script type="module" src="./adapters/obsBridge.js"></script>
-  <script id="tp-dist-entry" type="module" src="./dist/index.js?v=dev"></script>
+  <script type="module">
+    (async () => {
+      const r = await fetch("./dist/manifest.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("Missing dist/manifest.json");
+      const m = await r.json();
+      if (!m?.entry) throw new Error("manifest.json missing entry");
+      await import(m.entry);
+    })().catch((err) => {
+      console.error("[TP-BOOT] failed to load entry from manifest", err);
+    });
+  </script>
   <!-- Dev HUD / debug tools removed (TS HUD is canonical) -->
 
 <!-- Dev flag: add .tp-dev class early so CSS can key off it -->

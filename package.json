@@ -11,7 +11,7 @@
     "lint:strict": "node tools/run-eslint.mjs --max-warnings=0",
     "lint:fix": "node tools/run-eslint.mjs --fix",
     "dev": "npx live-server --port=8080 --no-browser --watch=.",
-    "build:ts": "esbuild src/index.ts src/forge/login.ts src/forge/account.ts src/forge/reset.ts src/display-renderer.ts src/net/display-ws-display-client.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src",
+    "build:ts": "esbuild src/index.ts src/forge/login.ts src/forge/account.ts src/forge/reset.ts src/display-renderer.ts src/net/display-ws-display-client.ts --bundle --format=esm --sourcemap --outdir=dist --outbase=src && node scripts/gen-esbuild-manifest.mjs",
     "build:compat": "esbuild adapters/bridge.ts adapters/obs.ts --bundle --format=esm --sourcemap --outdir=dist/adapters --platform=browser --banner:js=\"/* GENERATED FROM TypeScript - DO NOT EDIT. Edit adapters/*.ts instead. */\" && esbuild src/adapters/hotkey.ts --bundle --format=esm --sourcemap --outfile=dist/adapters/hotkey.js --platform=browser --banner:js=\"/* GENERATED FROM TypeScript - DO NOT EDIT. Edit src/adapters/*.ts instead. */\" && esbuild recorders.ts --bundle --format=esm --sourcemap --outdir=dist --platform=browser --banner:js=\"/* GENERATED FROM TypeScript - DO NOT EDIT. Edit recorders.ts instead. */\"",
     "build": "npm run build:ts && npm run build:compat && npm run build:speech && npm run build:hud && npm run build:asr && npm run build:display-relay && node tools/copy-static-to-dist.mjs && node tools/assert_dist_assets.mjs",
     "check:cycles": "madge --circular --extensions ts,tsx src/index.ts",
