@@ -54,13 +54,36 @@
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script type="module">
     (async () => {
-      const r = await fetch("./manifest.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("Missing manifest.json");
-      const manifest = await r.json();
-      const manifestUrl = r.url || "./manifest.json";
-      if (!manifest?.entry) throw new Error("manifest.json missing entry");
-      const entryUrl = new URL(manifest.entry, manifestUrl).toString();
-      await import(entryUrl);
+      let lastErr = null;
+      const manifestCandidates = ["./dist/manifest.json", "./manifest.json"];
+      for (const manifestPath of manifestCandidates) {
+        try {
+          const r = await fetch(manifestPath, { cache: "no-store" });
+          if (!r.ok) throw new Error(`Missing manifest at ${manifestPath} (HTTP ${r.status})`);
+          const manifest = await r.json();
+          const manifestUrl = r.url || manifestPath;
+          if (!manifest?.entry || typeof manifest.entry !== "string") {
+            throw new Error(`manifest missing entry at ${manifestPath}`);
+          }
+          const entryUrl = new URL(manifest.entry, manifestUrl).toString();
+          await import(entryUrl);
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      const directEntryCandidates = ["./dist/index.js", "./index.js"];
+      for (const entryPath of directEntryCandidates) {
+        try {
+          await import(entryPath);
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      throw (lastErr || new Error("No app entry could be loaded"));
     })().catch((err) => {
       console.error("[TP-BOOT] failed to load entry from manifest", err);
     });
