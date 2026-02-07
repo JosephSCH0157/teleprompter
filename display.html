@@ -147,6 +147,10 @@
           #preRoll .num{font-variant-numeric:tabular-nums;font-size:64px;line-height:1;margin-top:6px}
           /* CK watermark */
           body.ck::after{content:"CK";position:fixed;left:10px;bottom:10px;z-index:9999;font:600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;letter-spacing:2px;color:#d67d2d;opacity:.18;pointer-events:none}
+          /* Trial watermark */
+          #trialDisplayWatermark{position:fixed;inset:0;pointer-events:none;display:none;align-items:center;justify-content:center;flex-direction:column;gap:18px;z-index:9998}
+          #trialDisplayWatermark .trial-mark{width:min(34vw,280px);height:min(34vw,280px);background:url('assets/watermark.png') center/contain no-repeat;opacity:.14;filter:drop-shadow(0 6px 18px rgba(0,0,0,.45))}
+          #trialDisplayWatermark .trial-text{font:700 clamp(18px,5vw,52px)/1.1 system-ui,Segoe UI,Roboto,Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#fff;opacity:.08;text-shadow:0 0 20px rgba(0,0,0,.35)}
           /* Recorder pill overrides */
           #displayRecPill{all: unset; display:none;}
           .rec-pill{display:none;align-items:center;justify-content:center;height:22px;padding:0 12px;border-radius:999px;font-size:0.82rem;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;line-height:1;opacity:0;transform:scale(.98);transition:opacity 500ms ease,transform 500ms ease,color 320ms ease,background-color 320ms ease;pointer-events:none;user-select:none}
@@ -477,6 +481,22 @@
                 recPill.setAttribute('aria-hidden','false');
               }
             }
+            function applyTrialDisplay(active){
+              try {
+                let overlay = document.getElementById('trialDisplayWatermark');
+                if (active) {
+                  if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.id = 'trialDisplayWatermark';
+                    overlay.innerHTML = '<div class=\"trial-mark\"></div><div class=\"trial-text\">PODCASTERSFORGE.COM</div>';
+                    document.body.appendChild(overlay);
+                  }
+                  overlay.style.display = 'flex';
+                } else if (overlay) {
+                  overlay.style.display = 'none';
+                }
+              } catch {}
+            }
             const mapRecState = (s) => (s === 'armed' ? 'armed' : s === 'recording' ? 'recording' : 'idle');
 
             // Call on resize (debounced 150ms; only adjust if focus changed)
@@ -777,6 +797,10 @@
                     applyRecordState(msg.state || 'idle');
                     return;
                   }
+                  if (msg && (msg.kind === 'tp:trial' || msg.type === 'tp:trial')) {
+                    applyTrialDisplay(!!msg.on);
+                    return;
+                  }
                   if (msg && msg.type === 'rec-state') {
                     applyRecordState(mapRecState(msg.state));
                     return;
@@ -816,6 +840,10 @@
               }
               if (d && d.type === 'rec-state') {
                 applyRecordState(mapRecState(d.state));
+                return;
+              }
+              if (d && (d.type === 'tp:trial' || d.kind === 'tp:trial')) {
+                applyTrialDisplay(!!d.on);
                 return;
               }
               // Typography via postMessage
@@ -907,6 +935,7 @@
               }
             }
             window.__tpDisplayHandleRemote = handleDisplayMessage;
+            try { applyTrialDisplay(!!(window.opener && window.opener.__TP_TRIAL)); } catch {}
             window.addEventListener('message', (ev) => {
               try {
                 handleDisplayMessage(ev?.data);

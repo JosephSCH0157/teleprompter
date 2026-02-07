@@ -29,7 +29,6 @@ try {
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 import './features/speech/speech-store';
-import './features/logout';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
 import { speechStore, type SpeechState } from './state/speech-store';
@@ -97,7 +96,7 @@ import { hasActiveAsrProfile, onAsr } from './asr/store';
 import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
-import { wireWhoamiChip } from './ui/whoami-chip';
+import { initAuthUnlock } from './features/auth-unlock';
 
 function showFatalFallback(): void {
   try {
@@ -236,11 +235,6 @@ function attachScrollWriterOnce(): void {
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try { initAsrScrollBridge(appStore); } catch {}
 try { initObsBridge(appStore); } catch {}
-try {
-	if (hasSupabaseConfig) {
-		wireWhoamiChip(supabase);
-	}
-} catch {}
 // Early-safe OBS UI/status wiring: binders are idempotent and will wait for DOM
 try { bindObsSettingsUI(); } catch {}
 try { bindObsStatusPills(); } catch {}
@@ -1881,11 +1875,17 @@ export async function boot() {
 			let profileUserId: string | null = null;
 			if (shouldGateAuth()) {
 				try {
-					devLog('hydrate:start');
-					const ctx = await ensureUserAndProfile();
-					try { (window as any).__forgeUser = ctx.user; } catch {}
-					try { (window as any).__forgeProfile = ctx.profile; } catch {}
-					profileUserId = ctx.user?.id || null;
+					const { data, error } = await supabase.auth.getUser();
+					const hasUser = !error && !!data?.user;
+					if (hasUser) {
+						devLog('hydrate:start');
+						const ctx = await ensureUserAndProfile();
+						try { (window as any).__forgeUser = ctx.user; } catch {}
+						try { (window as any).__forgeProfile = ctx.profile; } catch {}
+						profileUserId = ctx.user?.id || null;
+					} else {
+						devLog('hydrate:skip-no-session');
+					}
 				} catch (err) {
 					try { console.warn('[forge] auth/profile init failed', err); } catch {}
 				}
@@ -1950,6 +1950,7 @@ export async function boot() {
 			// We still gate some UI-dependent wiring on DOM readiness for robustness.
           const onReady = () => {
             try {
+							try { initAuthUnlock(); } catch {}
 							// Prime scroll-router init once the viewer exists (before mode wiring)
 							try {
 								const initScrollRouter = initOnce('scroll-router', () => {

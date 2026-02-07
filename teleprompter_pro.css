@@ -106,6 +106,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 /* (Removed duplicate .inl-x1/.inl-x2/.inl-x3 definitions) */
 /* Inline style extractions */
 .inl-1{border:1px solid var(--edge); padding:4px 10px; border-radius:10px; background:#0e141b; color:var(--fg); margin-left:auto}
+.auth-cluster{display:inline-flex;align-items:center;gap:6px;margin-left:6px}
+.auth-link{text-decoration:none}
+.auth-link:hover{text-decoration:underline}
 .inl-2{min-width:240px}
 .inl-3{margin-top:16px}
 .inl-4{min-width:200px}
@@ -393,6 +396,26 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
         pointer-events:none; -webkit-user-select:none; user-select:none; z-index:9999;
     }
     body.mode-rehearsal .topbar { box-shadow: 0 0 0 2px #6cf inset; }
+    body.mode-trial::before{
+        content:'';
+        position:fixed; inset:0;
+        background:url('assets/watermark.png') center center / min(34vw, 300px) auto no-repeat;
+        opacity:.08;
+        pointer-events:none;
+        z-index:9998;
+    }
+    body.mode-trial::after{
+        content:'PODCASTERSFORGE.COM';
+        position:fixed; top:50%; left:50%; transform:translate(-50%, -50%) rotate(-15deg);
+        opacity:.055; font-weight:800; font-size:min(7vw, 72px); letter-spacing:.18em;
+        color:var(--fg, #e7ebf0);
+        text-shadow: 0 0 1px rgba(255,255,255,.2), 0 0 24px rgba(0,0,0,.32);
+        pointer-events:none; -webkit-user-select:none; user-select:none; z-index:9999;
+    }
+    body.mode-rehearsal.mode-trial::after{
+        content:'REHEARSAL â€¢ NO RECORDING';
+        opacity:.085;
+    }
 
     @supports(height: 100dvh){ body{ min-height:100dvh; } }
 

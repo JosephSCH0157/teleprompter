@@ -341,6 +341,11 @@
     <button class="chip" id="displayToggleBtn" data-action="display" data-ci="display-toggle" aria-haspopup="dialog" aria-expanded="false" title="Open or close the display window">Display</button>
     <button id="settingsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="settings-open">Settings</button>
     <button id="shortcutsBtn" class="chip" aria-haspopup="dialog" aria-expanded="false" data-action="help-open">Help</button>
+    <span id="authCluster" class="auth-cluster">
+      <span class="chip" id="whoamiChip" hidden></span>
+      <button id="logoutBtn" class="chip" type="button" hidden>Log out</button>
+      <a id="loginLink" class="chip auth-link" href="/login.html">Log in</a>
+    </span>
     <span id="selfChecksChip" class="chip chip-muted dev-only">
       Self-checks: <strong id="selfChecksText">6/6 OK</strong> <em>(click)</em>
     </span>
@@ -353,6 +358,9 @@
       type="button"
       aria-label="Open Iron Mine community"
       title="Open Iron Mine (Discord)"
+      aria-disabled="true"
+      aria-hidden="true"
+      hidden
     >
       Iron Mine
     </button>
@@ -366,6 +374,7 @@
         btn.dataset.wired = '1';
 
         var url = 'https://discord.com/channels/1457026850407841834/1457026850407841837';
+        var loginHref = '/login.html?redirect=' + encodeURIComponent(location.pathname + location.search + location.hash);
 
         // Capture so we beat any page-tab delegation that might exist elsewhere
         btn.addEventListener(
@@ -376,6 +385,15 @@
               e.stopPropagation();
               if (e.stopImmediatePropagation) e.stopImmediatePropagation();
             } catch (_) {}
+
+            if (window.__tpCanOpenIronMine !== true) {
+              try {
+                window.location.assign(loginHref);
+              } catch (_) {
+                window.location.href = loginHref;
+              }
+              return;
+            }
 
             try {
               window.open(url, '_blank', 'noopener,noreferrer');

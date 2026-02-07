@@ -2,6 +2,8 @@ import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 import './scroll/adapter';
 import './features/scroll/scroll-router';
 
+const IRON_MINE_URL = 'https://discord.com/channels/1457026850407841834/1457026850407841837';
+
 try {
   window.addEventListener('tp:autoIntent', (ev: any) => {
     try {
@@ -50,23 +52,8 @@ function shouldBypassAuth(): boolean {
   return false;
 }
 
-function shouldGateAuth(): boolean {
-  if (shouldBypassAuth()) return false;
-  if (!hasSupabaseConfig) return false;
-  return true;
-}
-
 function getRedirectTarget(): string {
   return window.location.pathname + window.location.search + window.location.hash;
-}
-
-function isLoginPath(path: string): boolean {
-  const clean = (path || '').toLowerCase();
-  return clean === '/login' || clean === '/login.html';
-}
-
-function isLoginPage(): boolean {
-  return isLoginPath(window.location.pathname);
 }
 
 function buildLoginUrl(): string {
@@ -74,7 +61,6 @@ function buildLoginUrl(): string {
 }
 
 function redirectToLogin(): void {
-  if (isLoginPage()) return;
   try {
     window.location.assign(buildLoginUrl());
   } catch {
@@ -82,32 +68,44 @@ function redirectToLogin(): void {
   }
 }
 
-async function gateAuth(): Promise<boolean> {
-  if (isLoginPage()) return false;
-  if (!shouldGateAuth()) return true;
+function isIronMinePath(path: string): boolean {
+  const clean = (path || '').toLowerCase();
+  return clean === '/iron-mine' || clean === '/iron-mine.html' || clean === '/ironmine' || clean === '/ironmine.html';
+}
+
+async function maybeHandleIronMineRoute(): Promise<boolean> {
+  if (!isIronMinePath(window.location.pathname)) return false;
+  if (shouldBypassAuth()) {
+    redirectToLogin();
+    return true;
+  }
+  if (!hasSupabaseConfig) {
+    redirectToLogin();
+    return true;
+  }
+
   try {
     const { data, error } = await supabase.auth.getUser();
-    if (!error && data?.user) return true;
+    if (!error && data?.user) {
+      window.location.assign(IRON_MINE_URL);
+      return true;
+    }
   } catch {
-    // fall through to redirect
+    // fall through to login
   }
 
   redirectToLogin();
-  return false;
+  return true;
 }
 
 (async () => {
   ensureDisplayMode();
   if (isDisplayContext()) return;
-  const ok = await gateAuth();
-  if (!ok) return;
+  const handledIronMine = await maybeHandleIronMineRoute();
+  if (handledIronMine) return;
   await import('./index-app');
 })().catch((err) => {
   try { console.error('[TP-BOOT] preflight failed', err); } catch {}
   if (isDisplayContext()) return;
-  if (shouldGateAuth()) {
-    redirectToLogin();
-    return;
-  }
   void import('./index-app');
 });

@@ -5,7 +5,7 @@ import { ensureUserAndProfile } from './authProfile';
 
 function getRedirectTarget(): string {
   const params = new URLSearchParams(window.location.search || '');
-  return params.get('redirect') || '/anvil';
+  return params.get('redirect') || '/teleprompter_pro.html';
 }
 
 async function checkExistingSession(): Promise<void> {
