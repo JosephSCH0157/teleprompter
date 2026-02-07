@@ -24,7 +24,8 @@ function getRedirectTarget(): string {
 }
 
 function buildLoginHref(): string {
-  return `${LOGIN_PATH}?redirect=${encodeURIComponent(getRedirectTarget())}`;
+  const target = encodeURIComponent(getRedirectTarget());
+  return `${LOGIN_PATH}?redirect=${target}&return=${target}`;
 }
 
 function pickDisplayName(session: Session | null): string {

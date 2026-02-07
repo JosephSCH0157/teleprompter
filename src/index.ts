@@ -57,7 +57,8 @@ function getRedirectTarget(): string {
 }
 
 function buildLoginUrl(): string {
-  return `/login.html?redirect=${encodeURIComponent(getRedirectTarget())}`;
+  const target = encodeURIComponent(getRedirectTarget());
+  return `/login.html?redirect=${target}&return=${target}`;
 }
 
 function redirectToLogin(): void {

@@ -399,7 +399,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
     body.mode-trial::before{
         content:'';
         position:fixed; inset:0;
-        background:url('assets/watermark.png') center center / min(34vw, 300px) auto no-repeat;
+        background:url('assets/watermark.png?v=1') center center / min(34vw, 300px) auto no-repeat;
         opacity:.08;
         pointer-events:none;
         z-index:9998;

@@ -374,7 +374,8 @@
         btn.dataset.wired = '1';
 
         var url = 'https://discord.com/channels/1457026850407841834/1457026850407841837';
-        var loginHref = '/login.html?redirect=' + encodeURIComponent(location.pathname + location.search + location.hash);
+        var target = encodeURIComponent(location.pathname + location.search + location.hash);
+        var loginHref = '/login.html?redirect=' + target + '&return=' + target;
 
         // Capture so we beat any page-tab delegation that might exist elsewhere
         btn.addEventListener(
