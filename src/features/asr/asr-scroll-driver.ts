@@ -287,6 +287,9 @@ const MICRO_DELTA_LINE_RATIO = 0.8;
 const MICRO_PURSUE_MS = 320;
 const MICRO_PURSUE_MAX_PXPS = 60;
 const MIN_PX_PER_SEC = 18;
+const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
+const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
+const MAX_CUE_SKIP_LOOKAHEAD_LINES = 12;
 const MOTION_PRESET_NORMAL = {
   maxLinesPerCommit: MAX_LINES_PER_COMMIT,
   deltaSmoothingFactor: DELTA_SMOOTHING_FACTOR,
@@ -340,6 +343,20 @@ function formatLogSnippet(value: string, maxLen: number) {
 
 function formatLogScore(value: number) {
   return Number.isFinite(value) ? value.toFixed(2) : '?';
+}
+
+function normalizeComparableText(value: string): string {
+  return normTokens(String(value || '')).join(' ');
+}
+
+function isIgnorableCueLineText(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return true;
+  const normalized = normalizeComparableText(raw);
+  if (!normalized) return true;
+  if (CUE_LINE_BRACKET_RE.test(raw)) return true;
+  const tokenCount = normalized.split(' ').filter(Boolean).length;
+  return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized);
 }
 
 function mergeEvidenceText(base: string, next: string): string {
@@ -631,17 +648,37 @@ function getScroller(): HTMLElement | null {
 }
 
 function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number): HTMLElement | null {
-  if (!scroller) return null;
   const idx = Math.max(0, Math.floor(lineIndex));
   const selectors = [
+    `.line[data-i="${idx}"]`,
+    `.tp-line[data-i="${idx}"]`,
+    `.line[data-index="${idx}"]`,
+    `.tp-line[data-index="${idx}"]`,
     `.line[data-line="${idx}"]`,
     `.tp-line[data-line="${idx}"]`,
     `.line[data-line-idx="${idx}"]`,
     `.tp-line[data-line-idx="${idx}"]`,
   ];
-  for (const selector of selectors) {
-    const candidate = scroller.querySelector<HTMLElement>(selector);
-    if (candidate) return candidate;
+  const roots: Array<ParentNode | null> = [
+    scroller,
+    getScriptRoot(),
+    getPrimaryScroller(),
+    document,
+  ];
+  for (const root of roots) {
+    if (!root) continue;
+    for (const selector of selectors) {
+      const candidate = (root as ParentNode).querySelector?.(selector) as HTMLElement | null;
+      if (candidate) return candidate;
+    }
+  }
+  for (const root of roots) {
+    if (!root) continue;
+    const list = (root as ParentNode).querySelectorAll?.('.line, .tp-line');
+    if (list && idx < list.length) {
+      const candidate = list[idx] as HTMLElement | null;
+      if (candidate) return candidate;
+    }
   }
   return null;
 }
@@ -1825,11 +1862,84 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     try {
       const root = getScriptRoot() || getPrimaryScroller();
       const container = root || document;
-      const lines = container?.querySelectorAll?.('.line');
+      const lines = container?.querySelectorAll?.('.line, .tp-line');
       return lines ? lines.length : 0;
     } catch {
       return 0;
     }
+  };
+
+  const getLineTextAt = (lineIndex: number): string => {
+    if (!Number.isFinite(lineIndex) || lineIndex < 0) return '';
+    try {
+      const scroller = getScroller();
+      const lineEl = getLineElementByIndex(scroller, lineIndex);
+      return String(lineEl?.textContent || '').replace(/\s+/g, ' ').trim();
+    } catch {
+      return '';
+    }
+  };
+
+  const findNextSpokenLineIndex = (
+    startIndex: number,
+    maxLookahead = MAX_CUE_SKIP_LOOKAHEAD_LINES,
+  ): number | null => {
+    const total = getTotalLines();
+    if (!Number.isFinite(startIndex) || total <= 0) return null;
+    const begin = Math.max(0, Math.floor(startIndex));
+    if (begin >= total) return null;
+    const end = Math.min(total - 1, begin + Math.max(1, Math.floor(maxLookahead)));
+    for (let idx = begin; idx <= end; idx += 1) {
+      const lineText = getLineTextAt(idx);
+      if (!isIgnorableCueLineText(lineText)) {
+        return idx;
+      }
+    }
+    return null;
+  };
+
+  const maybeSkipCueLine = (cursorLine: number, now: number, reason: string, clue: string): boolean => {
+    if (!Number.isFinite(cursorLine) || cursorLine < 0) return false;
+    const currentLineText = getLineTextAt(cursorLine);
+    if (!isIgnorableCueLineText(currentLineText)) return false;
+    const nextSpoken = findNextSpokenLineIndex(cursorLine + 1);
+    if (!Number.isFinite(nextSpoken as number) || (nextSpoken as number) <= cursorLine) return false;
+    const targetLine = Math.max(0, Math.floor(nextSpoken as number));
+    const scroller = getScroller();
+    const targetTop = scroller ? resolveTargetTop(scroller, targetLine) : null;
+    if (scroller && targetTop != null) {
+      stopGlide('cue-skip');
+      const applied = applyScrollWithHybridGuard(targetTop, {
+        scroller,
+        reason: 'asr-cue-skip',
+        source: 'asr',
+      });
+      lastKnownScrollTop = applied;
+      lastMoveAt = now;
+      markProgrammaticScroll();
+    }
+    lastLineIndex = targetLine;
+    matchAnchorIdx = targetLine;
+    setCurrentIndex(targetLine, 'cue-skip');
+    lastForwardCommitAt = now;
+    resetLowSimStreak();
+    lowSimFreezeLogged = false;
+    emitHudStatus('cue_skip', 'Skipped cue line');
+    warnGuard('cue_skip', [
+      `from=${cursorLine}`,
+      `to=${targetLine}`,
+      reason ? `reason=${reason}` : '',
+      currentLineText ? `line="${formatLogSnippet(currentLineText, 48)}"` : '',
+      clue ? `clue="${clue}"` : '',
+    ]);
+    logDev('cue skip', {
+      from: cursorLine,
+      to: targetLine,
+      reason,
+      line: currentLineText,
+      clue,
+    });
+    return true;
   };
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
@@ -3210,6 +3320,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     if (rawIdx < 0) {
+      if (maybeSkipCueLine(cursorLine, now, 'no_match', snippet)) {
+        return;
+      }
       warnGuard('no_match', [
         `current=${currentIdx}`,
         `final=${isFinal ? 1 : 0}`,
@@ -3504,6 +3617,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       if (hasTie && !forwardPick && !forwardBiasEligible && !shortFinalRecent && !outrunEligible) {
         const guardReason = rawIdx <= cursorLine ? 'same_line_noop' : 'no_match_wait';
+        if (guardReason === 'same_line_noop' && maybeSkipCueLine(cursorLine, now, guardReason, snippet)) {
+          return;
+        }
         warnGuard(guardReason, [
           `current=${cursorLine}`,
           `best=${rawIdx}`,
@@ -3763,6 +3879,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     } else if (effectiveThreshold > 0 && conf < effectiveThreshold) {
       if (!relockModeActive) {
+        if (rawIdx <= cursorLine && maybeSkipCueLine(cursorLine, now, 'low_sim_wait', snippet)) {
+          return;
+        }
         warnGuard('low_sim_wait', [
           matchId ? `matchId=${matchId}` : '',
           `current=${cursorLine}`,

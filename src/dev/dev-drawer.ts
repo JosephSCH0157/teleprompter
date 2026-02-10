@@ -91,6 +91,46 @@ function getKickScroller(): HTMLElement | null {
   );
 }
 
+function getActiveScrollMode(): string {
+  if (!isBrowser()) return '';
+  try {
+    const w = window as any;
+    const storeMode = w.__tpStore?.get?.('scrollMode');
+    const uiMode = w.__tpUiScrollMode;
+    return String(storeMode ?? uiMode ?? '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function findLineByIndex(index: number, root: ParentNode | null): HTMLElement | null {
+  if (!root || !Number.isFinite(index)) return null;
+  const idx = Math.max(0, Math.floor(index));
+  const selector = [
+    `.line[data-i="${idx}"]`,
+    `.line[data-index="${idx}"]`,
+    `.line[data-line="${idx}"]`,
+    `.line[data-line-idx="${idx}"]`,
+    `.tp-line[data-i="${idx}"]`,
+    `.tp-line[data-index="${idx}"]`,
+    `.tp-line[data-line="${idx}"]`,
+    `.tp-line[data-line-idx="${idx}"]`,
+  ].join(',');
+  try {
+    const direct = (root as ParentNode).querySelector?.(selector) as HTMLElement | null;
+    if (direct) return direct;
+  } catch {
+    // ignore
+  }
+  try {
+    const list = (root as ParentNode).querySelectorAll?.('.line, .tp-line');
+    if (list && idx < list.length) return list[idx] as HTMLElement;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 function installKickScroll(): void {
   if (!isDevActive()) return;
   const w = window as any;
@@ -100,6 +140,52 @@ function installKickScroll(): void {
     if (!scroller) {
       try { console.warn('[DEV] __tpKickScroll missing scroller'); } catch {}
       return;
+    }
+    const mode = getActiveScrollMode();
+    if (mode === 'asr') {
+      const driver = w.__tpAsrScrollDriver;
+      const driverIdxRaw = typeof driver?.getLastLineIndex === 'function' ? Number(driver.getLastLineIndex()) : NaN;
+      const currentRaw = Number.isFinite(driverIdxRaw) && driverIdxRaw >= 0
+        ? driverIdxRaw
+        : Number(w.currentIndex ?? 0);
+      const currentIndex = Number.isFinite(currentRaw) && currentRaw >= 0 ? Math.floor(currentRaw) : 0;
+      const totalLines = (() => {
+        try {
+          const root = (document.getElementById('script') as HTMLElement | null) || scroller || document;
+          return root.querySelectorAll?.('.line, .tp-line')?.length ?? 0;
+        } catch {
+          return 0;
+        }
+      })();
+      const nextIndex = totalLines > 0
+        ? Math.min(Math.max(0, totalLines - 1), currentIndex + 1)
+        : currentIndex + 1;
+      if (nextIndex > currentIndex) {
+        try { driver?.setLastLineIndex?.(nextIndex); } catch {}
+        try { w.currentIndex = nextIndex; } catch {}
+        const root = (document.getElementById('script') as HTMLElement | null) || scroller || document;
+        const line = findLineByIndex(nextIndex, root);
+        if (line) {
+          try {
+            const targetTop = Math.max(
+              0,
+              (line.offsetTop || 0) - Math.max(0, (scroller.clientHeight - (line.offsetHeight || line.clientHeight || 0)) / 2),
+            );
+            scroller.scrollTop = targetTop;
+          } catch {
+            try { line.scrollIntoView?.({ block: 'center', behavior: 'auto' }); } catch {}
+          }
+        }
+        try {
+          console.info('[DEV] __tpKickScroll', {
+            mode,
+            fromIndex: currentIndex,
+            toIndex: nextIndex,
+            scroller: describeElement(scroller),
+          });
+        } catch {}
+        return;
+      }
     }
     const from = scroller.scrollTop || 0;
     const target = from + 120;
