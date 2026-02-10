@@ -17,7 +17,7 @@ import {
 } from '../scroll/scroller';
 
 try {
-  (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v3-2025-12-19-a';
+  (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v4-2026-02-10-a';
   console.log('SCROLL_SESSION_FINGERPRINT', (window as any).__TP_SCROLL_SESSION_FINGERPRINT);
 } catch {}
 
@@ -54,9 +54,9 @@ function dispatchAutoIntent(enabled: boolean): void {
 }
 
 function startAutoScroll(mode: string): void {
-  if (mode !== 'timed') {
+  if (!shouldAutoStartForMode(mode)) {
     try {
-      console.debug('[scroll-session] auto-scroll start ignored (mode not timed)', { mode });
+      console.debug('[scroll-session] auto-scroll start ignored (mode not auto-capable)', { mode });
     } catch {}
     return;
   }
