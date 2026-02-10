@@ -1222,8 +1222,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let lastNoMatchAt = 0;
     let lastStuckDumpAt = 0;
     let lastMatchId: string | undefined;
+    let syntheticMatchIdSeq = 0;
     let lastScriptHash = '';
     let missingMatchIdKeysLogged = false;
+    const nextSyntheticMatchId = () => {
+      syntheticMatchIdSeq += 1;
+      return `drv-${Date.now().toString(36)}-${syntheticMatchIdSeq}`;
+    };
     const armPostCatchupGrace = (reason: string) => {
       const now = Date.now();
       postCatchupUntil = now + POST_CATCHUP_MS;
@@ -2960,10 +2965,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
-    const rawMatchId = (detail as any)?.matchId;
+    let rawMatchId = (detail as any)?.matchId;
     const noMatch = detail?.noMatch === true;
-    const hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
-    const explicitNoMatch = rawMatchId === null && noMatch;
+    const incomingMatch = detail?.match;
+    let hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
+    const explicitNoMatch = (rawMatchId === null || rawMatchId === undefined) && noMatch;
+    if (!hasMatchId && !explicitNoMatch && incomingMatch) {
+      rawMatchId = nextSyntheticMatchId();
+      hasMatchId = true;
+      if (isDevMode()) {
+        try {
+          console.debug('[ASR_PIPELINE] synthesized matchId', { matchId: rawMatchId });
+        } catch {}
+      }
+    }
     if (!hasMatchId && !explicitNoMatch) {
       if (isDevMode() && !missingMatchIdKeysLogged) {
         missingMatchIdKeysLogged = true;
@@ -2991,7 +3006,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const matchId = rawMatchId as string;
     lastMatchId = matchId;
     const metaTranscript = detail?.source === 'meta' || detail?.meta === true;
-    const incomingMatch = detail?.match;
     if (!incomingMatch) {
       const snippet = formatLogSnippet(compacted, 60);
       try { console.warn('[ASR_PIPELINE] NO_MATCH (pipeline): missing match payload'); } catch {}

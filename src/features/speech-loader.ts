@@ -98,7 +98,7 @@ declare global {
       stopRecognizer?: () => void;
       matchBatch?: AnyFn;
     };
-    __tpEmitSpeech?: (t: string, final?: boolean) => void;
+    __tpEmitSpeech?: (t: unknown, final?: boolean) => void;
     __tpSendToDisplay?: (payload: unknown) => void;
     __tpGetActiveRecognizer?: () => RecognizerLike | null;
     SpeechRecognition?: { new (): SpeechRecognition };
@@ -290,6 +290,135 @@ try {
   window.__tpGetActiveRecognizer = () => activeRecognizer;
 } catch {}
 
+let fallbackTranscriptMatchSeq = 0;
+
+function nextFallbackTranscriptMatchId(): string {
+  fallbackTranscriptMatchSeq += 1;
+  return `sl-${Date.now().toString(36)}-${fallbackTranscriptMatchSeq}`;
+}
+
+function normalizeRecognizerTranscriptPayload(input: unknown, defaultFinal: boolean): TranscriptPayload | null {
+  if (typeof input === 'string') {
+    const text = String(input || '');
+    if (!text) return null;
+    return {
+      text,
+      final: !!defaultFinal,
+      isFinal: !!defaultFinal,
+      timestamp: performance.now(),
+      source: 'speech-loader',
+      mode: lastScrollMode || getScrollMode(),
+    };
+  }
+  if (!input || typeof input !== 'object') {
+    const text = String(input || '');
+    if (!text) return null;
+    return {
+      text,
+      final: !!defaultFinal,
+      isFinal: !!defaultFinal,
+      timestamp: performance.now(),
+      source: 'speech-loader',
+      mode: lastScrollMode || getScrollMode(),
+    };
+  }
+  const incoming = input as Record<string, unknown>;
+  const textRaw = incoming.text ?? incoming.transcript ?? incoming.value;
+  const text = typeof textRaw === 'string' ? textRaw : String(textRaw || '');
+  if (!text) return null;
+  const finalFromInput = incoming.isFinal ?? incoming.final;
+  const final =
+    typeof finalFromInput === 'boolean'
+      ? finalFromInput
+      : !!defaultFinal;
+  return {
+    ...(incoming as Partial<TranscriptPayload>),
+    text,
+    final,
+    isFinal: final,
+    timestamp: typeof incoming.timestamp === 'number' ? incoming.timestamp : performance.now(),
+    source: typeof incoming.source === 'string' ? incoming.source : 'speech-loader',
+    mode: typeof incoming.mode === 'string' ? incoming.mode : (lastScrollMode || getScrollMode()),
+  } as TranscriptPayload;
+}
+
+function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown> | null {
+  const raw = payload as any;
+  if (raw?.match && typeof raw.match === 'object') {
+    return raw.match as Record<string, unknown>;
+  }
+  const bestIdxRaw = raw?.bestIdx ?? raw?.line ?? raw?.idx;
+  const bestSimRaw = raw?.bestSim ?? raw?.sim ?? raw?.score;
+  const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || raw?.noMatch === true;
+  if (!hasStructuredHint) {
+    try {
+      const matchBatch = window.__tpSpeech?.matchBatch;
+      if (typeof matchBatch === 'function') {
+        const result = matchBatch(String(payload.text || ''), Boolean(payload.isFinal ?? payload.final));
+        if (result && typeof result === 'object') {
+          return result as Record<string, unknown>;
+        }
+      }
+    } catch {}
+    return null;
+  }
+  const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const topScores = Array.isArray(raw?.topScores)
+    ? raw.topScores
+    : (Array.isArray(raw?.candidates) ? raw.candidates : []);
+  const currentIdxRaw = raw?.currentIdx ?? (window as any)?.currentIndex;
+  const currentIdx = Number.isFinite(Number(currentIdxRaw)) ? Math.floor(Number(currentIdxRaw)) : null;
+  return {
+    bestIdx,
+    bestSim,
+    topScores,
+    currentIdx,
+  };
+}
+
+function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPayload {
+  const next: TranscriptPayload = { ...payload };
+  const mode = String(next.mode || lastScrollMode || getScrollMode() || '').toLowerCase();
+  const asrLike = mode === 'asr' || mode === 'hybrid';
+  if (!asrLike) return next;
+
+  const match = deriveFallbackMatch(next);
+  if (match && (!next.match || typeof next.match !== 'object')) {
+    next.match = match;
+  }
+
+  const bestIdxRaw = (match as any)?.bestIdx;
+  const hasForwardMatch = Number.isFinite(Number(bestIdxRaw)) && Number(bestIdxRaw) >= 0;
+  if (next.noMatch == null) {
+    next.noMatch = !hasForwardMatch;
+  }
+  if (next.matchId == null || next.matchId === '') {
+    next.matchId = next.noMatch ? null : nextFallbackTranscriptMatchId();
+  }
+  if (next.currentIdx == null) {
+    const idxRaw = Number((window as any)?.currentIndex ?? (match as any)?.currentIdx);
+    next.currentIdx = Number.isFinite(idxRaw) ? Math.max(0, Math.floor(idxRaw)) : null;
+  }
+  if (next.line == null && hasForwardMatch) {
+    next.line = Math.floor(Number(bestIdxRaw));
+  }
+  const simRaw = (match as any)?.bestSim ?? (payload as any)?.bestSim;
+  if (next.sim == null && Number.isFinite(Number(simRaw))) {
+    next.sim = Number(simRaw);
+  }
+  if (next.candidates == null && Array.isArray((match as any)?.topScores)) {
+    next.candidates = (match as any).topScores;
+  }
+  return next;
+}
+
+function routeRecognizerTranscript(input: unknown, defaultFinal: boolean): void {
+  const payload = normalizeRecognizerTranscriptPayload(input, defaultFinal);
+  if (!payload) return;
+  routeTranscript(payload, Boolean(payload.isFinal ?? payload.final ?? defaultFinal));
+}
+
 // Small router to bridge transcripts to both legacy and modern paths
 function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: string }), isFinal?: boolean): void {
   try {
@@ -318,32 +447,34 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
     if (payload.timestamp == null) payload.timestamp = performance.now();
     if (payload.source == null) payload.source = 'speech-loader';
     if (payload.mode == null) payload.mode = lastScrollMode || getScrollMode();
+    const enriched = enrichTranscriptPayloadForAsr(payload);
+    const eventFinal = Boolean(enriched.isFinal ?? enriched.final ?? finalFlag);
     try {
       console.debug(
         '[ASR_ROUTE] keys=',
-        Object.keys(payload as Record<string, unknown>),
+        Object.keys(enriched as Record<string, unknown>),
         'matchId=',
-        (payload as any).matchId,
+        (enriched as any).matchId,
         'noMatch=',
-        (payload as any).noMatch,
+        (enriched as any).noMatch,
       );
     } catch {}
 
     // Always emit to HUD bus (unconditional for debugging/monitoring)
-    try { window.HUD?.bus?.emit?.(finalFlag ? 'speech:final' : 'speech:partial', payload); } catch {}
+    try { window.HUD?.bus?.emit?.(eventFinal ? 'speech:final' : 'speech:partial', enriched); } catch {}
 
     // In rehearsal, never steer; only HUD logging
     if (inRehearsal()) return;
 
     // Legacy monolith path
     if (typeof window.advanceByTranscript === 'function') {
-      try { window.advanceByTranscript(text, !!finalFlag); } catch {}
+      try { window.advanceByTranscript(text, !!eventFinal); } catch {}
     }
 
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
-      try { console.log('[speech-loader] emit tp:speech:transcript', payload); } catch {}
-      emitTranscriptEvent(payload);
+      try { console.log('[speech-loader] emit tp:speech:transcript', enriched); } catch {}
+      emitTranscriptEvent(enriched);
     }
   } catch {}
 }
@@ -837,7 +968,16 @@ function attachAsrScrollDriver(): void {
     const text = typeof detail.text === 'string' ? detail.text : '';
     if (!text) return;
     const isFinal = Boolean(detail.isFinal ?? detail.final);
-    asrScrollDriver?.ingest(text, isFinal, detail);
+    const payload = enrichTranscriptPayloadForAsr({
+      ...(detail as Partial<TranscriptPayload>),
+      text,
+      final: Boolean(detail.final ?? isFinal),
+      isFinal,
+      timestamp: typeof detail.timestamp === 'number' ? detail.timestamp : performance.now(),
+      source: typeof detail.source === 'string' ? detail.source : 'speech-loader',
+      mode: typeof detail.mode === 'string' ? detail.mode : effectiveMode,
+    } as TranscriptPayload);
+    asrScrollDriver?.ingest(text, isFinal, payload as any);
   };
   window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
 }
@@ -940,10 +1080,10 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
       const started = await window.__tpSpeechOrchestrator.start();
       rec = (started || null) as RecognizerLike | null;
       if (rec && typeof rec.on === 'function') {
-        try { rec.on('final', (t: any) => routeTranscript(String(t || ''), true)); } catch {}
-        try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
+        try { rec.on('final', (t: any) => routeRecognizerTranscript(t, true)); } catch {}
+        try { rec.on('partial', (t: any) => routeRecognizerTranscript(t, false)); } catch {}
       }
-      try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+      try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
       if (rec && typeof rec.start === 'function') {
         setActiveRecognizer(rec);
       }
@@ -987,7 +1127,7 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
   sr.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
   try { sr.start(); } catch {}
   rec = { stop: () => { try { sr.stop(); } catch {} } };
-  try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+  try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
   return true;
 }
 
@@ -1248,10 +1388,10 @@ async function resolveOrchestratorUrl(): Promise<string> {
             const started = await window.__tpSpeechOrchestrator.start();
             rec = (started || null) as RecognizerLike | null;
             if (rec && typeof rec.on === 'function') {
-              try { rec.on('final', (t: any) => routeTranscript(String(t || ''), true)); } catch {}
-              try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
+              try { rec.on('final', (t: any) => routeRecognizerTranscript(t, true)); } catch {}
+              try { rec.on('partial', (t: any) => routeRecognizerTranscript(t, false)); } catch {}
             }
-            try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+            try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
             return true;
           }
         } catch {}
@@ -1265,11 +1405,11 @@ async function resolveOrchestratorUrl(): Promise<string> {
               rec = (started || null) as RecognizerLike | null;
               try {
                 if (rec && typeof rec.on === 'function') {
-                  try { rec.on('final', (t: any) => routeTranscript(String(t || ''), true)); } catch {}
-                  try { rec.on('partial', (t: any) => routeTranscript(String(t || ''), false)); } catch {}
+                  try { rec.on('final', (t: any) => routeRecognizerTranscript(t, true)); } catch {}
+                  try { rec.on('partial', (t: any) => routeRecognizerTranscript(t, false)); } catch {}
                 }
               } catch {}
-              try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+              try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
               try { console.log('[SPEECH] shim', { start: !!window.__tpSpeech?.startRecognizer, match: !!window.__tpSpeech?.matchBatch }); } catch {}
               return true;
             }
@@ -1304,7 +1444,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
         sr.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
         try { sr.start(); } catch {}
         rec = { stop: () => { try { sr.stop(); } catch {} } };
-        try { window.__tpEmitSpeech = (t: string, final?: boolean) => routeTranscript(String(t || ''), !!final); } catch {}
+        try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
         return true;
       }
 
@@ -1362,7 +1502,9 @@ async function resolveOrchestratorUrl(): Promise<string> {
           });
           await beginCountdownThen(sec, async () => {
             // NOW start auto-scroll after countdown completes
-            try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true, reason: 'speech' } })); } catch {}
+            if (mode !== 'asr') {
+              try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true, reason: 'speech' } })); } catch {}
+            }
             const ok = await startBackend();
             console.debug('[ASR] didCallStartRecognizer', { ok });
             console.debug('[ASR] recognizerRef', {
@@ -1444,5 +1586,3 @@ async function _maybeStartRecorders(): Promise<void> {
   // recording/session-managed; placeholder to preserve API
   return;
 }
-
-

@@ -1177,6 +1177,14 @@ export function bindStaticDom() {
           setActiveLine(line);
           if (mode === 'asr' || mode === 'hybrid') {
             const prevIndex = Number.isFinite(index as number) ? Math.max(0, Math.floor(index as number)) : null;
+            if (mode === 'asr' && prevIndex != null) {
+              try {
+                const driver = (window as any).__tpAsrScrollDriver;
+                if (typeof driver?.setLastLineIndex === 'function') {
+                  driver.setLastLineIndex(prevIndex);
+                }
+              } catch {}
+            }
             const verify = () => {
               const nextIndex = getAsrAnchorIndex();
               if (
