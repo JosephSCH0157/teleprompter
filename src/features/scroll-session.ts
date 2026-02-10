@@ -22,6 +22,8 @@ try {
 } catch {}
 
 let asrOffLogged = false;
+let prerollDoneForSession = false;
+let didAutoStartThisSession = false;
 const lastPhaseInit = (() => {
   try {
     const session = getSession();
@@ -77,6 +79,42 @@ function shouldStopAutoForPhase(phase: SessionPhase): boolean {
   return phase !== 'preroll';
 }
 
+function resetSessionStartLatches(reason: string): void {
+  prerollDoneForSession = false;
+  didAutoStartThisSession = false;
+  try {
+    console.debug('[scroll-session] reset start latches', { reason });
+  } catch {}
+}
+
+function maybeStartAutoWhenReady(trigger: string): void {
+  const session = getSession();
+  if (session.phase !== 'live') {
+    try { console.debug('[scroll-session] start blocked: phase not live', { trigger, phase: session.phase }); } catch {}
+    return;
+  }
+  if (!prerollDoneForSession) {
+    try { console.debug('[scroll-session] start blocked: preroll not done', { trigger }); } catch {}
+    return;
+  }
+  if (!session.scrollAutoOnLive) {
+    try { console.debug('[scroll-session] start blocked: scrollAutoOnLive=false', { trigger }); } catch {}
+    return;
+  }
+  if (didAutoStartThisSession) {
+    try { console.debug('[scroll-session] start blocked: already started this session', { trigger }); } catch {}
+    return;
+  }
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const canonicalMode = normalizeScrollMode(rawMode);
+  if (!shouldAutoStartForMode(canonicalMode)) {
+    try { console.debug('[scroll-session] start blocked: mode not auto-capable', { trigger, mode: canonicalMode }); } catch {}
+    return;
+  }
+  didAutoStartThisSession = true;
+  startAutoScroll(String(canonicalMode));
+}
+
 function maybeStartOnLive(phase: SessionPhase): void {
   const prevPhase = lastSessionPhase;
   lastSessionPhase = phase;
@@ -86,6 +124,11 @@ function maybeStartOnLive(phase: SessionPhase): void {
   const canonicalModeStr = String(canonicalMode);
   const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(canonicalMode);
   if (phase !== 'live') {
+    if (phase === 'preroll') {
+      resetSessionStartLatches('phase-preroll');
+    } else if (phase === 'idle' || phase === 'wrap') {
+      resetSessionStartLatches(`phase-${phase}`);
+    }
     if (prevPhase === 'live' && shouldStopAutoForPhase(phase)) {
       stopAutoScroll({
         reason: 'phase-change',
@@ -150,8 +193,13 @@ function maybeStartOnLive(phase: SessionPhase): void {
     try { console.debug('[scroll-session] auto-scroll not allowed for mode', canonicalMode); } catch {}
     return;
   }
-  try { console.debug('[scroll-session] live phase with auto-on-live; starting auto-scroll', { mode: canonicalMode }); } catch {}
-  startAutoScroll(canonicalModeStr);
+  try {
+    console.debug('[scroll-session] live phase entered; waiting for preroll completion before auto-start', {
+      mode: canonicalMode,
+      prerollDoneForSession,
+    });
+  } catch {}
+  maybeStartAutoWhenReady('phase-live');
 }
 
 export function initScrollSessionRouter(): void {
@@ -165,8 +213,8 @@ export function initScrollSessionRouter(): void {
 
   try {
     window.addEventListener('tp:preroll:done', (ev) => {
-    const session = getSession();
-    const detail = (ev as CustomEvent)?.detail || {};
+      const session = getSession();
+      const detail = (ev as CustomEvent)?.detail || {};
 
       try {
         console.debug('[scroll-session] preroll done', {
@@ -179,18 +227,24 @@ export function initScrollSessionRouter(): void {
         // ignore
       }
 
-      if (session.phase !== 'live') return;
-      if (!session.scrollAutoOnLive) {
-        try { console.debug('[scroll-session] auto-scroll disabled for this mode'); } catch {}
-        return;
-      }
-      const rawMode = appStore.get('scrollMode') as string | undefined;
-      const canonicalMode = normalizeScrollMode(rawMode);
-      if (!shouldAutoStartForMode(canonicalMode)) {
-        try { console.debug('[scroll-session] auto-scroll disabled for this mode (manual block)', { mode: canonicalMode }); } catch {}
-        return;
-      }
-      startAutoScroll(String(canonicalMode));
+      prerollDoneForSession = true;
+      maybeStartAutoWhenReady('preroll-done');
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    window.addEventListener('tp:session:start', () => {
+      resetSessionStartLatches('session-start');
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    window.addEventListener('tp:session:stop', () => {
+      resetSessionStartLatches('session-stop');
     });
   } catch {
     // ignore
