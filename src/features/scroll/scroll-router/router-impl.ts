@@ -1479,7 +1479,11 @@ function createAutoMotor() {
     const dtSec = lastTs ? Math.max(0, (now - lastTs) / 1000) : 0;
     lastTs = now;
     const pxPerSec = currentSpeed;
-    const el = scrollerEl;
+    const canonicalViewer = ensureViewerElement();
+    if (canonicalViewer && scrollerEl !== canonicalViewer) {
+      scrollerEl = canonicalViewer;
+    }
+    const el = canonicalViewer || scrollerEl;
     if (!el) {
       logAutoTick('tick', el, pxPerSec, dtSec, 'no-element');
       scheduleTick();
@@ -1539,7 +1543,15 @@ function createAutoMotor() {
   }
 
   function start() {
-    if (enabled) return;
+    if (enabled) {
+      if (rafId == null) {
+        autoTickDebugStart = 0;
+        lastAutoTickLogAt = 0;
+        logAutoTick('start', viewer ?? scrollerEl, currentSpeed, 0, 'already-enabled-resume');
+        scheduleTick();
+      }
+      return;
+    }
     setEnabled(true);
     lastTickMoved = false;
     carry = 0;
@@ -2924,14 +2936,19 @@ function applyMode(m) {
 function installScrollRouter(opts) {
   const { auto: autoMotor, viewer: viewerInstallFlag = false, hostEl = null } = opts;
   auto = autoMotor || auto || null;
-  if (!viewer && hostEl) {
-    viewer = hostEl;
+  const docViewer = document.getElementById('viewer') as HTMLElement | null;
+  if (!viewer) {
+    if (docViewer) {
+      viewer = docViewer;
+    } else if (hostEl instanceof HTMLElement && hostEl.id === 'viewer') {
+      viewer = hostEl;
+    }
   }
   if (hostEl instanceof HTMLElement) {
-    scrollerEl = hostEl;
+    scrollerEl = docViewer || viewer || hostEl;
   }
   if (!scrollerEl) {
-    scrollerEl = document.querySelector<HTMLElement>('#viewer') || document.querySelector<HTMLElement>('#script');
+    scrollerEl = docViewer || document.querySelector<HTMLElement>('#viewer') || document.querySelector<HTMLElement>('#script');
   }
   if (!scrollerEl) {
     const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
@@ -5125,10 +5142,13 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         } catch {}
       }
       const viewerReady = hasScrollableTarget();
+      const livePhase = sessionPhase === 'live';
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
       if (mode === "asr" || mode === "step" || mode === "rehearsal") {
         autoBlocked = `blocked:mode-${mode}`;
+      } else if (!livePhase) {
+        autoBlocked = "blocked:livePhase";
       } else if (sessionBlocked) {
         autoBlocked = "blocked:sessionOff";
       } else if (!userEnabled) {
@@ -5141,9 +5161,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         autoBlocked = "none";
       }
       const want = autoBlocked === "none";
-      const prevEnabled = enabledNow && activeMotorBrain === 'auto';
+      const prevEnabled = ((enabledNow || !!auto?.getState?.().enabled) && activeMotorBrain === 'auto');
+      const prevRunning = !!auto?.isRunning?.();
       const action = want
-        ? prevEnabled
+        ? prevRunning
           ? "MOTOR_ALREADY_RUNNING"
           : "MOTOR_START"
         : prevEnabled
@@ -5156,7 +5177,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       } catch {}
       let emittedAutoStop = false;
       if (want) {
-        if (typeof auto.setEnabled === "function") auto.setEnabled(true);
+        try { auto.setSpeed?.(autoPxPerSec); } catch {}
+        try { auto.start?.(); } catch {}
+        try { auto.setEnabled?.(true); } catch {}
         enabledNow = true;
         setActiveMotor('auto', mode);
       } else {
