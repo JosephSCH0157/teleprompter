@@ -142,15 +142,6 @@ function snapshotPreroll(): void {
       scrollAutoOnLive,
     });
   } catch {}
-  if (scrollAutoOnLive) {
-    try {
-      window.dispatchEvent(
-        new CustomEvent('tp:auto:intent', {
-          detail: { enabled: true, source: 'preroll', reason: 'live-start' },
-        }),
-      );
-    } catch {}
-  }
 
   try {
     console.debug(

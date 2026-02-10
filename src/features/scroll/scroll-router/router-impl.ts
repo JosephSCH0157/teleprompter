@@ -3527,6 +3527,17 @@ function installScrollRouter(opts) {
     if (!payload) return;
     const { enabled, decision, pxs, reason } = payload;
     const mode = getScrollMode();
+      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
+      if (enabled && currentPhase !== 'live') {
+        try {
+          console.info('[AUTO_INTENT] start ignored: session not live', {
+            mode,
+            phase: currentPhase,
+            reason: reason ?? 'unknown',
+          });
+        } catch {}
+        return;
+      }
       const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
       const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
       try {
