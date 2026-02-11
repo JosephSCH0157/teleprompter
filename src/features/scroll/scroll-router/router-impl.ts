@@ -5160,8 +5160,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       const viewerReady = hasScrollableTarget();
       const livePhase = sessionPhase === 'live';
       const sessionBlocked = !sessionIntentOn && !userEnabled;
+      const asrMotorIntentOn = mode === "asr" && sessionIntentOn;
       let autoBlocked = "blocked:sessionOff";
-      if (mode === "asr" || mode === "step" || mode === "rehearsal") {
+      if (mode === "step" || mode === "rehearsal" || (mode === "asr" && !asrMotorIntentOn)) {
         autoBlocked = `blocked:mode-${mode}`;
       } else if (!livePhase) {
         autoBlocked = "blocked:livePhase";
