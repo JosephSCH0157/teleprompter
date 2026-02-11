@@ -125,6 +125,76 @@ async function main() {
     return popup || null;
   }
 
+  async function assertScrollMoves(pageRef) {
+    await pageRef.evaluate(() => {
+      const editor =
+        document.getElementById('editor') ||
+        document.getElementById('scriptInput') ||
+        document.querySelector('textarea#script');
+      const current = editor && 'value' in editor ? String(editor.value || '') : '';
+      if (current.trim().length >= 120) return;
+      const text = Array.from({ length: 120 }, (_, i) => `Smoke scroll line ${i + 1}.`).join('\n');
+      try {
+        window.dispatchEvent(new CustomEvent('tp:script-load', { detail: { name: 'smoke-scroll.txt', text } }));
+      } catch {}
+      try {
+        if (editor && 'value' in editor) {
+          editor.value = text;
+          editor.dispatchEvent(new Event('input', { bubbles: true }));
+          editor.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      } catch {}
+    });
+    await pageRef.waitForTimeout(300);
+
+    const before = await pageRef.evaluate(() => {
+      const el =
+        document.querySelector('#viewer') ||
+        document.querySelector('#scriptScrollContainer') ||
+        document.querySelector('#wrap') ||
+        document.scrollingElement;
+      return el?.scrollTop || 0;
+    });
+
+    await pageRef.evaluate(() => {
+      window.__tpSetMode?.('timed');
+      window.__tpScrollMode?.setMode?.('timed');
+      const modeSelect = document.querySelector('#scrollMode');
+      if (modeSelect && 'value' in modeSelect) {
+        modeSelect.value = 'timed';
+        modeSelect.dispatchEvent(new Event('input', { bubbles: true }));
+        modeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      window.__tpStart?.();
+      const recBtn = document.getElementById('recBtn');
+      if (recBtn && typeof recBtn.click === 'function') recBtn.click();
+    });
+
+    await pageRef.waitForFunction(() => {
+      try {
+        const phase = window.__tpStore?.get?.('session.phase');
+        return phase === 'live';
+      } catch {
+        return false;
+      }
+    }, { timeout: 12000 }).catch(() => {});
+
+    await pageRef.waitForTimeout(3000);
+
+    const after = await pageRef.evaluate(() => {
+      const el =
+        document.querySelector('#viewer') ||
+        document.querySelector('#scriptScrollContainer') ||
+        document.querySelector('#wrap') ||
+        document.scrollingElement;
+      return el?.scrollTop || 0;
+    });
+
+    if (after <= before) {
+      throw new Error(`Scroll did not move. before=${before}, after=${after}`);
+    }
+  }
+
   const url = RUN_SMOKE ? `http://127.0.0.1:${effectivePort}/teleprompter_pro.html?ci=1&mockFolder=1&uiMock=1&dev=1&noRelax=1${USE_DIST?'&useDist=1':''}` : `http://127.0.0.1:${effectivePort}/teleprompter_pro.html`;
   // Inject OBS config and a robust WebSocket proxy before any page scripts run.
   await page.evaluateOnNewDocument((cfg) => {
@@ -395,6 +465,7 @@ async function main() {
 
   if (RUN_SMOKE) {
     console.log('[e2e] running non-interactive smoke test...');
+    await assertScrollMoves(page);
 
     // drive init -> connect -> test -> report inside the page to keep adapter context local
     console.log('[e2e] running non-interactive smoke test...');
