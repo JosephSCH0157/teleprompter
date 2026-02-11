@@ -3014,6 +3014,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const limitedTarget = forced ? candidate : Math.min(candidate, baseClamped + jumpCap);
       const nextTargetTop = Math.max(baseClamped, limitedTarget);
       pursuitTargetTop = nextTargetTop;
+      if (isDevMode()) {
+        let hasWriter = false;
+        try {
+          const maybeWriter = (window as any).__tpScrollWrite;
+          hasWriter =
+            typeof maybeWriter === 'function' ||
+            (typeof maybeWriter === 'object' && !!maybeWriter && typeof maybeWriter.scrollTo === 'function');
+        } catch {}
+        console.log('[ASR] commit->seek', {
+          commitCount: commitCount + 1,
+          blockId: targetLine,
+          hasWriter,
+        });
+      }
       if (nextTargetTop > base) {
         emitHybridTargetHint(
           nextTargetTop,
@@ -4554,5 +4568,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const driver: AsrScrollDriver = { ingest, dispose, setLastLineIndex, getLastLineIndex };
   try { (driver as any).__instanceId = driverInstanceId; } catch {}
+  if (isDevMode() && typeof window !== 'undefined') {
+    try { (window as any).__tpAsrDriver = driver; } catch {}
+  }
   return driver;
 }

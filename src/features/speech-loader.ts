@@ -1308,6 +1308,16 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
 function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
   const t = String(text || '').trim();
   if (!t) return;
+  const payload = {
+    text: t,
+    isFinal: !!isFinal,
+    source: detail?.source,
+  };
+  if (isDevMode()) console.log('[ASR] ingest', {
+    isFinal: payload.isFinal,
+    text: payload.text?.slice(0, 60),
+    source: payload.source,
+  });
   const mode = String(detail?.mode || getScrollMode() || '').toLowerCase();
   attachAsrScrollDriver({ reason: 'transcript', mode, allowCreate: true });
   try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
