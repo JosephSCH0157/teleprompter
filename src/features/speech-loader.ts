@@ -1164,6 +1164,26 @@ let asrSessionIntentActive = false;
 let speechStartInFlight = false;
 let asrRunCounter = 0;
 let activeAsrRunKey = '';
+let lastAsrBlockSyncAt = 0;
+let lastAsrBlockSyncLogAt = 0;
+
+const ASR_LIVE_BLOCK_SYNC_THROTTLE_MS = 200;
+const ASR_BLOCK_SYNC_LOG_THROTTLE_MS = 1000;
+
+function logAsrBlockSyncSkip(mode: string, phase: string, reason: 'live-skip' | 'throttled', now: number): void {
+  if (!isDevMode()) return;
+  if (now - lastAsrBlockSyncLogAt < ASR_BLOCK_SYNC_LOG_THROTTLE_MS) return;
+  lastAsrBlockSyncLogAt = now;
+  const lastSyncAgeMs = lastAsrBlockSyncAt > 0 ? Math.max(0, now - lastAsrBlockSyncAt) : -1;
+  try {
+    console.debug('[ASR] block sync skipped', {
+      mode,
+      phase,
+      reason,
+      lastSyncAgeMs,
+    });
+  } catch {}
+}
 
 function isAsrLikeMode(mode: string | null | undefined): boolean {
   const normalized = String(mode || '').toLowerCase();
@@ -1263,7 +1283,10 @@ function ensureAsrScrollDriver(
 
 function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCreate?: boolean; runKey?: string }): void {
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
-  const asrLive = running && isAsrLikeMode(mode);
+  const phase = String(getSession().phase || '').toLowerCase();
+  const livePhase = phase === 'live';
+  const asrLive = running && mode === 'asr' && livePhase;
+  const now = Date.now();
   const driver =
     asrScrollDriver ||
     ensureAsrScrollDriver(`sync:${reason}`, {
@@ -1272,10 +1295,12 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
       runKey: opts?.runKey,
     });
   if (!driver) return;
-  if (asrLive) {
-    if (isDevMode()) {
-      try { console.debug('[ASR] block sync skipped (live)', { reason, mode }); } catch {}
-    }
+  if (livePhase && mode !== 'asr') {
+    logAsrBlockSyncSkip(mode, phase, 'live-skip', now);
+    return;
+  }
+  if (asrLive && now - lastAsrBlockSyncAt < ASR_LIVE_BLOCK_SYNC_THROTTLE_MS) {
+    logAsrBlockSyncSkip(mode, phase, 'throttled', now);
     return;
   }
   const blocks = getAsrBlockSnapshot();
@@ -1291,6 +1316,9 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
   } catch {}
   const markerIdx = computeMarkerLineIndex();
   syncAsrIndices(markerIdx, `blocks:${reason}`);
+  if (asrLive) {
+    lastAsrBlockSyncAt = now;
+  }
   if (isDevMode()) {
     try {
       console.info('[ASR] block sync complete', {
