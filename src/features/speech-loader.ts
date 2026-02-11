@@ -96,6 +96,11 @@ declare global {
     __tpSpeechCanDynImport?: boolean;
     __tpAsrRunKey?: string | null;
     __tpSpeech?: {
+      store?: {
+        getState?: () => unknown;
+        get?: () => unknown;
+        subscribe?: ((listener: (...args: any[]) => void) => (() => void) | void) | undefined;
+      } | null;
       startRecognizer?: (cb: AnyFn, opts?: { lang?: string }) => void;
       stopRecognizer?: () => void;
       matchBatch?: AnyFn;
@@ -170,6 +175,81 @@ function getScrollMode(): string {
   } catch {}
   return '';
 }
+
+function getSpeechStoreState(store: any): any {
+  if (!store) return undefined;
+
+  // Redux-ish / Zustand vanilla
+  if (typeof store.getState === 'function') return store.getState();
+
+  // Atom-ish local store
+  if (typeof store.get === 'function') return store.get();
+
+  return undefined;
+}
+
+function subscribeSpeechStore(store: any, fn: (s: any) => void): () => void {
+  if (!store) return () => {};
+
+  // Redux-ish
+  if (typeof store.subscribe === 'function' && typeof store.getState === 'function') {
+    const unsub = store.subscribe(() => fn(store.getState()));
+    return typeof unsub === 'function' ? unsub : () => {};
+  }
+
+  // Atom-ish with get()
+  if (typeof store.subscribe === 'function' && typeof store.get === 'function') {
+    const unsub = store.subscribe(() => fn(store.get()));
+    return typeof unsub === 'function' ? unsub : () => {};
+  }
+
+  // Atom-ish subscribe passes value directly
+  if (typeof store.subscribe === 'function') {
+    const unsub = store.subscribe((v: any) => fn(v));
+    return typeof unsub === 'function' ? unsub : () => {};
+  }
+
+  return () => {};
+}
+
+let speechStoreShimmed = false;
+let speechStoreSubscribed = false;
+let latestSpeechStoreState: any = undefined;
+
+function getTpSpeechNamespace(): any {
+  if (typeof window === 'undefined') return null;
+  const ns = (window as any).__tpSpeech;
+  if (!ns || typeof ns !== 'object') return null;
+  const store = ns.store;
+  if (store && !speechStoreShimmed && typeof store.getState !== 'function' && typeof store.get === 'function') {
+    try {
+      store.getState = store.get.bind(store);
+    } catch {
+      try { store.getState = () => store.get(); } catch {}
+    }
+    speechStoreShimmed = true;
+  }
+  if (store && !speechStoreSubscribed) {
+    speechStoreSubscribed = true;
+    try { latestSpeechStoreState = getSpeechStoreState(store); } catch {}
+    try {
+      subscribeSpeechStore(store, (state) => {
+        latestSpeechStoreState = state;
+      });
+    } catch {}
+  }
+  return ns;
+}
+
+function getTpSpeechStoreSnapshot(): any {
+  try {
+    const ns = getTpSpeechNamespace();
+    return getSpeechStoreState(ns?.store) ?? latestSpeechStoreState;
+  } catch {
+    return latestSpeechStoreState;
+  }
+}
+
 function dispatchSessionIntent(active: boolean, detail?: { source?: string; reason?: string; mode?: string; phase?: string }): void {
   try {
     const payload: Record<string, unknown> = {
@@ -346,6 +426,8 @@ function normalizeRecognizerTranscriptPayload(input: unknown, defaultFinal: bool
 
 function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown> | null {
   const raw = payload as any;
+  const speechNs = getTpSpeechNamespace();
+  const speechStoreState = getTpSpeechStoreSnapshot();
   if (raw?.match && typeof raw.match === 'object') {
     return raw.match as Record<string, unknown>;
   }
@@ -354,7 +436,7 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
   const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || raw?.noMatch === true;
   if (!hasStructuredHint) {
     try {
-      const matchBatch = window.__tpSpeech?.matchBatch;
+      const matchBatch = speechNs?.matchBatch;
       if (typeof matchBatch === 'function') {
         const result = matchBatch(String(payload.text || ''), Boolean(payload.isFinal ?? payload.final));
         if (result && typeof result === 'object') {
@@ -369,7 +451,11 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
   const topScores = Array.isArray(raw?.topScores)
     ? raw.topScores
     : (Array.isArray(raw?.candidates) ? raw.candidates : []);
-  const currentIdxRaw = raw?.currentIdx ?? (window as any)?.currentIndex;
+  const currentIdxRaw =
+    raw?.currentIdx ??
+    (window as any)?.currentIndex ??
+    (speechStoreState as any)?.currentIdx ??
+    (speechStoreState as any)?.currentIndex;
   const currentIdx = Number.isFinite(Number(currentIdxRaw)) ? Math.floor(Number(currentIdxRaw)) : null;
   return {
     bestIdx,
@@ -1303,6 +1389,8 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
 }
 
 async function startBackendForSession(mode: string, reason?: string): Promise<boolean> {
+  const speechNs = getTpSpeechNamespace();
+  const speechStoreState = getTpSpeechStoreSnapshot();
   if (isSettingsHydrating()) {
     try { console.debug('[ASR] startBackend blocked during settings hydration', { mode, reason }); } catch {}
     return false;
@@ -1313,8 +1401,11 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
       mode,
       reason,
       hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
-      hasRecognizerStart: typeof w?.__tpSpeech?.startRecognizer === 'function',
+      hasRecognizerStart: typeof speechNs?.startRecognizer === 'function',
       hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+      sessionPhase: (speechStoreState as any)?.sessionPhase,
+      scrollMode: (speechStoreState as any)?.scrollMode,
+      speechRunning: (speechStoreState as any)?.speechRunning,
     };
     try { console.log('[ASR] lifecycle startBackend: invoking backend', info); } catch {}
   }
@@ -1336,10 +1427,10 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
   } catch {}
 
   try {
-    const startRecognizer = window.__tpSpeech?.startRecognizer;
+    const startRecognizer = speechNs?.startRecognizer;
     if (typeof startRecognizer === 'function') {
       startRecognizer(() => {}, { lang: 'en-US' });
-      rec = { stop: () => { try { window.__tpSpeech?.stopRecognizer?.(); } catch {} } };
+      rec = { stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} } };
       return true;
     }
   } catch {}
@@ -1495,7 +1586,7 @@ export function stopSpeechBackendForSession(reason?: string): void {
   try { stopAsrRuntime(); } catch {}
   try { window.__tpMic?.releaseMic?.(); } catch {}
   try { rec?.stop?.(); } catch {}
-  try { window.__tpSpeech?.stopRecognizer?.(); } catch {}
+  try { getTpSpeechNamespace()?.stopRecognizer?.(); } catch {}
   setActiveRecognizer(null);
   running = false;
   try { document.body.classList.remove('listening'); } catch {}
@@ -1630,12 +1721,17 @@ async function resolveOrchestratorUrl(): Promise<string> {
       try { window.__tpSpeechCanDynImport = backendAllowed && !!hasOrchestrator && !ciGuard; } catch {}
 
       async function startBackend(): Promise<boolean> {
+        const runtimeSpeechNs = getTpSpeechNamespace();
+        const runtimeSpeechState = getTpSpeechStoreSnapshot();
         if (isDevMode()) {
           const w = typeof window !== 'undefined' ? (window as any) : null;
           const info = {
             hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
-            hasRecognizerStart: typeof w?.__tpSpeech?.startRecognizer === 'function',
+            hasRecognizerStart: typeof runtimeSpeechNs?.startRecognizer === 'function',
             hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+            sessionPhase: (runtimeSpeechState as any)?.sessionPhase,
+            scrollMode: (runtimeSpeechState as any)?.scrollMode,
+            speechRunning: (runtimeSpeechState as any)?.speechRunning,
           };
           console.log('[ASR] lifecycle startBackend: invoking backend', info);
         }
@@ -1667,7 +1763,10 @@ async function resolveOrchestratorUrl(): Promise<string> {
                 }
               } catch {}
               try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
-              try { console.log('[SPEECH] shim', { start: !!window.__tpSpeech?.startRecognizer, match: !!window.__tpSpeech?.matchBatch }); } catch {}
+              try {
+                const shimNs = getTpSpeechNamespace();
+                console.log('[SPEECH] shim', { start: !!shimNs?.startRecognizer, match: !!shimNs?.matchBatch });
+              } catch {}
               return true;
             }
           }
@@ -1744,11 +1843,16 @@ async function resolveOrchestratorUrl(): Promise<string> {
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
           if (isDevMode()) {
             const w = typeof window !== 'undefined' ? (window as any) : null;
+            const debugSpeechNs = getTpSpeechNamespace();
+            const debugSpeechState = getTpSpeechStoreSnapshot();
             const info = {
               mode,
               hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
-              hasRecognizerStart: typeof w?.__tpSpeech?.startRecognizer === 'function',
+              hasRecognizerStart: typeof debugSpeechNs?.startRecognizer === 'function',
               hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+              sessionPhase: (debugSpeechState as any)?.sessionPhase,
+              scrollMode: (debugSpeechState as any)?.scrollMode,
+              speechRunning: (debugSpeechState as any)?.speechRunning,
             };
             console.log('[ASR] lifecycle start: willStartBackend', info);
           }

@@ -49,6 +49,9 @@ if (typeof window !== 'undefined') {
   const win = window as any;
   const ns = win.__tpSpeech || {};
   ns.store = speechStore;
+  if (ns.store && typeof ns.store.getState !== 'function' && typeof ns.store.get === 'function') {
+    ns.store.getState = ns.store.get.bind(ns.store);
+  }
   ns.getAsrSettings = getAsrSettings;
   ns.setAsrSettings = setAsrSettings;
   win.__tpSpeech = ns;
