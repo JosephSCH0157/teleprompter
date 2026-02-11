@@ -103,6 +103,7 @@ declare global {
       } | null;
       startRecognizer?: (cb: AnyFn, opts?: { lang?: string }) => void;
       stopRecognizer?: () => void;
+      matchOne?: AnyFn;
       matchBatch?: AnyFn;
     };
     __tpEmitSpeech?: (t: unknown, final?: boolean) => void;
@@ -373,6 +374,36 @@ try {
 } catch {}
 
 let fallbackTranscriptMatchSeq = 0;
+let __asrLastInterimText = '';
+let __asrLastInterimAt = 0;
+let __asrInterimRepeatCount = 0;
+
+function resetAsrInterimStabilizer(): void {
+  __asrLastInterimText = '';
+  __asrLastInterimAt = 0;
+  __asrInterimRepeatCount = 0;
+}
+
+function shouldPromoteInterimToFinal(text: string): boolean {
+  const now = Date.now();
+  const t = String(text || '').trim();
+  if (!t) return false;
+
+  const same = t === __asrLastInterimText;
+  if (same && now - __asrLastInterimAt < 1200) {
+    __asrInterimRepeatCount += 1;
+  } else {
+    __asrInterimRepeatCount = 0;
+  }
+
+  __asrLastInterimText = t;
+  __asrLastInterimAt = now;
+
+  if (__asrInterimRepeatCount >= 2) return true;
+  if (t.length >= 60 && /[.!?]$/.test(t)) return true;
+  if (t.length >= 90) return true;
+  return false;
+}
 
 function nextFallbackTranscriptMatchId(): string {
   fallbackTranscriptMatchSeq += 1;
@@ -424,6 +455,25 @@ function normalizeRecognizerTranscriptPayload(input: unknown, defaultFinal: bool
   } as TranscriptPayload;
 }
 
+function normalizeMatcherResult(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== 'object') return null;
+  const raw = input as Record<string, unknown>;
+  const bestIdxRaw = raw.bestIdx ?? raw.idx;
+  const bestSimRaw = raw.bestSim ?? raw.sim;
+  const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const topScores = Array.isArray(raw.topScores)
+    ? raw.topScores
+    : (Array.isArray(raw.candidates) ? raw.candidates : []);
+  return {
+    ...raw,
+    bestIdx,
+    bestSim,
+    topScores,
+    noMatch: typeof raw.noMatch === 'boolean' ? raw.noMatch : bestIdx < 0,
+  };
+}
+
 function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown> | null {
   const raw = payload as any;
   const speechNs = getTpSpeechNamespace();
@@ -435,13 +485,20 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
   const bestSimRaw = raw?.bestSim ?? raw?.sim ?? raw?.score;
   const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || raw?.noMatch === true;
   if (!hasStructuredHint) {
+    const transcript = String(payload.text || '');
+    const finalFlag = Boolean(payload.isFinal ?? payload.final);
+    try {
+      const matchOne = speechNs?.matchOne;
+      if (typeof matchOne === 'function') {
+        const result = normalizeMatcherResult(matchOne(transcript, finalFlag));
+        if (result) return result;
+      }
+    } catch {}
     try {
       const matchBatch = speechNs?.matchBatch;
       if (typeof matchBatch === 'function') {
-        const result = matchBatch(String(payload.text || ''), Boolean(payload.isFinal ?? payload.final));
-        if (result && typeof result === 'object') {
-          return result as Record<string, unknown>;
-        }
+        const result = normalizeMatcherResult(matchBatch(transcript, finalFlag));
+        if (result) return result;
       }
     } catch {}
     return null;
@@ -535,8 +592,17 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
     if (payload.timestamp == null) payload.timestamp = performance.now();
     if (payload.source == null) payload.source = 'speech-loader';
     if (payload.mode == null) payload.mode = lastScrollMode || getScrollMode();
+    const rawFinal = Boolean(payload.isFinal ?? payload.final ?? finalFlag);
+    const normalizedMode = String(payload.mode || '').toLowerCase();
+    const asrLike = normalizedMode === 'asr' || normalizedMode === 'hybrid';
+    const promotedFinal = rawFinal || (asrLike ? shouldPromoteInterimToFinal(text) : false);
+    if (rawFinal) {
+      resetAsrInterimStabilizer();
+    }
+    payload.final = promotedFinal;
+    payload.isFinal = promotedFinal;
     const enriched = enrichTranscriptPayloadForAsr(payload);
-    const eventFinal = Boolean(enriched.isFinal ?? enriched.final ?? finalFlag);
+    const eventFinal = Boolean(enriched.isFinal ?? enriched.final ?? promotedFinal);
     try {
       console.debug(
         '[ASR_ROUTE] keys=',
@@ -551,6 +617,8 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
     // Always emit to HUD bus (unconditional for debugging/monitoring)
     try { window.HUD?.bus?.emit?.(eventFinal ? 'speech:final' : 'speech:partial', enriched); } catch {}
 
+    pushAsrTranscript(text, eventFinal, enriched as any);
+
     // In rehearsal, never steer; only HUD logging
     if (inRehearsal()) return;
 
@@ -561,6 +629,7 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
 
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
+      try { (enriched as any).__tpDirectIngest = true; } catch {}
       try { console.log('[speech-loader] emit tp:speech:transcript', enriched); } catch {}
       emitTranscriptEvent(enriched);
     }
@@ -1236,6 +1305,14 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
   }
 }
 
+function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
+  const t = String(text || '').trim();
+  if (!t) return;
+  const mode = String(detail?.mode || getScrollMode() || '').toLowerCase();
+  attachAsrScrollDriver({ reason: 'transcript', mode, allowCreate: true });
+  try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
+}
+
 function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
   if (typeof window === 'undefined') return;
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
@@ -1247,6 +1324,7 @@ function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCre
   if (transcriptListener) return;
   transcriptListener = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
+    if ((detail as any).__tpDirectIngest === true) return;
     const detectedMode = typeof detail.mode === 'string' ? detail.mode.toLowerCase() : '';
     const rawMode = (detectedMode || getScrollMode() || '').toLowerCase();
     const effectiveMode = rawMode === 'manual' ? 'step' : rawMode;
@@ -1270,7 +1348,7 @@ function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCre
       source: typeof detail.source === 'string' ? detail.source : 'speech-loader',
       mode: typeof detail.mode === 'string' ? detail.mode : effectiveMode,
     } as TranscriptPayload);
-    asrScrollDriver?.ingest(text, isFinal, payload as any);
+    pushAsrTranscript(text, isFinal, payload as any);
   };
   window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
 }
@@ -1337,12 +1415,14 @@ function ensureAsrDriverLifecycleHooks(): void {
   const onSessionStop = () => {
     asrSessionIntentActive = false;
     speechStartInFlight = false;
+    resetAsrInterimStabilizer();
     clearAsrRunKey('lifecycle-session-stop');
   };
   const onSessionPhase = (event: Event) => {
     const phase = String((event as CustomEvent)?.detail?.phase || '').toLowerCase();
     if (phase === 'idle' || phase === 'wrap') {
       asrSessionIntentActive = false;
+      resetAsrInterimStabilizer();
       clearAsrRunKey(`phase-${phase}`);
     }
   };
@@ -1386,6 +1466,7 @@ function ensureSessionStopHooked(): void {
   window.addEventListener('tp:session:stop', (event) => {
     asrSessionIntentActive = false;
     speechStartInFlight = false;
+    resetAsrInterimStabilizer();
     clearAsrRunKey('session-stop-hook');
     detachAsrScrollDriver();
     const detail = (event as CustomEvent)?.detail || {};
@@ -1634,6 +1715,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
 export function stopSpeechBackendForSession(reason?: string): void {
   speechStartInFlight = false;
   asrSessionIntentActive = false;
+  resetAsrInterimStabilizer();
   clearAsrRunKey(`stop:${String(reason || 'unspecified')}`);
   if (!running && !rec) {
     detachAsrScrollDriver();

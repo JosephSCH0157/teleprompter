@@ -5096,6 +5096,22 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     });
   } catch {}
   let applyGateRaf: number | null = null;
+  const MOTOR_IGNORED_LOG_THROTTLE_MS = 750;
+  let lastMotorIgnoredLogAt = 0;
+  let lastMotorIgnoredLogMode = '';
+  function logAutoGateAction(action: string, mode: string, line: string) {
+    if (action !== 'MOTOR_IGNORED_OFF') {
+      try { console.info(line); } catch {}
+      return;
+    }
+    const now = Date.now();
+    if (mode === lastMotorIgnoredLogMode && now - lastMotorIgnoredLogAt < MOTOR_IGNORED_LOG_THROTTLE_MS) {
+      return;
+    }
+    lastMotorIgnoredLogMode = mode;
+    lastMotorIgnoredLogAt = now;
+    try { console.info(line); } catch {}
+  }
   function scheduleApplyGate() {
     if (applyGateRaf != null) return;
     if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
@@ -5170,11 +5186,11 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         : prevEnabled
           ? "MOTOR_STOP"
           : "MOTOR_IGNORED_OFF";
-      try {
-        console.info(
-          `[scroll-router] ${action} mode=${mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
-        );
-      } catch {}
+      logAutoGateAction(
+        action,
+        mode,
+        `[scroll-router] ${action} mode=${mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+      );
       let emittedAutoStop = false;
       if (want) {
         try { auto.setSpeed?.(autoPxPerSec); } catch {}

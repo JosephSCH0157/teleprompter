@@ -525,6 +525,56 @@ function isDevMode(): boolean {
   return false;
 }
 
+function normalizeSpeechMatchResult(input: unknown): MatchResult | null {
+  if (!input || typeof input !== 'object') return null;
+  const raw = input as Record<string, unknown>;
+  const bestIdxRaw = raw.bestIdx ?? raw.idx;
+  const bestSimRaw = raw.bestSim ?? raw.sim;
+  const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const topScores = Array.isArray(raw.topScores)
+    ? raw.topScores
+    : (Array.isArray(raw.candidates) ? raw.candidates : []);
+  return {
+    ...(raw as MatchResult),
+    bestIdx,
+    bestSim,
+    topScores: topScores as Array<{ idx: number; score: number }>,
+  };
+}
+
+function resolveSpeechMatchResult(text: string, isFinal: boolean): MatchResult | null {
+  if (typeof window === 'undefined') return null;
+  const ns = (window as any).__tpSpeech;
+  if (!ns || typeof ns !== 'object') return null;
+  const transcript = String(text || '');
+
+  const tryCall = (fn: any): MatchResult | null => {
+    if (typeof fn !== 'function') return null;
+    try {
+      return normalizeSpeechMatchResult(fn(transcript, isFinal));
+    } catch {}
+    try {
+      return normalizeSpeechMatchResult(fn(transcript, { isFinal }));
+    } catch {}
+    return null;
+  };
+
+  const fromMatchOne = tryCall(ns.matchOne);
+  if (fromMatchOne) return fromMatchOne;
+
+  const fromMatchBatch = tryCall(ns.matchBatch);
+  if (fromMatchBatch) return fromMatchBatch;
+
+  try {
+    if (typeof ns.matchBatch === 'function') {
+      return normalizeSpeechMatchResult(ns.matchBatch([transcript], { isFinal }));
+    }
+  } catch {}
+
+  return null;
+}
+
 function logDev(...args: any[]) {
   if (!isDevMode()) return;
   try {
@@ -3130,9 +3180,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     let rawMatchId = (detail as any)?.matchId;
     const noMatch = detail?.noMatch === true;
-    const incomingMatch = detail?.match;
+    let incomingMatch: MatchResult | undefined = detail?.match;
+    if (!incomingMatch) {
+      const fallbackMatch = resolveSpeechMatchResult(compacted, isFinal);
+      if (fallbackMatch) {
+        incomingMatch = fallbackMatch;
+      }
+    }
     let hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
-    const explicitNoMatch = (rawMatchId === null || rawMatchId === undefined) && noMatch;
+    const explicitNoMatch = (rawMatchId === null || rawMatchId === undefined) && noMatch && !incomingMatch;
     if (!hasMatchId && !explicitNoMatch && incomingMatch) {
       rawMatchId = nextSyntheticMatchId();
       hasMatchId = true;
