@@ -721,6 +721,64 @@ function isDevMode(): boolean {
   return false;
 }
 
+function installAsrHudDev(): void {
+  if (!isDevMode()) return;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+  const w = window as any;
+  if (w.__tpAsrHudInstalled) return;
+  w.__tpAsrHudInstalled = true;
+
+  const mountHud = () => {
+    if (!document.body || document.getElementById('__tpAsrHud')) return;
+
+    const el = document.createElement('div');
+    el.id = '__tpAsrHud';
+    el.style.cssText = [
+      'position:fixed; right:8px; bottom:8px; z-index:999999;',
+      'background:rgba(0,0,0,0.75); color:#9ef; padding:10px 12px;',
+      'font:12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;',
+      'border:1px solid rgba(255,255,255,0.15); border-radius:10px;',
+      'max-width:420px; white-space:pre; pointer-events:none;',
+    ].join(' ');
+    document.body.appendChild(el);
+
+    const readStore = () => {
+      const ns = w.__tpSpeech;
+      const store = ns?.store;
+      const getState = store?.getState || store?.get;
+      return typeof getState === 'function' ? getState.call(store) : null;
+    };
+
+    window.setInterval(() => {
+      const s = readStore() || {};
+      const d = w.__tpAsrScrollDriver;
+      el.textContent =
+`ASR HUD
+href: ${location.pathname}${location.search}${location.hash}
+scrollMode: ${s.scrollMode ?? s.mode ?? '?'}
+sessionPhase: ${s.sessionPhase ?? s.phase ?? '?'}
+speechRunning: ${s.speechRunning ?? s.running ?? '?'}
+asrDesired: ${s.asrDesired ?? '?'}
+asrArmed: ${s.asrArmed ?? '?'}
+
+driver: ${d ? 'YES' : 'NO'}
+driverId: ${d?._instanceId ?? '-'}
+lastLineIndex: ${typeof d?.getLastLineIndex === 'function' ? d.getLastLineIndex() : '-'}
+`;
+    }, 250);
+  };
+
+  if (document.body) {
+    mountHud();
+    return;
+  }
+
+  try {
+    window.addEventListener('DOMContentLoaded', mountHud, { once: true });
+  } catch {}
+}
+
 const SPEAKER_SLOTS: SpeakerSlot[] = ['s1', 's2', 'g1', 'g2'];
 const SPEAKER_NAME_SELECTORS: Record<SpeakerSlot, string> = {
   s1: '#name-s1',
@@ -1599,6 +1657,7 @@ export function stopSpeechBackendForSession(reason?: string): void {
 
 export function installSpeech(): void {
   ensureAsrDriverLifecycleHooks();
+  installAsrHudDev();
   // Session-first: recBtn only starts preroll/session
   (async () => {
     try {
