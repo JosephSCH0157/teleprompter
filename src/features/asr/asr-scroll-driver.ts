@@ -22,6 +22,8 @@ type DriverOptions = {
   seekThrottleMs?: number;
   /** Scale applied to the confidence threshold when processing interim results (values >1 tighten). */
   interimConfidenceScale?: number;
+  /** Stable ASR run key passed by lifecycle owner to dedupe duplicate driver summaries. */
+  runKey?: string;
 };
 
 type TranscriptDetail = {
@@ -401,6 +403,32 @@ const LOG_THROTTLE_MS = 500;
 const HUD_STATUS_THROTTLE_MS = 500;
 const HUD_PURSUE_THROTTLE_MS = 200;
 let lastPursueHudAt = 0;
+const SUMMARY_TOAST_DEDUPE_MS = 1000;
+const MAX_REPORTED_RUN_KEYS = 128;
+const reportedSummaryRunKeys = new Set<string>();
+let lastSummaryToastKey = '';
+let lastSummaryToastAt = 0;
+
+function markRunSummaryReported(runKey: string | null | undefined): boolean {
+  const key = String(runKey || '').trim();
+  if (!key) return false;
+  if (reportedSummaryRunKeys.has(key)) return true;
+  if (reportedSummaryRunKeys.size >= MAX_REPORTED_RUN_KEYS) {
+    reportedSummaryRunKeys.clear();
+  }
+  reportedSummaryRunKeys.add(key);
+  return false;
+}
+
+function emitSummaryToastOnce(toastKey: string, message: string, type: 'warning' | 'info'): void {
+  const now = Date.now();
+  if (toastKey && toastKey === lastSummaryToastKey && (now - lastSummaryToastAt) <= SUMMARY_TOAST_DEDUPE_MS) {
+    return;
+  }
+  lastSummaryToastKey = toastKey;
+  lastSummaryToastAt = now;
+  try { (window as any).toast?.(message, { type }); } catch {}
+}
 
 function logThrottled(key: string, level: 'log' | 'warn' | 'debug', message: string, payload?: any) {
   const now = Date.now();
@@ -836,6 +864,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const sessionStartAt = Date.now();
   const driverInstanceId = Math.random().toString(36).slice(2);
+  const summaryRunKey = String(options.runKey || '').trim();
   try { console.log('[ASR DRIVER CREATED]', driverInstanceId); } catch {}
   let threshold = resolveThreshold();
   setAsrDriverThresholds({ candidateMinSim: threshold });
@@ -1968,6 +1997,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const emitSummary = (source: string) => {
     if (summaryEmitted) return;
+    const duplicateRunSummary = markRunSummaryReported(summaryRunKey);
+    if (duplicateRunSummary) {
+      summaryEmitted = true;
+      if (isDevMode()) {
+        try {
+          console.info('[ASR] summary deduped', { source, summaryRunKey, driverInstanceId });
+        } catch {}
+      }
+      return;
+    }
     summaryEmitted = true;
     const now = Date.now();
     const durationMs = Math.max(0, now - sessionStartAt);
@@ -2001,6 +2040,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       durationMs,
       commitCount,
       driverInstanceId,
+      summaryRunKey: summaryRunKey || undefined,
       firstIndex,
       lastIndex,
       linesAdvanced,
@@ -2016,20 +2056,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       window.dispatchEvent(new CustomEvent('tp:asr:summary', { detail: summary }));
     } catch {}
     const warnUnsafe = commitCount === 0 || traversedPct < 5;
+    const toastKey = `${summaryRunKey || driverInstanceId}:${warnUnsafe ? 'warn' : 'info'}`;
     if (warnUnsafe) {
-      try {
-        (window as any).toast?.(
-          'ASR did not advance the script (0 commits). This run is not production-safe.',
-          { type: 'warning' },
-        );
-      } catch {}
+      emitSummaryToastOnce(
+        toastKey,
+        'ASR did not advance the script (0 commits). This run is not production-safe.',
+        'warning',
+      );
     } else {
-      try {
-        (window as any).toast?.(
-          `ASR session: ${commitCount} commits, ${linesAdvanced >= 0 ? '+' : ''}${linesAdvanced} lines (${summary.traversedPct}%)`,
-          { type: 'info' },
-        );
-      } catch {}
+      emitSummaryToastOnce(
+        toastKey,
+        `ASR session: ${commitCount} commits, ${linesAdvanced >= 0 ? '+' : ''}${linesAdvanced} lines (${summary.traversedPct}%)`,
+        'info',
+      );
     }
   };
 

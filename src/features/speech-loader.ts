@@ -94,6 +94,7 @@ declare global {
     __tpAutoRecord?: { start?: () => Promise<unknown> | unknown; stop?: () => Promise<unknown> | unknown };
     __tpSpeechOrchestrator?: { start?: () => Promise<RecognizerLike | void> | RecognizerLike | void };
     __tpSpeechCanDynImport?: boolean;
+    __tpAsrRunKey?: string | null;
     __tpSpeech?: {
       startRecognizer?: (cb: AnyFn, opts?: { lang?: string }) => void;
       stopRecognizer?: () => void;
@@ -948,6 +949,8 @@ let asrBrainLogged = false;
 let asrDriverLifecycleHooked = false;
 let asrSessionIntentActive = false;
 let speechStartInFlight = false;
+let asrRunCounter = 0;
+let activeAsrRunKey = '';
 
 function isAsrLikeMode(mode: string | null | undefined): boolean {
   const normalized = String(mode || '').toLowerCase();
@@ -1005,27 +1008,56 @@ function shouldCreateAsrDriver(mode: string, reason: string): boolean {
   return allowed;
 }
 
+function beginAsrRunKey(mode: string, reason?: string): string {
+  if (activeAsrRunKey) return activeAsrRunKey;
+  asrRunCounter += 1;
+  activeAsrRunKey = `asr-${Date.now().toString(36)}-${asrRunCounter}-${String(mode || 'unknown').toLowerCase()}`;
+  if (typeof window !== 'undefined') {
+    try { window.__tpAsrRunKey = activeAsrRunKey; } catch {}
+  }
+  if (isDevMode()) {
+    try { console.info('[ASR] run begin', { runKey: activeAsrRunKey, mode, reason }); } catch {}
+  }
+  return activeAsrRunKey;
+}
+
+function clearAsrRunKey(reason: string): void {
+  if (!activeAsrRunKey) return;
+  if (isDevMode()) {
+    try { console.info('[ASR] run clear', { runKey: activeAsrRunKey, reason }); } catch {}
+  }
+  activeAsrRunKey = '';
+  if (typeof window !== 'undefined') {
+    try { window.__tpAsrRunKey = null; } catch {}
+  }
+}
+
 function ensureAsrScrollDriver(
   reason: string,
-  opts?: { mode?: string; allowCreate?: boolean },
+  opts?: { mode?: string; allowCreate?: boolean; runKey?: string },
 ): AsrScrollDriver | null {
   if (typeof window === 'undefined') return null;
   if (asrScrollDriver) return asrScrollDriver;
   if (opts?.allowCreate !== true) return null;
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
   if (!shouldCreateAsrDriver(mode, reason)) return null;
-  asrScrollDriver = createAsrScrollDriver();
+  const runKey = String(opts?.runKey || activeAsrRunKey || '').trim();
+  asrScrollDriver = createAsrScrollDriver({ runKey: runKey || undefined });
   try { (window as any).__tpAsrScrollDriver = asrScrollDriver; } catch {}
-  try { console.info('[ASR] driver created', { reason, mode, phase: getSession().phase }); } catch {}
+  try { console.info('[ASR] driver created', { reason, mode, phase: getSession().phase, runKey: runKey || null }); } catch {}
   return asrScrollDriver;
 }
 
-function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCreate?: boolean }): void {
+function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCreate?: boolean; runKey?: string }): void {
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
   const asrLive = running && isAsrLikeMode(mode);
   const driver =
     asrScrollDriver ||
-    ensureAsrScrollDriver(`sync:${reason}`, { mode, allowCreate: opts?.allowCreate === true });
+    ensureAsrScrollDriver(`sync:${reason}`, {
+      mode,
+      allowCreate: opts?.allowCreate === true,
+      runKey: opts?.runKey,
+    });
   if (!driver) return;
   if (asrLive) {
     if (isDevMode()) {
@@ -1060,12 +1092,13 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
   }
 }
 
-function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean }): void {
+function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
   if (typeof window === 'undefined') return;
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
   ensureAsrScrollDriver(opts?.reason || 'attach', {
     mode,
     allowCreate: opts?.allowCreate === true,
+    runKey: opts?.runKey,
   });
   if (transcriptListener) return;
   transcriptListener = (event: Event) => {
@@ -1160,11 +1193,13 @@ function ensureAsrDriverLifecycleHooks(): void {
   const onSessionStop = () => {
     asrSessionIntentActive = false;
     speechStartInFlight = false;
+    clearAsrRunKey('lifecycle-session-stop');
   };
   const onSessionPhase = (event: Event) => {
     const phase = String((event as CustomEvent)?.detail?.phase || '').toLowerCase();
     if (phase === 'idle' || phase === 'wrap') {
       asrSessionIntentActive = false;
+      clearAsrRunKey(`phase-${phase}`);
     }
   };
   window.addEventListener('tp:session:intent', onSessionIntent, TRANSCRIPT_EVENT_OPTIONS);
@@ -1207,6 +1242,7 @@ function ensureSessionStopHooked(): void {
   window.addEventListener('tp:session:stop', (event) => {
     asrSessionIntentActive = false;
     speechStartInFlight = false;
+    clearAsrRunKey('session-stop-hook');
     detachAsrScrollDriver();
     const detail = (event as CustomEvent)?.detail || {};
     const mode = typeof detail.mode === 'string' && detail.mode
@@ -1355,9 +1391,10 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     const layoutReady = await waitForAsrLayoutReady(info?.reason);
     if (!layoutReady) return false;
     if (running) return true;
+    const runKey = beginAsrRunKey(mode, info?.reason);
 
-    attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true });
-    syncAsrDriverFromBlocks(info?.reason || 'session-start', { mode, allowCreate: true });
+    attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true, runKey });
+    syncAsrDriverFromBlocks(info?.reason || 'session-start', { mode, allowCreate: true, runKey });
     const startIdx = computeMarkerLineIndex();
     syncAsrIndices(startIdx, 'session-start');
     if (!asrBrainLogged) {
@@ -1437,6 +1474,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       setActiveRecognizer(null);
       setListeningUi(false);
       setReadyUi();
+      clearAsrRunKey('start-failed');
       return false;
     }
   } finally {
@@ -1447,6 +1485,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
 export function stopSpeechBackendForSession(reason?: string): void {
   speechStartInFlight = false;
   asrSessionIntentActive = false;
+  clearAsrRunKey(`stop:${String(reason || 'unspecified')}`);
   if (!running && !rec) {
     detachAsrScrollDriver();
     return;
