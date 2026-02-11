@@ -3670,13 +3670,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     resetLagRelock('in-band');
     if (isDevMode()) {
       const currentIndex = cursorLine;
+      const scriptLinesLength = getTotalLines();
       const scriptRaw = getLineTextAt(currentIndex);
       const scriptNormalized = normalizeComparableText(scriptRaw);
       const asrRaw = String(text || '');
       const asrNormalized = normalizeComparableText(asrRaw);
       try {
         console.log('=== ASR DEBUG COMPARISON ===');
-        console.log('Current Index:', currentIndex);
+        console.log('ScriptLines length:', Number.isFinite(scriptLinesLength) ? scriptLinesLength : 'null');
+        console.log('CurrentIndex:', currentIndex);
         console.log('Script Raw:', scriptRaw);
         console.log('Script Normalized:', scriptNormalized);
         console.log('ASR Raw:', asrRaw);
