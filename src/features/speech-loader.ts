@@ -3,6 +3,7 @@ import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
 import { stopAsrRuntime } from '../speech/runtime-control';
 import { createAsrScrollDriver, type AsrScrollDriver } from '../features/asr/asr-scroll-driver';
+import { getAsrBlockElements, getAsrBlockIndex } from '../scroll/asr-block-store';
 import {
   describeElement,
   getFallbackScroller,
@@ -944,13 +945,87 @@ let asrScrollDriver: AsrScrollDriver | null = null;
 let transcriptListener: ((event: Event) => void) | null = null;
 let sessionStopHooked = false;
 let asrBrainLogged = false;
+let asrDriverLifecycleHooked = false;
 
-function attachAsrScrollDriver(): void {
-  if (typeof window === 'undefined') return;
+function isAsrLikeMode(mode: string | null | undefined): boolean {
+  const normalized = String(mode || '').toLowerCase();
+  return normalized === 'asr' || normalized === 'hybrid';
+}
+
+function getAsrBlockSnapshot(): { ready: boolean; count: number; schemaVersion?: number; source?: string } {
+  let count = 0;
+  let schemaVersion: number | undefined;
+  let source: string | undefined;
+  try {
+    const els = getAsrBlockElements();
+    count = Array.isArray(els) ? els.length : 0;
+  } catch {}
+  try {
+    const meta = getAsrBlockIndex() as any;
+    if (Number.isFinite(Number(meta?.schemaVersion))) {
+      schemaVersion = Number(meta.schemaVersion);
+    }
+    if (typeof meta?.source === 'string') {
+      source = meta.source;
+    }
+  } catch {}
+  try {
+    const globalCount = Number((window as any).__tpAsrBlockCount);
+    if (Number.isFinite(globalCount) && globalCount > count) {
+      count = Math.floor(globalCount);
+    }
+  } catch {}
+  const ready = count > 0 || (() => {
+    try { return Boolean((window as any).__tpAsrBlocksReady); } catch { return false; }
+  })();
+  return { ready, count, schemaVersion, source };
+}
+
+function ensureAsrScrollDriver(reason: string): AsrScrollDriver | null {
+  if (typeof window === 'undefined') return null;
   if (!asrScrollDriver) {
     asrScrollDriver = createAsrScrollDriver();
     try { (window as any).__tpAsrScrollDriver = asrScrollDriver; } catch {}
+    try { console.info('[ASR] driver created', { reason }); } catch {}
   }
+  return asrScrollDriver;
+}
+
+function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; forceCreate?: boolean }): void {
+  const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
+  const shouldCreate = opts?.forceCreate === true || isAsrLikeMode(mode);
+  const driver = shouldCreate ? ensureAsrScrollDriver(`sync:${reason}`) : asrScrollDriver;
+  if (!driver) return;
+  const blocks = getAsrBlockSnapshot();
+  if (!blocks.ready || blocks.count <= 0) {
+    if (isDevMode()) {
+      try { console.debug('[ASR] block sync skipped (not ready)', { reason, mode, blocks }); } catch {}
+    }
+    return;
+  }
+  try {
+    (window as any).__tpAsrBlocksReady = true;
+    (window as any).__tpAsrBlockCount = blocks.count;
+  } catch {}
+  const markerIdx = computeMarkerLineIndex();
+  syncAsrIndices(markerIdx, `blocks:${reason}`);
+  if (isDevMode()) {
+    try {
+      console.info('[ASR] block sync complete', {
+        reason,
+        mode,
+        markerIdx,
+        blockCount: blocks.count,
+        schemaVersion: blocks.schemaVersion,
+        source: blocks.source,
+      });
+    } catch {}
+  }
+}
+
+function attachAsrScrollDriver(): void {
+  if (typeof window === 'undefined') return;
+  ensureAsrScrollDriver('attach');
   if (transcriptListener) return;
   transcriptListener = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
@@ -980,6 +1055,70 @@ function attachAsrScrollDriver(): void {
     asrScrollDriver?.ingest(text, isFinal, payload as any);
   };
   window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
+}
+
+function ensureAsrDriverLifecycleHooks(): void {
+  if (asrDriverLifecycleHooked || typeof window === 'undefined') return;
+  asrDriverLifecycleHooked = true;
+  const onScrollMode = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const mode = String(detail.mode || detail.nextMode || getScrollMode() || '').toLowerCase();
+    if (isAsrLikeMode(mode)) {
+      attachAsrScrollDriver();
+      syncAsrDriverFromBlocks('scroll-mode', { mode, forceCreate: true });
+      return;
+    }
+    if (!running) {
+      detachAsrScrollDriver();
+    }
+  };
+  const onSessionStart = () => {
+    const session = getSession();
+    const mode = getScrollMode();
+    if (session.asrDesired || isAsrLikeMode(mode)) {
+      attachAsrScrollDriver();
+      syncAsrDriverFromBlocks('session-start', { mode, forceCreate: true });
+    }
+  };
+  const onBlocksReady = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const mode = String(getScrollMode() || '').toLowerCase();
+    const session = getSession();
+    const wantsAsrDriver = isAsrLikeMode(mode) || session.asrDesired;
+    if (detail && typeof detail.blockCount === 'number') {
+      try { (window as any).__tpAsrBlockCount = Math.max(0, Math.floor(detail.blockCount)); } catch {}
+      try { (window as any).__tpAsrBlocksReady = true; } catch {}
+    }
+    syncAsrDriverFromBlocks('blocks-ready', { mode, forceCreate: wantsAsrDriver });
+  };
+  const onScriptRendered = () => {
+    const mode = String(getScrollMode() || '').toLowerCase();
+    const session = getSession();
+    const wantsAsrDriver = isAsrLikeMode(mode) || session.asrDesired || !!asrScrollDriver;
+    if (!wantsAsrDriver) return;
+    try {
+      window.requestAnimationFrame?.(() => {
+        syncAsrDriverFromBlocks('script-rendered', { mode, forceCreate: true });
+      });
+    } catch {
+      syncAsrDriverFromBlocks('script-rendered', { mode, forceCreate: true });
+    }
+  };
+  window.addEventListener('tp:scroll:mode', onScrollMode, TRANSCRIPT_EVENT_OPTIONS);
+  document.addEventListener('tp:scroll:mode', onScrollMode as EventListener, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:session:start', onSessionStart, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:asr:blocks-ready', onBlocksReady, TRANSCRIPT_EVENT_OPTIONS);
+  document.addEventListener('tp:asr:blocks-ready', onBlocksReady as EventListener, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:script-rendered', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
+  document.addEventListener('tp:script-rendered', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:render:done', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
+  document.addEventListener('tp:render:done', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
+  const initialMode = String(getScrollMode() || '').toLowerCase();
+  const session = getSession();
+  if (isAsrLikeMode(initialMode) || session.asrDesired) {
+    attachAsrScrollDriver();
+    syncAsrDriverFromBlocks('bootstrap', { mode: initialMode, forceCreate: true });
+  }
 }
 
 function detachAsrScrollDriver(): void {
@@ -1135,6 +1274,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   const mode = (info?.mode || getScrollMode()).toLowerCase();
   const wantsSpeech = mode === 'asr' || mode === 'hybrid';
   if (!wantsSpeech) return false;
+  ensureAsrDriverLifecycleHooks();
   if (isSettingsHydrating()) {
     try { console.debug('[ASR] startSpeech blocked during settings hydration', { mode, reason: info?.reason }); } catch {}
     return false;
@@ -1146,6 +1286,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   if (running) return true;
 
   attachAsrScrollDriver();
+  syncAsrDriverFromBlocks(info?.reason || 'session-start', { mode, forceCreate: true });
   const startIdx = computeMarkerLineIndex();
   syncAsrIndices(startIdx, 'session-start');
   if (!asrBrainLogged) {
@@ -1251,6 +1392,7 @@ export function stopSpeechBackendForSession(reason?: string): void {
 }
 
 export function installSpeech(): void {
+  ensureAsrDriverLifecycleHooks();
   // Session-first: recBtn only starts preroll/session
   (async () => {
     try {
