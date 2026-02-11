@@ -10,15 +10,14 @@ import { listRecorders } from '../recording/recorderRegistry';
 import { getRecordingEngine, getRecordingMode } from '../recording/recording-settings';
 import {
   normalizeScrollMode,
-  shouldAutoStartForMode,
 } from './scroll/scroll-mode-utils';
 
 function computeScrollAutoOnLive(rawMode?: string | undefined): boolean {
   try {
-    const mode = rawMode ?? (appStore.get('scrollMode') as string | undefined);
-    return shouldAutoStartForMode(mode);
+    const mode = normalizeScrollMode(rawMode ?? (appStore.get('scrollMode') as string | undefined));
+    return mode === 'timed' || mode === 'wpm' || mode === 'hybrid';
   } catch {
-    return true;
+    return false;
   }
 }
 

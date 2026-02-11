@@ -3023,6 +3023,15 @@ function installScrollRouter(opts) {
       const normalized = normalizeScrollModeValue(next);
       if (!normalized || normalized === state2.mode) return;
       applyMode(normalized);
+      if (normalized === 'asr') {
+        // Safety belt: entering ASR must always leave timed/wpm/hybrid motors fully off.
+        try { stopAllMotors('mode switch to asr (safety)'); } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent('tp:auto:intent', {
+            detail: { enabled: false, reason: 'mode-enter-asr' },
+          }));
+        } catch {}
+      }
       emitScrollModeSnapshot("store-change");
     });
   } catch {}
@@ -5160,9 +5169,8 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       const viewerReady = hasScrollableTarget();
       const livePhase = sessionPhase === 'live';
       const sessionBlocked = !sessionIntentOn && !userEnabled;
-      const asrMotorIntentOn = mode === "asr" && sessionIntentOn;
       let autoBlocked = "blocked:sessionOff";
-      if (mode === "step" || mode === "rehearsal" || (mode === "asr" && !asrMotorIntentOn)) {
+      if (mode === "step" || mode === "rehearsal" || mode === "asr") {
         autoBlocked = `blocked:mode-${mode}`;
       } else if (!livePhase) {
         autoBlocked = "blocked:livePhase";
@@ -5468,6 +5476,24 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         });
       appStore.subscribe("session.scrollAutoOnLive", () => {
         applyGate();
+      });
+      appStore.subscribe("scrollMode", (modeRaw) => {
+        const normalized = normalizeScrollModeValue(modeRaw);
+        if (normalized !== 'asr') return;
+        stopAllMotors("mode-enter-asr");
+        userEnabled = false;
+        userIntentOn = false;
+        sessionIntentOn = false;
+        hybridWantedRunning = false;
+        hybridSilence.pausedBySilence = false;
+        clearHybridSilenceTimer();
+        enabledNow = false;
+        asrIntentLiveSince = 0;
+        try { auto?.setEnabled?.(false); } catch {}
+        persistStoredAutoEnabled(false);
+        try { emitMotorState("auto", false); } catch {}
+        try { emitMotorState("hybridWpm", false); } catch {}
+        try { emitAutoState(); } catch {}
       });
     }
   } catch {}
