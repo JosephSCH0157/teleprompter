@@ -1,4 +1,4 @@
-import { normTokens, type MatchResult } from '../../speech/matcher';
+import { computeLineSimilarityFromTokens, normTokens, type MatchResult } from '../../speech/matcher';
 import { speechStore } from '../../state/speech-store';
 import { getAsrSettings } from '../speech/speech-store';
 import { ensureAsrTuningProfile, getActiveAsrTuningProfile, onAsrTuning, type AsrTuningProfile } from '../../asr/tuning-store';
@@ -10,6 +10,7 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../../scroll/scroller';
+import { getAsrBlockElements } from '../../scroll/asr-block-store';
 import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
 import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
 
@@ -106,6 +107,22 @@ type ConsistencyResult = {
   minSim: number;
   spread: number;
   nearOk: boolean;
+};
+
+type AsrBlockCorpusEntry = {
+  blockId: number;
+  startLine: number;
+  endLine: number;
+  textNorm: string;
+  tokens: string[];
+};
+
+type AsrBlockMatch = {
+  blockId: number;
+  conf: number;
+  startLine: number;
+  endLine: number;
+  textNormSample: string;
 };
 
 export interface AsrScrollDriver {
@@ -364,6 +381,24 @@ function getOverlapTokens(leftNormalized: string, rightNormalized: string): stri
   return overlap;
 }
 
+function parseLineIndexFromElement(el: HTMLElement | null): number | null {
+  if (!el) return null;
+  const raw =
+    el.dataset.i ||
+    el.dataset.index ||
+    el.dataset.line ||
+    el.dataset.lineIdx ||
+    el.getAttribute('data-line') ||
+    el.getAttribute('data-line-idx');
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
+}
+
+function parseBlockIndexFromElement(el: HTMLElement | null, fallback: number): number {
+  const raw = Number(el?.dataset.tpBlock ?? fallback);
+  return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : Math.max(0, Math.floor(fallback));
+}
+
 function isIgnorableCueLineText(value: string): boolean {
   const raw = String(value || '').trim();
   if (!raw) return true;
@@ -372,6 +407,39 @@ function isIgnorableCueLineText(value: string): boolean {
   if (CUE_LINE_BRACKET_RE.test(raw)) return true;
   const tokenCount = normalized.split(' ').filter(Boolean).length;
   return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized);
+}
+
+function buildAsrBlockCorpusFromElements(blockEls: HTMLElement[]): AsrBlockCorpusEntry[] {
+  if (!Array.isArray(blockEls) || !blockEls.length) return [];
+  const corpus: AsrBlockCorpusEntry[] = [];
+  for (let i = 0; i < blockEls.length; i += 1) {
+    const blockEl = blockEls[i];
+    if (!blockEl) continue;
+    const blockId = parseBlockIndexFromElement(blockEl, i);
+    const lineEls = Array.from(blockEl.querySelectorAll<HTMLElement>('.line, .tp-line'));
+    if (!lineEls.length) continue;
+    const lineIndices: number[] = [];
+    const spokenTextParts: string[] = [];
+    for (const lineEl of lineEls) {
+      const lineIdx = parseLineIndexFromElement(lineEl);
+      if (lineIdx != null) lineIndices.push(lineIdx);
+      const raw = String(lineEl.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!raw || isIgnorableCueLineText(raw)) continue;
+      spokenTextParts.push(raw);
+    }
+    if (!lineIndices.length) continue;
+    lineIndices.sort((a, b) => a - b);
+    const textNorm = normalizeComparableText(spokenTextParts.join(' '));
+    corpus.push({
+      blockId,
+      startLine: lineIndices[0],
+      endLine: lineIndices[lineIndices.length - 1],
+      textNorm,
+      tokens: normTokens(textNorm),
+    });
+  }
+  corpus.sort((a, b) => a.blockId - b.blockId || a.startLine - b.startLine);
+  return corpus;
 }
 
 function mergeEvidenceText(base: string, next: string): string {
@@ -959,6 +1027,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
   let resyncBacktrackOverride = DEFAULT_MATCH_BACKTRACK_LINES;
   let matchAnchorIdx = -1;
+  let lastCommittedBlockId = -1;
+  let blockCorpusCacheRef: HTMLElement[] | null = null;
+  let blockCorpusCache: AsrBlockCorpusEntry[] = [];
     let pursuitTargetTop: number | null = null;
     let appliedTopPx = 0;
     let pursuitVel = 0;
@@ -971,6 +1042,122 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         commitCount,
       });
     } catch {}
+  };
+
+  const getAsrBlockCorpus = (): AsrBlockCorpusEntry[] => {
+    const blockEls = getAsrBlockElements();
+    if (!Array.isArray(blockEls) || !blockEls.length) {
+      blockCorpusCacheRef = null;
+      blockCorpusCache = [];
+      return [];
+    }
+    if (blockCorpusCacheRef === blockEls && blockCorpusCache.length) return blockCorpusCache;
+    blockCorpusCacheRef = blockEls;
+    blockCorpusCache = buildAsrBlockCorpusFromElements(blockEls);
+    return blockCorpusCache;
+  };
+
+  const findBlockByLine = (
+    lineIndex: number,
+    corpus: AsrBlockCorpusEntry[] = getAsrBlockCorpus(),
+  ): AsrBlockCorpusEntry | null => {
+    if (!Number.isFinite(lineIndex) || lineIndex < 0 || !corpus.length) return null;
+    const needle = Math.floor(lineIndex);
+    for (const entry of corpus) {
+      if (needle < entry.startLine || needle > entry.endLine) continue;
+      return entry;
+    }
+    return null;
+  };
+
+  const resolveAsrAnchorBlockId = (corpus: AsrBlockCorpusEntry[]): number => {
+    if (!corpus.length) return -1;
+    const markerIdx = computeMarkerLineIndex(getScroller());
+    if (Number.isFinite(markerIdx) && markerIdx >= 0) {
+      const markerBlock = findBlockByLine(markerIdx, corpus);
+      if (markerBlock) return markerBlock.blockId;
+    }
+    if (lastCommittedBlockId >= 0 && corpus.some((entry) => entry.blockId === lastCommittedBlockId)) {
+      return lastCommittedBlockId;
+    }
+    return corpus[0].blockId;
+  };
+
+  const resolveBlockWindowRange = (
+    corpus: AsrBlockCorpusEntry[],
+    blockId: number,
+    padBlocks = 1,
+  ): { startLine: number; endLine: number } | null => {
+    if (!corpus.length) return null;
+    const center = corpus.findIndex((entry) => entry.blockId === blockId);
+    if (center < 0) return null;
+    const from = Math.max(0, center - Math.max(0, Math.floor(padBlocks)));
+    const to = Math.min(corpus.length - 1, center + Math.max(0, Math.floor(padBlocks)));
+    let startLine = Number.POSITIVE_INFINITY;
+    let endLine = -1;
+    for (let i = from; i <= to; i += 1) {
+      startLine = Math.min(startLine, corpus[i].startLine);
+      endLine = Math.max(endLine, corpus[i].endLine);
+    }
+    if (!Number.isFinite(startLine) || !Number.isFinite(endLine) || endLine < startLine) return null;
+    return { startLine: Math.max(0, Math.floor(startLine)), endLine: Math.max(0, Math.floor(endLine)) };
+  };
+
+  const matchAgainstBlocks = (
+    asrNormalized: string,
+    anchorBlockId: number,
+    corpus: AsrBlockCorpusEntry[],
+  ): AsrBlockMatch | null => {
+    if (!corpus.length) return null;
+    const asrTokens = normTokens(asrNormalized);
+    if (!asrTokens.length) return null;
+    const anchorPos = corpus.findIndex((entry) => entry.blockId === anchorBlockId);
+    let best: AsrBlockMatch | null = null;
+    for (let i = 0; i < corpus.length; i += 1) {
+      const entry = corpus[i];
+      if (!entry.tokens.length) continue;
+      let score = computeLineSimilarityFromTokens(asrTokens, entry.tokens);
+      if (anchorPos >= 0) {
+        const distance = Math.abs(i - anchorPos);
+        score = Math.max(0, score - Math.min(0.05, distance * 0.005));
+      }
+      if (!best || score > best.conf) {
+        best = {
+          blockId: entry.blockId,
+          conf: score,
+          startLine: entry.startLine,
+          endLine: entry.endLine,
+          textNormSample: entry.textNorm.slice(0, 60),
+        };
+      }
+    }
+    return best;
+  };
+
+  const pickBestLineWithinRange = (
+    topScores: Array<{ idx: number; score: number }>,
+    range: { startLine: number; endLine: number } | null,
+  ): { idx: number; score: number } | null => {
+    if (!range || !Array.isArray(topScores) || !topScores.length) return null;
+    let best: { idx: number; score: number } | null = null;
+    for (const entry of topScores) {
+      const idx = Number(entry.idx);
+      const score = Number(entry.score);
+      if (!Number.isFinite(idx) || !Number.isFinite(score)) continue;
+      if (idx < range.startLine || idx > range.endLine) continue;
+      const lineEl = getLineElementByIndex(getScroller(), idx);
+      const lineText = String(lineEl?.textContent || '').replace(/\s+/g, ' ').trim();
+      if (isIgnorableCueLineText(lineText)) continue;
+      if (!best || score > best.score) {
+        best = { idx: Math.max(0, Math.floor(idx)), score };
+      }
+    }
+    return best;
+  };
+
+  const rememberCommittedBlockFromLine = (lineIndex: number): void => {
+    const block = findBlockByLine(lineIndex);
+    if (block) lastCommittedBlockId = block.blockId;
   };
 
   function logAsrScrollAttempt(
@@ -1571,6 +1758,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lineMissingRetryCount = 0;
     }
     try { (window as any).currentIndex = next; } catch {}
+    rememberCommittedBlockFromLine(next);
     if (scriptHashChanged) lastScriptHash = scriptHash;
   };
 
@@ -3029,15 +3217,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       pursuitTargetTop = nextTargetTop;
       if (isDevMode()) {
         let hasWriter = false;
+        let targetBlockId = -1;
         try {
           const maybeWriter = (window as any).__tpScrollWrite;
           hasWriter =
             typeof maybeWriter === 'function' ||
             (typeof maybeWriter === 'object' && !!maybeWriter && typeof maybeWriter.scrollTo === 'function');
         } catch {}
+        try {
+          targetBlockId = findBlockByLine(targetLine)?.blockId ?? -1;
+        } catch {}
         console.log('[ASR] commit->seek', {
           commitCount: commitCount + 1,
-          blockId: targetLine,
+          blockId: targetBlockId,
+          lineIdx: targetLine,
           hasWriter,
         });
       }
@@ -3202,6 +3395,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (nextIdx !== lastLineIndex) {
         lastLineIndex = nextIdx;
         matchAnchorIdx = nextIdx;
+        rememberCommittedBlockFromLine(nextIdx);
       }
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
@@ -3355,14 +3549,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
 
+    const mode = getScrollMode();
+    const asrMode = mode === 'asr';
+    const legacyWindowIdx = asrMode
+      ? -1 // ASR must not anchor from window.currentIndex.
+      : Number((window as any)?.currentIndex ?? 0);
     const anchorIdx = matchAnchorIdx >= 0
       ? matchAnchorIdx
-      : (lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? 0));
+      : (lastLineIndex >= 0 ? lastLineIndex : legacyWindowIdx);
     const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
     const lagRelockActive = resyncActive && resyncReason === 'lag';
     const effectiveAnchor = resyncActive
       ? Math.max(0, Math.floor(resyncAnchorIdx as number))
-      : Math.max(0, Math.floor(anchorIdx));
+      : (anchorIdx >= 0 ? Math.max(0, Math.floor(anchorIdx)) : -1);
     const anchorTarget = effectiveAnchor;
 
     const driverWindowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
@@ -3381,6 +3580,45 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     const thresholds = getAsrDriverThresholds();
+    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
+    const blockCorpus = asrMode ? getAsrBlockCorpus() : [];
+    const anchorBlockId = asrMode ? resolveAsrAnchorBlockId(blockCorpus) : -1;
+    const blockAsrText = asrMode ? normalizeComparableText(bufferedText || compacted) : '';
+    const blockMatch = asrMode ? matchAgainstBlocks(blockAsrText, anchorBlockId, blockCorpus) : null;
+    const blockWindowRange = asrMode && blockMatch
+      ? resolveBlockWindowRange(blockCorpus, blockMatch.blockId, 1)
+      : null;
+    const blockAnchorFloor = Math.max(0, thresholds.candidateMinSim - 0.05);
+    let usedBlockMatch = asrMode && !!blockMatch;
+    let usedLineFallback = false;
+    if (asrMode && effectiveAnchor < 0) {
+      if (blockMatch && blockMatch.conf >= blockAnchorFloor) {
+        const resyncedLine = Math.max(0, Math.floor(blockMatch.startLine));
+        lastLineIndex = resyncedLine;
+        matchAnchorIdx = resyncedLine;
+        lastCommittedBlockId = blockMatch.blockId;
+        setCurrentIndex(resyncedLine, 'block-anchor-sync');
+        if (isDevMode()) {
+          try {
+            console.info('[ASR] block anchor synced', {
+              anchorBlockId,
+              matchedBlockId: blockMatch.blockId,
+              conf: Number(blockMatch.conf.toFixed(3)),
+              line: resyncedLine,
+            });
+          } catch {}
+        }
+      } else {
+        warnGuard('anchor_missing_block', [
+          `anchorIdx=${anchorIdx}`,
+          `anchorBlockId=${anchorBlockId}`,
+          `blockConf=${formatLogScore(blockMatch?.conf ?? 0)}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        emitHudStatus('anchor_missing', 'Waiting: block anchor');
+      }
+      return;
+    }
     const matchWindowBackRaw = Number((match as any)?.windowBack);
     const matchWindowAheadRaw = Number((match as any)?.windowAhead);
     const matchWindowBack = Number.isFinite(matchWindowBackRaw)
@@ -3391,6 +3629,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : driverWindowAhead;
     let rawIdx = Number(match.bestIdx);
     let conf = Number.isFinite(match.bestSim) ? match.bestSim : 0;
+    if (asrMode && blockWindowRange) {
+      const inBlockWindow =
+        Number.isFinite(rawIdx) &&
+        rawIdx >= blockWindowRange.startLine &&
+        rawIdx <= blockWindowRange.endLine &&
+        !isIgnorableCueLineText(getLineTextAt(rawIdx));
+      if (!inBlockWindow) {
+        const fallback = pickBestLineWithinRange(topScores, blockWindowRange);
+        if (fallback) {
+          rawIdx = fallback.idx;
+          conf = fallback.score;
+          usedLineFallback = true;
+        } else if (blockMatch && blockMatch.conf >= blockAnchorFloor) {
+          rawIdx = Math.max(0, Math.floor(blockMatch.startLine));
+          conf = Math.max(conf, blockMatch.conf);
+          usedLineFallback = true;
+        }
+      }
+    }
     const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
     const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
@@ -3499,7 +3756,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const confirmingCurrentLine = candidateIdx >= 0 && candidateIdx === cursorLine;
     const stickAdjust = confirmingCurrentLine ? thresholds.stickinessDelta : 0;
     const effectiveThresholdForPending = clamp(requiredThreshold - stickAdjust, 0, 1);
-    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
     const rawScoreByIdx = new Map<number, number>();
     topScores.forEach((entry) => {
       const idx = Number(entry.idx);
@@ -3679,6 +3935,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         console.log('=== ASR DEBUG COMPARISON ===');
         console.log('ScriptLines length:', Number.isFinite(scriptLinesLength) ? scriptLinesLength : 'null');
         console.log('CurrentIndex:', currentIndex);
+        console.log('AnchorBlockId:', anchorBlockId);
+        console.log('BlockTextNormalized:', blockMatch?.textNormSample || '');
         console.log('Script Raw:', scriptRaw);
         console.log('Script Normalized:', scriptNormalized);
         console.log('ASR Raw:', asrRaw);
@@ -3698,6 +3956,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       winBack: matchWindowBack,
       winAhead: matchWindowAhead,
       final: isFinal ? 1 : 0,
+      anchorBlockId,
+      bestBlockId: blockMatch?.blockId ?? null,
+      usedBlockMatch: usedBlockMatch ? 1 : 0,
+      usedLineFallback: usedLineFallback ? 1 : 0,
     });
     if (
       (resyncReason === 'stuck' || resyncReason === 'lag') &&
