@@ -351,6 +351,19 @@ function normalizeComparableText(value: string): string {
   return normTokens(String(value || '')).join(' ');
 }
 
+function getOverlapTokens(leftNormalized: string, rightNormalized: string): string[] {
+  const leftTokens = String(leftNormalized || '').split(' ').filter(Boolean);
+  const rightTokens = new Set(String(rightNormalized || '').split(' ').filter(Boolean));
+  const seen = new Set<string>();
+  const overlap: string[] = [];
+  for (const token of leftTokens) {
+    if (!rightTokens.has(token) || seen.has(token)) continue;
+    seen.add(token);
+    overlap.push(token);
+  }
+  return overlap;
+}
+
 function isIgnorableCueLineText(value: string): boolean {
   const raw = String(value || '').trim();
   if (!raw) return true;
@@ -3655,6 +3668,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     resetLagRelock('in-band');
+    if (isDevMode()) {
+      const currentIndex = cursorLine;
+      const scriptRaw = getLineTextAt(currentIndex);
+      const scriptNormalized = normalizeComparableText(scriptRaw);
+      const asrRaw = String(text || '');
+      const asrNormalized = normalizeComparableText(asrRaw);
+      try {
+        console.log('=== ASR DEBUG COMPARISON ===');
+        console.log('Current Index:', currentIndex);
+        console.log('Script Raw:', scriptRaw);
+        console.log('Script Normalized:', scriptNormalized);
+        console.log('ASR Raw:', asrRaw);
+        console.log('ASR Normalized:', asrNormalized);
+        console.log('Overlap Tokens:', getOverlapTokens(scriptNormalized, asrNormalized));
+        console.log('Similarity:', conf);
+        console.log('============================');
+      } catch {}
+    }
     logThrottled('ASR_MATCH', 'log', 'ASR_MATCH', {
       matchId,
       currentIndex: cursorLine,
