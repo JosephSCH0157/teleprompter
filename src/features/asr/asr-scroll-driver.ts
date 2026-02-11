@@ -835,6 +835,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     : DEFAULT_INTERIM_SCALE;
 
   const sessionStartAt = Date.now();
+  const driverInstanceId = Math.random().toString(36).slice(2);
+  try { console.log('[ASR DRIVER CREATED]', driverInstanceId); } catch {}
   let threshold = resolveThreshold();
   setAsrDriverThresholds({ candidateMinSim: threshold });
   let lastLineIndex = -1;
@@ -870,6 +872,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let pursuitVel = 0;
     let pursuitLastTs = 0;
     let pursuitActive = false;
+  const logDriverActive = (reason: string) => {
+    try {
+      console.log('[ASR DRIVER ACTIVE]', driverInstanceId, {
+        reason,
+        commitCount,
+      });
+    } catch {}
+  };
+
   function logAsrScrollAttempt(
     stage: 'attempt' | 'denied' | 'applied',
     payload: {
@@ -1944,6 +1955,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     commitCount += 1;
+    logDriverActive('commit');
     stallHudEmitted = false;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
       firstCommitIndex = Math.max(0, Math.floor(prevIndex));
@@ -1988,6 +2000,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       mode: getScrollMode() || 'unknown',
       durationMs,
       commitCount,
+      driverInstanceId,
       firstIndex,
       lastIndex,
       linesAdvanced,
@@ -1997,6 +2010,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       scrollerId,
       source,
     };
+    logDriverActive(`summary:${source}`);
     try { console.warn('ASR_SESSION_SUMMARY', summary); } catch {}
     try {
       window.dispatchEvent(new CustomEvent('tp:asr:summary', { detail: summary }));
@@ -4354,6 +4368,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const dispose = () => {
     if (disposed) return;
+    logDriverActive('dispose');
     emitSummary('dispose');
     disposed = true;
     try {
@@ -4442,5 +4457,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
   const getLastLineIndex = () => lastLineIndex;
 
-  return { ingest, dispose, setLastLineIndex, getLastLineIndex };
+  const driver: AsrScrollDriver = { ingest, dispose, setLastLineIndex, getLastLineIndex };
+  try { (driver as any).__instanceId = driverInstanceId; } catch {}
+  return driver;
 }

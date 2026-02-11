@@ -993,9 +993,26 @@ function ensureAsrScrollDriver(reason: string): AsrScrollDriver | null {
 
 function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; forceCreate?: boolean }): void {
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
+  const asrLive = running && isAsrLikeMode(mode);
   const shouldCreate = opts?.forceCreate === true || isAsrLikeMode(mode);
+  if (asrLive && !asrScrollDriver) {
+    if (isDevMode()) {
+      try {
+        console.warn('[ASR] block sync skipped (live/no-driver)', { reason, mode });
+      } catch {}
+    }
+    return;
+  }
   const driver = shouldCreate ? ensureAsrScrollDriver(`sync:${reason}`) : asrScrollDriver;
   if (!driver) return;
+  if (asrLive) {
+    if (isDevMode()) {
+      try {
+        console.debug('[ASR] block sync skipped (live)', { reason, mode });
+      } catch {}
+    }
+    return;
+  }
   const blocks = getAsrBlockSnapshot();
   if (!blocks.ready || blocks.count <= 0) {
     if (isDevMode()) {
