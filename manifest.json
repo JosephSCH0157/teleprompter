@@ -1,0 +1,114 @@
+{
+  "schema": "forge.manifest.v1",
+  "workpiece_id": "9d3c2c8c-7a9e-4d1e-8d7a-1a2f9b4f4b10",
+  "workspace_id": "2f4a7e1b-6b3a-4a7a-9f3b-8b8c3a6f2a11",
+  "created_at": "2026-02-12T18:40:12.123Z",
+  "updated_at": "2026-02-12T18:55:01.004Z",
+  "status": "draft",
+  "pointers": {
+    "script_primary": "script/script.md",
+    "script_format": "script/script.format.json",
+    "script_sources": "script/script.sources.json",
+    "assets_registry": "assets/assets.json",
+    "session_current": null,
+    "edit_current": null,
+    "export_current": null,
+    "publish_intent": null
+  },
+  "hashing": {
+    "algo": "sha256",
+    "text_newlines": "LF",
+    "json": {
+      "sorted_keys": true,
+      "minified": true,
+      "preserve_array_order": true
+    }
+  },
+  "origin": {
+    "created_by": {
+      "user_id": "7a2a1f2b-3c4d-4e5f-8a9b-1c2d3e4f5a6b",
+      "display_name": "Joe"
+    },
+    "tool": {
+      "name": "tongs",
+      "version": "0.1.0"
+    }
+  },
+  "files": {
+    "metadata.json": {
+      "type": "metadata",
+      "content_type": "application/json",
+      "bytes": 1184,
+      "hash": {
+        "algo": "sha256",
+        "value": "8f6a2c2c5f8a0c9f6cbbf4df2a7a7d3e9bbf8a6f0b7c5d4e3a2b1c0d9e8f7a6b"
+      },
+      "written_by": {
+        "tool": "tongs",
+        "tool_version": "0.1.0",
+        "lane": "forge-managed"
+      },
+      "updated_at": "2026-02-12T18:55:01.004Z"
+    },
+    "script/script.md": {
+      "type": "script",
+      "content_type": "text/markdown",
+      "bytes": 18342,
+      "hash": {
+        "algo": "sha256",
+        "value": "2a7f3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809"
+      },
+      "written_by": {
+        "tool": "hearth",
+        "tool_version": "0.1.0",
+        "lane": "forge-managed"
+      },
+      "updated_at": "2026-02-12T18:54:10.221Z"
+    },
+    "script/script.format.json": {
+      "type": "script_format",
+      "content_type": "application/json",
+      "bytes": 2540,
+      "hash": {
+        "algo": "sha256",
+        "value": "0c91a4b2e1f7d8c9b0a1f2e3d4c5b6a79887766554433221100ffeeddccbbaa99"
+      },
+      "written_by": {
+        "tool": "anvil",
+        "tool_version": "1.8.2",
+        "lane": "forge-managed"
+      },
+      "updated_at": "2026-02-12T18:54:30.113Z"
+    },
+    "script/script.sources.json": {
+      "type": "script_sources",
+      "content_type": "application/json",
+      "bytes": 912,
+      "hash": {
+        "algo": "sha256",
+        "value": "9bbf8a6f0b7c5d4e3a2b1c0d9e8f7a6b8f6a2c2c5f8a0c9f6cbbf4df2a7a7d3e"
+      },
+      "written_by": {
+        "tool": "hearth",
+        "tool_version": "0.1.0",
+        "lane": "forge-managed"
+      },
+      "updated_at": "2026-02-12T18:54:12.004Z"
+    },
+    "assets/assets.json": {
+      "type": "assets_registry",
+      "content_type": "application/json",
+      "bytes": 3921,
+      "hash": {
+        "algo": "sha256",
+        "value": "5e6f708192a3b4c5d6e7f8091a2b3c4d2a7f3c4d5e6f708192a3b4c5d6e7f809"
+      },
+      "written_by": {
+        "tool": "hearth",
+        "tool_version": "0.1.0",
+        "lane": "forge-managed"
+      },
+      "updated_at": "2026-02-12T18:54:40.901Z"
+    }
+  }
+}
