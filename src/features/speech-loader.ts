@@ -428,6 +428,9 @@ function normalizeComparableText(value: string): string {
 
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
+const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
+const NOTE_TAG_ONLY_RE = /^\s*\[\s*\/?\s*note(?:[^\]]*)\]\s*$/i;
+const NOTE_INLINE_BLOCK_RE = /^\s*\[\s*note(?:[^\]]*)\][\s\S]*\[\s*\/\s*note\s*\]\s*$/i;
 
 function isCueOnlyLineText(value: string): boolean {
   const raw = String(value || '').trim();
@@ -437,6 +440,27 @@ function isCueOnlyLineText(value: string): boolean {
   if (CUE_LINE_BRACKET_RE.test(raw)) return true;
   const tokenCount = normalized.split(' ').filter(Boolean).length;
   return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized);
+}
+
+function isSpeakerTagOnlyLineText(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  return SPEAKER_TAG_ONLY_RE.test(raw);
+}
+
+function isNoteOnlyLineText(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  return NOTE_TAG_ONLY_RE.test(raw) || NOTE_INLINE_BLOCK_RE.test(raw) || /\[\s*\/?\s*note\b/i.test(raw);
+}
+
+function isSpeakableLineText(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  if (isSpeakerTagOnlyLineText(raw)) return false;
+  if (isNoteOnlyLineText(raw)) return false;
+  if (isCueOnlyLineText(raw)) return false;
+  return true;
 }
 
 function nextFallbackTranscriptMatchId(): string {
@@ -1173,6 +1197,55 @@ function getLineSnapshot(index: number) {
   }
 }
 
+function getLineTextAtIndex(index: number, container?: ParentNode | null): string {
+  const idx = Math.max(0, Math.floor(Number(index) || 0));
+  try {
+    const host = container || getScriptRoot() || getPrimaryScroller() || document;
+    const line =
+      host.querySelector<HTMLElement>(`.line[data-line="${idx}"]`) ||
+      host.querySelector<HTMLElement>(`.line[data-line-idx="${idx}"]`) ||
+      host.querySelector<HTMLElement>(`.line[data-i="${idx}"]`) ||
+      host.querySelector<HTMLElement>(`.line[data-index="${idx}"]`);
+    return String(line?.textContent || '').replace(/\s+/g, ' ').trim();
+  } catch {
+    return '';
+  }
+}
+
+function nextSpeakableLineFrom(
+  startIndex: number,
+  opts?: { maxLookahead?: number; container?: ParentNode | null },
+): number | null {
+  if (!Number.isFinite(startIndex)) return null;
+  const begin = Math.max(0, Math.floor(startIndex));
+  const maxLookaheadRaw = Number(opts?.maxLookahead);
+  const maxLookahead = Number.isFinite(maxLookaheadRaw) && maxLookaheadRaw >= 0
+    ? Math.floor(maxLookaheadRaw)
+    : Number.POSITIVE_INFINITY;
+  try {
+    const host = opts?.container || getScriptRoot() || getPrimaryScroller() || document;
+    const lines = Array.from(host.querySelectorAll<HTMLElement>('.line'));
+    if (!lines.length) return null;
+    const entries = lines
+      .map((lineEl, pos) => ({
+        idx: parseLineIndexFromElement(lineEl, pos),
+        text: String(lineEl.textContent || '').replace(/\s+/g, ' ').trim(),
+      }))
+      .filter((entry) => Number.isFinite(entry.idx))
+      .sort((a, b) => a.idx - b.idx);
+    for (const entry of entries) {
+      if (entry.idx < begin) continue;
+      if (Number.isFinite(maxLookahead) && entry.idx > begin + maxLookahead) break;
+      if (isSpeakableLineText(entry.text)) {
+        return entry.idx;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 type AsrBlockCursorCandidate = {
   blockIdx: number;
   lineStart: number;
@@ -1226,7 +1299,7 @@ function getAsrBlockCursorCandidates(scroller: HTMLElement | null): AsrBlockCurs
         const text = String(lineEl.textContent || '').replace(/\s+/g, ' ').trim();
         return {
           idx,
-          cueOnly: isCueOnlyLineText(text),
+          cueOnly: !isSpeakableLineText(text),
         };
       })
       .filter((entry) => Number.isFinite(entry.idx))
@@ -1374,7 +1447,19 @@ function syncAsrIndices(startIdx: number, reason: string): void {
   const topEpsilon = Math.max(24, lineHeight * 0.5);
   if (syncAsrBlockCursor(startIdx, reason, scroller, scrollTop, topEpsilon)) return;
   const clamped = scrollTop <= topEpsilon;
-  const idx = clamped ? 0 : Math.max(0, Math.floor(Number(startIdx) || 0));
+  const sourceIdx = clamped ? 0 : Math.max(0, Math.floor(Number(startIdx) || 0));
+  let idx = sourceIdx;
+  const sourceLineText = getLineTextAtIndex(sourceIdx, root || viewer || document);
+  let cueAdjusted = false;
+  if (!isSpeakableLineText(sourceLineText)) {
+    const nextSpoken = nextSpeakableLineFrom(sourceIdx, {
+      container: root || viewer || document,
+    });
+    if (Number.isFinite(nextSpoken as number) && (nextSpoken as number) >= sourceIdx) {
+      idx = Math.max(0, Math.floor(nextSpoken as number));
+      cueAdjusted = true;
+    }
+  }
   const blockIdx = resolveBlockIdxForLine(idx, scroller);
   try { (window as any).currentIndex = idx; } catch {}
   try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
@@ -1386,6 +1471,8 @@ function syncAsrIndices(startIdx: number, reason: string): void {
       lineIdx: idx,
       reason,
       clamped,
+      cueAdjusted,
+      sourceLine: sourceIdx,
       scrollTop: Math.round(scrollTop),
       topEpsilon: Math.round(topEpsilon),
     });

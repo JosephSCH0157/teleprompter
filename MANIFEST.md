@@ -161,6 +161,7 @@ In `scrollMode='asr'`:
     - resolve block cursor first
     - derive line cursor from block range
     - skip cue-only lines (`[pause]`, `[beat]`, `[reflective pause]`) to first speakable line in the block
+  - ASR cursor/evidence domain is speakable-line based (rendered cue/tag/note-only lines remain visible but are excluded from match/cursor math)
 
 ---
 

@@ -334,6 +334,9 @@ const MICRO_PURSUE_MAX_PXPS = 60;
 const MIN_PX_PER_SEC = 18;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
+const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
+const NOTE_TAG_ONLY_RE = /^\s*\[\s*\/?\s*note(?:[^\]]*)\]\s*$/i;
+const NOTE_INLINE_BLOCK_RE = /^\s*\[\s*note(?:[^\]]*)\][\s\S]*\[\s*\/\s*note\s*\]\s*$/i;
 const MAX_CUE_SKIP_LOOKAHEAD_LINES = 12;
 const MOTION_PRESET_NORMAL = {
   maxLinesPerCommit: MAX_LINES_PER_COMMIT,
@@ -428,6 +431,8 @@ function parseBlockIndexFromElement(el: HTMLElement | null, fallback: number): n
 function isIgnorableCueLineText(value: string): boolean {
   const raw = String(value || '').trim();
   if (!raw) return true;
+  if (SPEAKER_TAG_ONLY_RE.test(raw)) return true;
+  if (NOTE_TAG_ONLY_RE.test(raw) || NOTE_INLINE_BLOCK_RE.test(raw) || /\[\s*\/?\s*note\b/i.test(raw)) return true;
   const normalized = normalizeComparableText(raw);
   if (!normalized) return true;
   if (CUE_LINE_BRACKET_RE.test(raw)) return true;
@@ -2329,6 +2334,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return null;
   };
 
+  const prevSpeakableLineFrom = (
+    startIndex: number,
+    maxLookback = MAX_CUE_SKIP_LOOKAHEAD_LINES,
+  ): number | null => {
+    const total = getTotalLines();
+    if (!Number.isFinite(startIndex) || total <= 0) return null;
+    const begin = Math.min(total - 1, Math.max(0, Math.floor(startIndex)));
+    const end = Math.max(0, begin - Math.max(1, Math.floor(maxLookback)));
+    for (let idx = begin; idx >= end; idx -= 1) {
+      const lineText = getLineTextAt(idx);
+      if (!isIgnorableCueLineText(lineText)) {
+        return idx;
+      }
+    }
+    return null;
+  };
+
   const maybeSkipCueLine = (cursorLine: number, now: number, reason: string, clue: string): boolean => {
     if (!Number.isFinite(cursorLine) || cursorLine < 0) return false;
     const currentLineText = getLineTextAt(cursorLine);
@@ -3908,7 +3930,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     const thresholds = getAsrDriverThresholds();
-    const topScores = Array.isArray(match.topScores) ? match.topScores : [];
+    const topScores = (Array.isArray(match.topScores) ? match.topScores : [])
+      .map((entry) => ({ idx: Number((entry as any)?.idx), score: Number((entry as any)?.score) }))
+      .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+      .map((entry) => ({ idx: Math.floor(entry.idx), score: entry.score }));
+    const topScoreSpeakableCache = new Map<number, boolean>();
+    const isSpeakableTopScoreIdx = (idx: number): boolean => {
+      const key = Math.max(0, Math.floor(Number(idx) || 0));
+      if (topScoreSpeakableCache.has(key)) return !!topScoreSpeakableCache.get(key);
+      const speakable = !isIgnorableCueLineText(getLineTextAt(key));
+      topScoreSpeakableCache.set(key, speakable);
+      return speakable;
+    };
+    const topScoresSpeakable = topScores.filter((entry) => isSpeakableTopScoreIdx(entry.idx));
     const blockCorpus = asrMode ? getAsrBlockCorpus() : [];
     const anchorBlockId = asrMode ? resolveAsrAnchorBlockId(blockCorpus) : -1;
     const blockAsrText = asrMode ? normalizeComparableText(bufferedText || compacted) : '';
@@ -3921,7 +3955,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let usedLineFallback = false;
     if (asrMode && effectiveAnchor < 0) {
       if (blockMatch && blockMatch.conf >= blockAnchorFloor) {
-        const resyncedLine = Math.max(0, Math.floor(blockMatch.startLine));
+        let resyncedLine = Math.max(0, Math.floor(blockMatch.startLine));
+        const forwardLookahead = Math.max(1, Math.floor(blockMatch.endLine - resyncedLine));
+        const backwardLookback = Math.max(1, Math.floor(resyncedLine - blockMatch.startLine));
+        const nextSpoken = findNextSpokenLineIndex(resyncedLine, forwardLookahead);
+        const prevSpoken = prevSpeakableLineFrom(resyncedLine, backwardLookback);
+        if (Number.isFinite(nextSpoken as number)) {
+          resyncedLine = Math.max(0, Math.floor(nextSpoken as number));
+        } else if (Number.isFinite(prevSpoken as number)) {
+          resyncedLine = Math.max(0, Math.floor(prevSpoken as number));
+        }
         lastLineIndex = resyncedLine;
         matchAnchorIdx = resyncedLine;
         lastCommittedBlockId = blockMatch.blockId;
@@ -3964,14 +4007,44 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         rawIdx <= blockWindowRange.endLine &&
         !isIgnorableCueLineText(getLineTextAt(rawIdx));
       if (!inBlockWindow) {
-        const fallback = pickBestLineWithinRange(topScores, blockWindowRange);
+        const fallback = pickBestLineWithinRange(topScoresSpeakable, blockWindowRange);
         if (fallback) {
           rawIdx = fallback.idx;
           conf = fallback.score;
           usedLineFallback = true;
         } else if (blockMatch && blockMatch.conf >= blockAnchorFloor) {
           rawIdx = Math.max(0, Math.floor(blockMatch.startLine));
+          const forwardLookahead = Math.max(1, Math.floor(blockMatch.endLine - rawIdx));
+          const backwardLookback = Math.max(1, Math.floor(rawIdx - blockMatch.startLine));
+          const nextSpoken = findNextSpokenLineIndex(rawIdx, forwardLookahead);
+          const prevSpoken = prevSpeakableLineFrom(rawIdx, backwardLookback);
+          if (Number.isFinite(nextSpoken as number)) {
+            rawIdx = Math.max(0, Math.floor(nextSpoken as number));
+          } else if (Number.isFinite(prevSpoken as number)) {
+            rawIdx = Math.max(0, Math.floor(prevSpoken as number));
+          }
           conf = Math.max(conf, blockMatch.conf);
+          usedLineFallback = true;
+        }
+      }
+    }
+    if (Number.isFinite(rawIdx) && rawIdx >= 0 && !isSpeakableTopScoreIdx(rawIdx)) {
+      const anchorForPick = effectiveAnchor >= 0 ? effectiveAnchor : 0;
+      const replacement = topScoresSpeakable
+        .slice()
+        .sort((a, b) => b.score - a.score || Math.abs(a.idx - anchorForPick) - Math.abs(b.idx - anchorForPick))[0];
+      if (replacement) {
+        rawIdx = replacement.idx;
+        conf = replacement.score;
+        usedLineFallback = true;
+      } else {
+        const nextSpoken = findNextSpokenLineIndex(rawIdx, MAX_CUE_SKIP_LOOKAHEAD_LINES);
+        const prevSpoken = prevSpeakableLineFrom(rawIdx, MAX_CUE_SKIP_LOOKAHEAD_LINES);
+        if (Number.isFinite(nextSpoken as number)) {
+          rawIdx = Math.max(0, Math.floor(nextSpoken as number));
+          usedLineFallback = true;
+        } else if (Number.isFinite(prevSpoken as number)) {
+          rawIdx = Math.max(0, Math.floor(prevSpoken as number));
           usedLineFallback = true;
         }
       }
@@ -4094,7 +4167,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const stickAdjust = confirmingCurrentLine ? thresholds.stickinessDelta : 0;
     const effectiveThresholdForPending = clamp(requiredThreshold - stickAdjust, 0, 1);
     const rawScoreByIdx = new Map<number, number>();
-    topScores.forEach((entry) => {
+    topScoresSpeakable.forEach((entry) => {
       const idx = Number(entry.idx);
       const score = Number(entry.score);
       if (Number.isFinite(idx) && Number.isFinite(score)) {
@@ -4109,7 +4182,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const delta = idx - cursorLine;
       if (delta < 0 || delta > slamDunkMaxDelta) return false;
       if (sim < slamDunkSim) return false;
-      const hasCompetitor = topScores.some((entry) => {
+      const hasCompetitor = topScoresSpeakable.some((entry) => {
         const entryIdx = Number(entry.idx);
         const entryScore = Number(entry.score);
         if (!Number.isFinite(entryIdx) || !Number.isFinite(entryScore)) return false;
@@ -4321,10 +4394,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const outrunRecent =
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
     const outrunMax = cursorLine + Math.max(1, outrunLookaheadLines);
-    const forwardBandScores = topScores.length
-      ? topScores
-        .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
-        .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+    const forwardBandScores = topScoresSpeakable.length
+      ? topScoresSpeakable
         .filter((entry) => entry.idx > cursorLine && entry.idx <= outrunMax)
       : [];
     const outrunCandidate = forwardBandScores
@@ -4345,11 +4416,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       behindByForBias <= forwardBiasRecentLines &&
       lastLineIndex >= 0 &&
       now - lastForwardCommitAt <= forwardBiasWindowMs;
-    if (topScores.length) {
+    if (topScoresSpeakable.length) {
       const bestScore = conf;
-      const tieCandidates = topScores
-        .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
-        .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+      const tieCandidates = topScoresSpeakable
         .filter((entry) => entry.score >= bestScore - forwardTieEps);
       const hasTie = tieCandidates.length >= 2;
       const forwardMinIdx = cursorLine + Math.max(1, minLineAdvance);
@@ -4528,14 +4597,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
-    if (forwardBiasEligible && rawIdx < cursorLine && topScores.length) {
+    if (forwardBiasEligible && rawIdx < cursorLine && topScoresSpeakable.length) {
       const behindBy = cursorLine - rawIdx;
       const biasThreshold = clamp(requiredThreshold - forwardBiasSimSlack, 0, 1);
       const forwardNeed = shortFinalRecent ? Math.min(biasThreshold, shortFinalNeed) : biasThreshold;
       const forwardMax = cursorLine + Math.max(1, forwardBiasLookaheadLines);
-      const forwardPick = topScores
-        .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
-        .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+      const forwardPick = topScoresSpeakable
         .filter((entry) => entry.idx >= cursorLine && entry.idx <= forwardMax)
         .sort((a, b) => b.score - a.score || a.idx - b.idx)[0];
       if (forwardPick && forwardPick.score >= forwardNeed) {
@@ -4711,8 +4778,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       nearMarker,
       isFinal,
     });
-    const genericCandidateCount = topScores.length
-      ? topScores.filter((entry) => Number(entry.score) >= conf - DEFAULT_GENERIC_SIM_DELTA).length
+    const genericCandidateCount = topScoresSpeakable.length
+      ? topScoresSpeakable.filter((entry) => Number(entry.score) >= conf - DEFAULT_GENERIC_SIM_DELTA).length
       : 0;
     const genericTranscript =
       tokenCount > 0 &&
@@ -4872,10 +4939,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       snippet,
       matchId,
     });
-    if (topScores.length >= 2) {
+    if (topScoresSpeakable.length >= 2) {
       let near: { idx: number; score: number; dist: number } | null = null;
       let far: { idx: number; score: number; dist: number } | null = null;
-      for (const entry of topScores) {
+      for (const entry of topScoresSpeakable) {
         const idx = Number(entry.idx);
         const score = Number(entry.score);
         if (!Number.isFinite(idx) || !Number.isFinite(score)) continue;
@@ -5091,7 +5158,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       minThreshold:
         effectiveThresholdForPending < requiredThreshold ? effectiveThresholdForPending : undefined,
       requiredThreshold,
-      topScores,
+      topScores: topScoresSpeakable,
       stickinessApplied: stickAdjust > 0,
       forced: outrunCommit || shortFinalForced || catchupCommit,
       forceReason,
