@@ -868,15 +868,11 @@ function resolveRolePrimaryScroller(role: ViewerRole): HTMLElement | null {
     } catch {
       // ignore
     }
-    return (
-      (document.getElementById('wrap') as HTMLElement | null) ||
-      (document.getElementById('viewer') as HTMLElement | null)
-    );
+    return document.getElementById('wrap') as HTMLElement | null;
   }
   return (
     (document.querySelector('main#viewer') as HTMLElement | null) ||
-    (document.getElementById('viewer') as HTMLElement | null) ||
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null)
+    (document.getElementById('viewer') as HTMLElement | null)
   );
 }
 
@@ -922,16 +918,23 @@ function logCommitScrollStamp(
 
 function getScroller(): HTMLElement | null {
   const role = resolveViewerRole();
-  const rolePrimary = resolveRolePrimaryScroller(role);
-  const primary = rolePrimary || getPrimaryScroller();
   const root = getScriptRoot();
-  const fallback = role === 'display'
-    ? (
+  if (role === 'display') {
+    const primary = resolveRolePrimaryScroller('display');
+    const fallback =
       (document.getElementById('wrap') as HTMLElement | null) ||
       root ||
-      getFallbackScroller()
-    )
-    : (root || getFallbackScroller());
+      getFallbackScroller();
+    return resolveActiveScroller(primary, fallback);
+  }
+  const primary =
+    resolveRolePrimaryScroller('main') ||
+    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+    root;
+  const fallback =
+    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+    root ||
+    getFallbackScroller();
   return resolveActiveScroller(primary, fallback);
 }
 
