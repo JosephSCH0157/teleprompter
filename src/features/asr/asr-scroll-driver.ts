@@ -2921,6 +2921,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (writerSeekOk) {
         const writerScroller = getScroller() || deps.scroller;
         const afterTop = Number(writerScroller?.scrollTop ?? beforeTop);
+        bootTrace('SCROLL:apply', {
+          y: Math.round(afterTop),
+          from: Math.round(beforeTop),
+          via: 'writer',
+          reason,
+          lineIdx: commit.lineIdx,
+          blockId: commit.blockId,
+        });
         pursuitTargetTop = afterTop;
         lastKnownScrollTop = afterTop;
         lastMoveAt = Date.now();
@@ -2946,6 +2954,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       source: 'asr-commit',
     });
     const afterTop = Number.isFinite(appliedTop) ? appliedTop : readAfterTop();
+    bootTrace('SCROLL:apply', {
+      y: Math.round(afterTop),
+      from: Math.round(beforeTop),
+      via: 'pixel',
+      reason,
+      lineIdx: commit.lineIdx,
+      blockId: commit.blockId,
+    });
     pursuitTargetTop = afterTop;
     lastKnownScrollTop = afterTop;
     lastMoveAt = Date.now();
@@ -3593,6 +3609,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       } catch {}
       const intendedTargetTop = commitTopAfterForLogs;
       try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
+      bootTrace('ASR:commit', {
+        matchId,
+        prev: prevLineIndex,
+        index: targetLine,
+        delta: targetLine - prevLineIndex,
+        sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : null,
+        final: !!isFinal,
+        via: writerCommitted ? 'writer' : 'pixel',
+        forced: !!forced,
+        reason: forceReason || 'commit',
+      });
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         matchId,
         prevIndex: prevLineIndex,
@@ -3990,6 +4017,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
     }
     const noMatchFlag = !Number.isFinite(rawIdx) || rawIdx < 0;
+    bootTrace('ASR:match', {
+      matchId,
+      idx: Number.isFinite(rawIdx) ? Math.floor(rawIdx) : null,
+      sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : null,
+      final: !!isFinal,
+      anchor: cursorLine,
+      meta: !!metaTranscript,
+      clue: snippet || undefined,
+    });
     if (isDevMode() && rawIdx !== cursorLine) {
       const bestOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) : rawIdx;
       const deltaOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) - cursorLine : NaN;
@@ -4919,9 +4955,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             scroller,
             reason: 'asr-behind-reanchor',
           });
-        lastKnownScrollTop = applied;
-        lastMoveAt = Date.now();
-        markProgrammaticScroll();
+          lastKnownScrollTop = applied;
+          lastMoveAt = Date.now();
+          markProgrammaticScroll();
+          bootTrace('SCROLL:apply', {
+            y: Math.round(applied),
+            from: Math.round(scrollTopBefore),
+            via: 'pixel',
+            reason: 'asr-behind-reanchor',
+            lineIdx: rawIdx,
+          });
         }
         lastLineIndex = Math.max(0, Math.floor(rawIdx));
         matchAnchorIdx = lastLineIndex;
@@ -4945,6 +4988,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           scrollTopAfter: Math.round(targetTop ?? scrollTopBefore),
           forced: false,
           mode: getScrollMode() || 'unknown',
+          reason: 'behind-reanchor',
+        });
+        bootTrace('ASR:commit', {
+          matchId,
+          prev: cursorLine,
+          index: lastLineIndex,
+          delta: lastLineIndex - cursorLine,
+          sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : null,
+          final: !!isFinal,
+          via: 'pixel',
+          forced: false,
           reason: 'behind-reanchor',
         });
         updateDebugState('behind-reanchor');
