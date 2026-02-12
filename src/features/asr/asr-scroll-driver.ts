@@ -11,6 +11,7 @@ import {
   resolveActiveScroller,
 } from '../../scroll/scroller';
 import { getAsrBlockElements } from '../../scroll/asr-block-store';
+import { seekToBlockAnimated } from '../../scroll/scroll-writer';
 import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
 import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
 
@@ -799,10 +800,112 @@ function emitHybridTargetHint(
   });
 }
 
+type ViewerRole = 'main' | 'display';
+
+function isElementLike(node: unknown): node is HTMLElement {
+  return !!node && typeof node === 'object' && (node as any).nodeType === 1;
+}
+
+function resolveViewerRole(): ViewerRole {
+  if (typeof window === 'undefined') return 'main';
+  try {
+    const explicit = String((window as any).__TP_VIEWER_ROLE || '').toLowerCase();
+    if (explicit === 'display') return 'display';
+    if (explicit === 'main') return 'main';
+    const bodyRole = String(window.document?.body?.dataset?.viewerRole || '').toLowerCase();
+    if (bodyRole === 'display') return 'display';
+    if (bodyRole === 'main') return 'main';
+    if ((window as any).__TP_FORCE_DISPLAY) return 'display';
+    const path = String(window.location?.pathname || '').toLowerCase();
+    if (path.includes('display')) return 'display';
+  } catch {
+    // ignore
+  }
+  return 'main';
+}
+
+function resolveRolePrimaryScroller(role: ViewerRole): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  if (role === 'display') {
+    try {
+      const direct = (window as any).__tpDisplayViewerEl;
+      if (isElementLike(direct)) return direct as HTMLElement;
+    } catch {
+      // ignore
+    }
+    return (
+      (document.getElementById('wrap') as HTMLElement | null) ||
+      (document.getElementById('viewer') as HTMLElement | null)
+    );
+  }
+  return (
+    (document.querySelector('main#viewer') as HTMLElement | null) ||
+    (document.getElementById('viewer') as HTMLElement | null) ||
+    (document.getElementById('scriptScrollContainer') as HTMLElement | null)
+  );
+}
+
+function hasActiveScrollWriter(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const maybeWriter = (window as any).__tpScrollWrite;
+    return (
+      typeof maybeWriter === 'function' ||
+      (typeof maybeWriter === 'object' &&
+        !!maybeWriter &&
+        typeof maybeWriter.scrollTo === 'function' &&
+        typeof maybeWriter.scrollBy === 'function')
+    );
+  } catch {
+    return false;
+  }
+}
+
+function logCommitScrollStamp(
+  via: 'writer' | 'pixel',
+  scroller: HTMLElement | null,
+  beforeTop: number,
+  lineIdx: number,
+  blockId: number,
+): void {
+  const run = () => {
+    const afterTop = scroller?.scrollTop ?? beforeTop;
+    const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
+    const id = scroller?.id || '(none)';
+    const clsRaw = typeof scroller?.className === 'string' ? scroller.className : '';
+    const cls = clsRaw.trim() || '(none)';
+    const role = resolveViewerRole();
+    try {
+      console.info(
+        `[ASR_COMMIT_SCROLL] via=${via} role=${role} path=${path} scroller.id=${id} scroller.class=${cls} before=${Math.round(beforeTop)} after=${Math.round(afterTop)} line=${lineIdx} block=${blockId}`,
+      );
+    } catch {
+      // ignore
+    }
+  };
+  try {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(run);
+      return;
+    }
+  } catch {
+    // ignore
+  }
+  run();
+}
+
 function getScroller(): HTMLElement | null {
-  const primary = getPrimaryScroller();
+  const role = resolveViewerRole();
+  const rolePrimary = resolveRolePrimaryScroller(role);
+  const primary = rolePrimary || getPrimaryScroller();
   const root = getScriptRoot();
-  const fallback = root || getFallbackScroller();
+  const fallback = role === 'display'
+    ? (
+      (document.getElementById('wrap') as HTMLElement | null) ||
+      root ||
+      getFallbackScroller()
+    )
+    : (root || getFallbackScroller());
   return resolveActiveScroller(primary, fallback);
 }
 
@@ -3215,55 +3318,87 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const limitedTarget = forced ? candidate : Math.min(candidate, baseClamped + jumpCap);
       const nextTargetTop = Math.max(baseClamped, limitedTarget);
       pursuitTargetTop = nextTargetTop;
+      const modeNow = getScrollMode();
+      const hasWriter = hasActiveScrollWriter();
+      let targetBlockId = -1;
+      try {
+        targetBlockId = findBlockByLine(targetLine)?.blockId ?? -1;
+      } catch {
+        targetBlockId = -1;
+      }
       if (isDevMode()) {
-        let hasWriter = false;
-        let targetBlockId = -1;
-        try {
-          const maybeWriter = (window as any).__tpScrollWrite;
-          hasWriter =
-            typeof maybeWriter === 'function' ||
-            (typeof maybeWriter === 'object' && !!maybeWriter && typeof maybeWriter.scrollTo === 'function');
-        } catch {}
-        try {
-          targetBlockId = findBlockByLine(targetLine)?.blockId ?? -1;
-        } catch {}
         console.log('[ASR] commit->seek', {
           commitCount: commitCount + 1,
           blockId: targetBlockId,
           lineIdx: targetLine,
           hasWriter,
+          mode: modeNow,
+          role: resolveViewerRole(),
         });
       }
-      if (nextTargetTop > base) {
-        emitHybridTargetHint(
-          nextTargetTop,
-          isFinal ? 0.9 : 0.7,
-          forced ? 'asr-forced-commit' : 'asr-commit',
-          undefined,
-          targetLine,
-        );
-      }
-      const microThresholdPx = lineHeightPx > 0
-        ? lineHeightPx * motionTuning.microDeltaLineRatio
-        : 0;
-      const useMicro = microThresholdPx > 0 && taperedDeltaPx > 0 && taperedDeltaPx <= microThresholdPx;
+
+      let writerCommitted = false;
       let didGlide = false;
-      if (!isHybridMode()) {
-        if (useMicro) {
-          stopGlide('micro-commit');
-          pursuitTargetTop = nextTargetTop;
-          pursuitVel = 0;
-          armMicroPursuit(now, 'micro-commit');
-        } else {
-          microPursuitUntil = 0;
-          pursuitActive = false;
-          pursuitVel = 0;
-          didGlide = startGlideTo(nextTargetTop, {
-            scroller,
-            reason: forced ? 'asr-forced-commit' : 'asr-commit',
-            source: 'asr',
-          });
+      const scrollerForStamp: HTMLElement | null = scroller;
+      const commitBeforeTop = currentTop;
+      let commitAfterTop = currentTop;
+      // ASR commit SSOT: use block writer when available; pixel movement is fallback only.
+      if (modeNow === 'asr' && hasWriter && targetBlockId >= 0) {
+        const writerReason = forced ? 'asr-forced-commit' : 'asr-commit';
+        stopGlide('writer-commit');
+        microPursuitUntil = 0;
+        pursuitActive = false;
+        pursuitVel = 0;
+        lastCommitDeltaPx = 0;
+        let writerSeekOk = false;
+        try {
+          seekToBlockAnimated(targetBlockId, writerReason);
+          writerSeekOk = true;
+        } catch {
+          writerSeekOk = false;
         }
+        if (writerSeekOk) {
+          const writerStateScroller = getScroller() || scroller;
+          commitAfterTop = writerStateScroller?.scrollTop ?? commitBeforeTop;
+          pursuitTargetTop = commitAfterTop;
+          lastKnownScrollTop = commitAfterTop;
+          lastMoveAt = Date.now();
+          markProgrammaticScroll();
+          writerCommitted = true;
+        }
+      }
+      if (!writerCommitted) {
+        if (nextTargetTop > base) {
+          emitHybridTargetHint(
+            nextTargetTop,
+            isFinal ? 0.9 : 0.7,
+            forced ? 'asr-forced-commit' : 'asr-commit',
+            undefined,
+            targetLine,
+          );
+        }
+        const microThresholdPx = lineHeightPx > 0
+          ? lineHeightPx * motionTuning.microDeltaLineRatio
+          : 0;
+        const useMicro = microThresholdPx > 0 && taperedDeltaPx > 0 && taperedDeltaPx <= microThresholdPx;
+        if (!isHybridMode()) {
+          if (useMicro) {
+            stopGlide('micro-commit');
+            pursuitTargetTop = nextTargetTop;
+            pursuitVel = 0;
+            armMicroPursuit(now, 'micro-commit');
+          } else {
+            microPursuitUntil = 0;
+            pursuitActive = false;
+            pursuitVel = 0;
+            didGlide = startGlideTo(nextTargetTop, {
+              scroller,
+              reason: forced ? 'asr-forced-commit' : 'asr-commit',
+              source: 'asr',
+            });
+          }
+        }
+        commitAfterTop = scroller.scrollTop || (pursuitTargetTop ?? currentTop);
       }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
       creepBudgetLine = -1;
@@ -3303,18 +3438,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
       try {
         const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
-        const fromTop = Number.isFinite(currentTop) ? Math.round(currentTop) : currentTop;
-        const toTop = Number.isFinite(pursuitTargetTop ?? currentTop)
-          ? Math.round((pursuitTargetTop ?? currentTop) as number)
-          : (pursuitTargetTop ?? currentTop);
+        const fromTop = Number.isFinite(commitBeforeTop) ? Math.round(commitBeforeTop) : commitBeforeTop;
+        const toTopRaw = writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop);
+        const toTop = Number.isFinite(toTopRaw) ? Math.round(toTopRaw as number) : toTopRaw;
         const movedPx =
           typeof fromTop === 'number' && typeof toTop === 'number' ? Math.round(toTop - fromTop) : 0;
         const targetElFound = !!lineEl;
+        const action = writerCommitted ? 'writerCommit' : 'driveToLine';
         console.log(
-          `[ASR_DRIVER] driveToLine best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=transcript fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
+          `[ASR_DRIVER] ${action} best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=${writerCommitted ? 'writer' : 'transcript'} fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
         );
       } catch {}
-      const intendedTargetTop = pursuitTargetTop ?? currentTop;
+      const intendedTargetTop = writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop);
       try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         matchId,
@@ -3322,24 +3457,33 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         nextIndex: targetLine,
         delta: targetLine - prevLineIndex,
         sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
-        scrollTopBefore: Math.round(currentTop),
-        scrollTopAfter: Math.round(pursuitTargetTop ?? currentTop),
+        scrollTopBefore: Math.round(commitBeforeTop),
+        scrollTopAfter: Math.round(writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop)),
         targetTop: Math.round(intendedTargetTop),
         forced: !!forced,
+        via: writerCommitted ? 'writer' : 'pixel',
         mode: getScrollMode() || 'unknown',
         relock: !!relockOverride,
         relockReason: relockReason || undefined,
       });
-      if (!didGlide) {
+      logCommitScrollStamp(
+        writerCommitted ? 'writer' : 'pixel',
+        scrollerForStamp,
+        commitBeforeTop,
+        targetLine,
+        targetBlockId,
+      );
+      if (!writerCommitted && !didGlide) {
         ensurePursuitActive();
       }
       try {
         const forcedCount = getForcedCount(now);
         const forcedCooldown = getForcedCooldownRemaining(now);
-        const markerIdx = computeMarkerLineIndex(scroller);
-        const currentEl = getLineElementByIndex(scroller, prevLineIndex);
-        const bestEl = getLineElementByIndex(scroller, targetLine);
-        const markerEl = getLineElementByIndex(scroller, markerIdx);
+        const logScroller = scrollerForStamp || scroller;
+        const markerIdx = computeMarkerLineIndex(logScroller);
+        const currentEl = getLineElementByIndex(logScroller, prevLineIndex);
+        const bestEl = getLineElementByIndex(logScroller, targetLine);
+        const markerEl = getLineElementByIndex(logScroller, markerIdx);
         const currentText = currentEl ? formatLogSnippet(currentEl.textContent || '', 60) : '';
         const bestText = bestEl ? formatLogSnippet(bestEl.textContent || '', 60) : '';
         const markerText = markerEl ? formatLogSnippet(markerEl.textContent || '', 60) : '';
@@ -3351,8 +3495,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `delta=${targetLine - prevLineIndex}`,
           `sim=${formatLogScore(conf)}`,
           `final=${isFinal ? 1 : 0}`,
+          `via=${writerCommitted ? 'writer' : 'pixel'}`,
           `marker=${markerIdx}`,
-          `scrollTop=${Math.round(scroller.scrollTop || 0)}`,
+          `scrollTop=${Math.round(logScroller?.scrollTop || 0)}`,
           `lineH=${lineHeight}`,
           matchId ? `matchId=${matchId}` : '',
           `forced=${forced ? 1 : 0}`,
@@ -3377,7 +3522,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         emitHudStatus('catchup_commit', `Catch-up commit +${targetLine - prevLineIndex}`);
       }
       clearEvidenceBuffer('commit');
-      logDev('target update', { line: targetLine, conf, pxDelta: deltaPx, targetTop: pursuitTargetTop });
+      logDev('target update', {
+        line: targetLine,
+        conf,
+        pxDelta: writerCommitted ? Math.round(commitAfterTop - commitBeforeTop) : deltaPx,
+        targetTop: intendedTargetTop,
+        via: writerCommitted ? 'writer' : 'pixel',
+      });
       updateDebugState('target-update');
       })();
     });
