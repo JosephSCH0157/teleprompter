@@ -1190,6 +1190,14 @@ function isAsrLikeMode(mode: string | null | undefined): boolean {
   return normalized === 'asr' || normalized === 'hybrid';
 }
 
+function isAsrDriverArmed(): boolean {
+  try {
+    return !!getSession().asrArmed;
+  } catch {
+    return false;
+  }
+}
+
 function getAsrBlockSnapshot(): { ready: boolean; count: number; schemaVersion?: number; source?: string } {
   let count = 0;
   let schemaVersion: number | undefined;
@@ -1224,12 +1232,14 @@ function shouldCreateAsrDriver(mode: string, reason: string): boolean {
   const phase = String(session.phase || '').toLowerCase();
   const phaseActive = phase === 'preroll' || phase === 'live';
   const speechActive = running || speechStartInFlight;
-  const allowed = isAsrLikeMode(mode) && (phaseActive || asrSessionIntentActive) && speechActive;
+  const asrArmed = !!session.asrArmed;
+  const allowed = isAsrLikeMode(mode) && asrArmed && (phaseActive || asrSessionIntentActive) && speechActive;
   if (!allowed && isDevMode()) {
     try {
       console.debug('[ASR] driver create blocked', {
         reason,
         mode,
+        asrArmed,
         phase,
         phaseActive,
         sessionIntentActive: asrSessionIntentActive,
@@ -1347,6 +1357,12 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
     source: payload.source,
   });
   const mode = String(detail?.mode || getScrollMode() || '').toLowerCase();
+  if (!isAsrDriverArmed()) {
+    if (isDevMode()) {
+      try { console.info('[ASR] ingest ignored (driver unarmed)', { mode }); } catch {}
+    }
+    return;
+  }
   attachAsrScrollDriver({ reason: 'transcript', mode, allowCreate: true });
   try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
 }
@@ -1354,6 +1370,12 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
 function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
   if (typeof window === 'undefined') return;
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
+  if (isAsrLikeMode(mode) && !isAsrDriverArmed()) {
+    if (isDevMode()) {
+      try { console.info('[ASR] driver attach blocked (unarmed)', { mode, reason: opts?.reason || 'attach' }); } catch {}
+    }
+    return;
+  }
   ensureAsrScrollDriver(opts?.reason || 'attach', {
     mode,
     allowCreate: opts?.allowCreate === true,
@@ -1367,6 +1389,8 @@ function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCre
     const rawMode = (detectedMode || getScrollMode() || '').toLowerCase();
     const effectiveMode = rawMode === 'manual' ? 'step' : rawMode;
     const phase = getSession().phase;
+    const asrArmed = isAsrDriverArmed();
+    if (!asrArmed) return;
     if (effectiveMode === 'hybrid') {
       // allow
     } else if (effectiveMode === 'asr' && phase === 'live') {

@@ -126,6 +126,30 @@ type AsrBlockMatch = {
   textNormSample: string;
 };
 
+type AsrCommit = {
+  forced: boolean;
+  lineIdx: number;
+  blockId: number;
+  fromTop: number;
+  targetTop: number;
+  nextTargetTop: number;
+};
+
+type AsrCommitMoveDeps = {
+  scroller: HTMLElement;
+  writerAvailable: boolean;
+  role: ViewerRole;
+  path: string;
+};
+
+type AsrMoveResult = {
+  method: 'writer' | 'pixel';
+  writerCommitted: boolean;
+  beforeTop: number;
+  afterTop: number;
+  movedPx: number;
+};
+
 export interface AsrScrollDriver {
   ingest(text: string, isFinal: boolean, detail?: TranscriptDetail): void;
   dispose(): void;
@@ -677,6 +701,17 @@ function getScrollMode(): string {
   }
 }
 
+function isSessionAsrArmed(): boolean {
+  try {
+    const store = (window as any).__tpStore;
+    const armed = store?.get?.('session.asrArmed');
+    if (typeof armed === 'boolean') return armed;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 function isHybridMode(): boolean {
   return getScrollMode() === 'hybrid';
 }
@@ -862,36 +897,27 @@ function hasActiveScrollWriter(): boolean {
 }
 
 function logCommitScrollStamp(
-  via: 'writer' | 'pixel',
+  method: 'writer' | 'pixel',
   scroller: HTMLElement | null,
   beforeTop: number,
+  afterTop: number,
   lineIdx: number,
   blockId: number,
+  writerAvailable: boolean,
 ): void {
-  const run = () => {
-    const afterTop = scroller?.scrollTop ?? beforeTop;
-    const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
-    const id = scroller?.id || '(none)';
-    const clsRaw = typeof scroller?.className === 'string' ? scroller.className : '';
-    const cls = clsRaw.trim() || '(none)';
-    const role = resolveViewerRole();
-    try {
-      console.info(
-        `[ASR_COMMIT_SCROLL] via=${via} role=${role} path=${path} scroller.id=${id} scroller.class=${cls} before=${Math.round(beforeTop)} after=${Math.round(afterTop)} line=${lineIdx} block=${blockId}`,
-      );
-    } catch {
-      // ignore
-    }
-  };
+  const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
+  const id = scroller?.id || '(none)';
+  const clsRaw = typeof scroller?.className === 'string' ? scroller.className : '';
+  const cls = clsRaw.trim() || '(none)';
+  const role = resolveViewerRole();
+  const moved = Math.round((Number(afterTop) || 0) - (Number(beforeTop) || 0));
   try {
-    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-      window.requestAnimationFrame(run);
-      return;
-    }
+    console.info(
+      `[ASR_COMMIT] path=${path} role=${role} writer=${writerAvailable ? 1 : 0} block=${blockId} line=${lineIdx} scroller.id=${id} scroller.class=${cls} before=${Math.round(beforeTop)} after=${Math.round(afterTop)} moved=${moved} method=${method}`,
+    );
   } catch {
     // ignore
   }
-  run();
 }
 
 function getScroller(): HTMLElement | null {
@@ -1328,6 +1354,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const reason = opts.reason ?? 'asr';
     const source = opts.source ?? 'asr';
     const currentTop = scroller?.scrollTop ?? lastKnownScrollTop;
+    const mode = getScrollMode();
     logAsrScrollAttempt('attempt', { targetTop, currentTop, reason, scroller, source });
     if (!scroller) {
       logAsrScrollAttempt('denied', {
@@ -1340,11 +1367,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
       return currentTop;
     }
-    if (isHybridMode()) {
+    if (mode === 'hybrid' || mode === 'asr') {
       logAsrScrollAttempt('denied', {
         targetTop,
         currentTop,
-        reason: `${reason}:hybrid`,
+        reason: `${reason}:${mode || 'blocked'}`,
         scroller,
         source,
         applied: false,
@@ -2731,6 +2758,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const tickController = () => {
     if (!pursuitActive || disposed) return;
+    if (getScrollMode() === 'asr') {
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      pursuitVel = 0;
+      microPursuitUntil = 0;
+      return;
+    }
     const scroller = getScroller();
     if (!scroller) {
       pursuitActive = false;
@@ -2822,10 +2856,97 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
 
   const ensurePursuitActive = () => {
+    if (getScrollMode() === 'asr') {
+      pursuitActive = false;
+      pursuitTargetTop = null;
+      pursuitVel = 0;
+      microPursuitUntil = 0;
+      return;
+    }
     if (pursuitActive) return;
     pursuitActive = true;
     pursuitLastTs = performance.now();
     window.requestAnimationFrame(tickController);
+  };
+
+  const applyAsrCommitMovement = (
+    commit: AsrCommit,
+    deps: AsrCommitMoveDeps,
+  ): AsrMoveResult => {
+    const beforeTop = Number.isFinite(commit.fromTop)
+      ? commit.fromTop
+      : (deps.scroller.scrollTop || 0);
+    const reason = commit.forced ? 'asr-forced-commit' : 'asr-commit';
+    if (isDevMode()) {
+      try {
+        console.debug('[ASR_COMMIT_MOVE]', {
+          line: commit.lineIdx,
+          block: commit.blockId,
+          method: deps.writerAvailable && commit.blockId >= 0 ? 'writer-preferred' : 'pixel-fallback',
+          role: deps.role,
+          path: deps.path,
+        });
+      } catch {}
+    }
+    const stopCommitPursuit = (why: string) => {
+      stopGlide(why);
+      microPursuitUntil = 0;
+      pursuitActive = false;
+      pursuitVel = 0;
+    };
+    const readAfterTop = () => {
+      const next = deps.scroller.scrollTop;
+      return Number.isFinite(next) ? Number(next) : beforeTop;
+    };
+    if (deps.writerAvailable && commit.blockId >= 0) {
+      stopCommitPursuit('writer-commit');
+      lastCommitDeltaPx = 0;
+      let writerSeekOk = false;
+      try {
+        seekToBlockAnimated(commit.blockId, reason);
+        writerSeekOk = true;
+      } catch {
+        writerSeekOk = false;
+      }
+      if (writerSeekOk) {
+        const writerScroller = getScroller() || deps.scroller;
+        const afterTop = Number(writerScroller?.scrollTop ?? beforeTop);
+        pursuitTargetTop = afterTop;
+        lastKnownScrollTop = afterTop;
+        lastMoveAt = Date.now();
+        markProgrammaticScroll();
+        return {
+          method: 'writer',
+          writerCommitted: true,
+          beforeTop,
+          afterTop,
+          movedPx: Math.round(afterTop - beforeTop),
+        };
+      }
+    }
+    stopCommitPursuit('pixel-commit');
+    const max = Math.max(0, deps.scroller.scrollHeight - deps.scroller.clientHeight);
+    const targetTopRaw = Number.isFinite(commit.targetTop)
+      ? commit.targetTop
+      : (Number.isFinite(commit.nextTargetTop) ? commit.nextTargetTop : beforeTop);
+    const targetTop = clamp(targetTopRaw, 0, max);
+    const appliedTop = applyCanonicalScrollTop(targetTop, {
+      scroller: deps.scroller,
+      reason,
+      source: 'asr-commit',
+    });
+    const afterTop = Number.isFinite(appliedTop) ? appliedTop : readAfterTop();
+    pursuitTargetTop = afterTop;
+    lastKnownScrollTop = afterTop;
+    lastMoveAt = Date.now();
+    markProgrammaticScroll();
+    return {
+      method: 'pixel',
+      writerCommitted: false,
+      beforeTop,
+      afterTop,
+      movedPx: Math.round(afterTop - beforeTop),
+    };
   };
 
   const schedulePending = () => {
@@ -3319,6 +3440,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const nextTargetTop = Math.max(baseClamped, limitedTarget);
       pursuitTargetTop = nextTargetTop;
       const modeNow = getScrollMode();
+      if (modeNow === 'asr' && !isSessionAsrArmed()) {
+        warnGuard('asr_unarmed', [
+          `current=${lastLineIndex}`,
+          `best=${targetLine}`,
+          `delta=${targetLine - lastLineIndex}`,
+          `sim=${formatLogScore(conf)}`,
+        ]);
+        emitHudStatus('asr_unarmed', 'ASR commit blocked: unarmed');
+        return;
+      }
       const hasWriter = hasActiveScrollWriter();
       let targetBlockId = -1;
       try {
@@ -3342,32 +3473,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const scrollerForStamp: HTMLElement | null = scroller;
       const commitBeforeTop = currentTop;
       let commitAfterTop = currentTop;
-      // ASR commit SSOT: use block writer when available; pixel movement is fallback only.
-      if (modeNow === 'asr' && hasWriter && targetBlockId >= 0) {
-        const writerReason = forced ? 'asr-forced-commit' : 'asr-commit';
-        stopGlide('writer-commit');
-        microPursuitUntil = 0;
-        pursuitActive = false;
-        pursuitVel = 0;
-        lastCommitDeltaPx = 0;
-        let writerSeekOk = false;
-        try {
-          seekToBlockAnimated(targetBlockId, writerReason);
-          writerSeekOk = true;
-        } catch {
-          writerSeekOk = false;
-        }
-        if (writerSeekOk) {
-          const writerStateScroller = getScroller() || scroller;
-          commitAfterTop = writerStateScroller?.scrollTop ?? commitBeforeTop;
-          pursuitTargetTop = commitAfterTop;
-          lastKnownScrollTop = commitAfterTop;
-          lastMoveAt = Date.now();
-          markProgrammaticScroll();
-          writerCommitted = true;
-        }
-      }
-      if (!writerCommitted) {
+      if (modeNow === 'asr') {
+        const role = resolveViewerRole();
+        const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
+        const commitMove = applyAsrCommitMovement(
+          {
+            forced: !!forced,
+            lineIdx: targetLine,
+            blockId: targetBlockId,
+            fromTop: commitBeforeTop,
+            targetTop,
+            nextTargetTop,
+          },
+          {
+            scroller,
+            writerAvailable: hasWriter,
+            role,
+            path,
+          },
+        );
+        writerCommitted = commitMove.writerCommitted;
+        commitAfterTop = commitMove.afterTop;
+        didGlide = false;
+      } else if (!writerCommitted) {
         if (nextTargetTop > base) {
           emitHybridTargetHint(
             nextTargetTop,
@@ -3436,20 +3564,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       resetLowSimStreak();
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
+      const commitTopAfterForLogs = modeNow === 'asr'
+        ? commitAfterTop
+        : (writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop));
       try {
         const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
         const fromTop = Number.isFinite(commitBeforeTop) ? Math.round(commitBeforeTop) : commitBeforeTop;
-        const toTopRaw = writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop);
+        const toTopRaw = commitTopAfterForLogs;
         const toTop = Number.isFinite(toTopRaw) ? Math.round(toTopRaw as number) : toTopRaw;
         const movedPx =
           typeof fromTop === 'number' && typeof toTop === 'number' ? Math.round(toTop - fromTop) : 0;
         const targetElFound = !!lineEl;
-        const action = writerCommitted ? 'writerCommit' : 'driveToLine';
+        const action = writerCommitted ? 'writerCommit' : (modeNow === 'asr' ? 'pixelFallback' : 'driveToLine');
+        const actionReason = writerCommitted ? 'writer' : (modeNow === 'asr' ? 'pixel-fallback' : 'transcript');
         console.log(
-          `[ASR_DRIVER] ${action} best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=${writerCommitted ? 'writer' : 'transcript'} fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
+          `[ASR_DRIVER] ${action} best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=${actionReason} fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
         );
       } catch {}
-      const intendedTargetTop = writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop);
+      const intendedTargetTop = commitTopAfterForLogs;
       try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
       logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
         matchId,
@@ -3458,7 +3590,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         delta: targetLine - prevLineIndex,
         sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
         scrollTopBefore: Math.round(commitBeforeTop),
-        scrollTopAfter: Math.round(writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop)),
+        scrollTopAfter: Math.round(commitTopAfterForLogs),
         targetTop: Math.round(intendedTargetTop),
         forced: !!forced,
         via: writerCommitted ? 'writer' : 'pixel',
@@ -3470,10 +3602,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         writerCommitted ? 'writer' : 'pixel',
         (writerCommitted ? getScroller() : null) || scrollerForStamp,
         commitBeforeTop,
+        commitTopAfterForLogs,
         targetLine,
         targetBlockId,
+        hasWriter,
       );
-      if (!writerCommitted && !didGlide) {
+      if (modeNow !== 'asr' && !writerCommitted && !didGlide) {
         ensurePursuitActive();
       }
       try {
@@ -3525,7 +3659,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       logDev('target update', {
         line: targetLine,
         conf,
-        pxDelta: writerCommitted ? Math.round(commitAfterTop - commitBeforeTop) : deltaPx,
+        pxDelta: Math.round(commitTopAfterForLogs - commitBeforeTop),
         targetTop: intendedTargetTop,
         via: writerCommitted ? 'writer' : 'pixel',
       });
@@ -3536,6 +3670,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const ingest = (text: string, isFinal: boolean, detail?: TranscriptDetail) => {
     if (disposed) return;
+    if (getScrollMode() === 'asr' && !isSessionAsrArmed()) {
+      if (isDevMode()) {
+        try { console.info('[ASR] ingest ignored (session unarmed)'); } catch {}
+      }
+      return;
+    }
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
