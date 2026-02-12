@@ -26,6 +26,7 @@ import {
   setProfileAsrTweaks,
 } from '../ui/speaker-profiles-store';
 import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
+import { normTokens } from '../speech/matcher';
 import type { SpeakerSlot } from '../types/speaker-profiles';
 import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
 
@@ -418,6 +419,10 @@ function shouldPromoteInterimToFinal(text: string): boolean {
   if (t.length >= 60 && /[.!?]$/.test(t)) return true;
   if (t.length >= 90) return true;
   return false;
+}
+
+function normalizeComparableText(value: string): string {
+  return normTokens(String(value || '')).join(' ');
 }
 
 function nextFallbackTranscriptMatchId(): string {
@@ -1379,6 +1384,10 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
     return;
   }
   attachAsrScrollDriver({ reason: 'transcript', mode, allowCreate: true });
+  bootTrace('ASR:ingest', {
+    raw: t,
+    normalized: normalizeComparableText(t),
+  });
   try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
 }
 
