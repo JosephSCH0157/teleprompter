@@ -3468,7 +3468,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
       logCommitScrollStamp(
         writerCommitted ? 'writer' : 'pixel',
-        scrollerForStamp,
+        (writerCommitted ? getScroller() : null) || scrollerForStamp,
         commitBeforeTop,
         targetLine,
         targetBlockId,

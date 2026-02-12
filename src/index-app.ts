@@ -482,13 +482,27 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 		SETTINGS_KEYS.forEach((k) => {
 			if (!Object.prototype.hasOwnProperty.call(app, k)) return;
 			if (k === 'scrollMode') {
+				let raw = '';
+				let current = '';
 				try {
-					const raw = String((app as any)[k] ?? '').trim().toLowerCase();
-					if (raw !== 'asr' && isAsrOverlayActive()) {
+					raw = normalizeUiScrollMode(String((app as any)[k] ?? '').trim().toLowerCase());
+					current = normalizeUiScrollMode(store.get?.('scrollMode') as string | undefined);
+					const engaged = isAsrOverlayActive();
+					if (raw === 'asr' && current !== 'asr' && !engaged) {
+						devLog('[ASR] hydrate skipped scrollMode override to asr', { raw, current, engaged });
+						return;
+					}
+					if (raw !== 'asr' && engaged) {
 						devLog('[ASR] hydrate skipped scrollMode override while engaged', { raw });
 						return;
 					}
 				} catch {}
+				try {
+					withScrollModeWriter('state/app-store', () => {
+						store.set?.('scrollMode' as any, raw as any);
+					}, { source: 'hydrate', via: 'profile' });
+				} catch {}
+				return;
 			}
 			try { store.set?.(k as any, (app as any)[k]); } catch {}
 		});
