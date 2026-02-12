@@ -270,6 +270,7 @@ import './ui/settings/asr-wizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
 import { initHotkeys } from './features/hotkeys';
+import { kick } from './features/kick/kick';
 import { initPersistence } from './features/persistence';
 import { initTelemetry } from './features/telemetry';
 import { initToasts } from './features/toasts';
@@ -378,6 +379,19 @@ function isDevMode(): boolean {
 	} catch {
 		return false;
 	}
+}
+
+function attachKickDevGlobalOnce(): void {
+  if (!isDevMode()) return;
+  try {
+    const w = window as any;
+    if (typeof w.__tpKick === 'function') return;
+    const invoke = (options?: Parameters<typeof kick>[0]) => kick(options);
+    w.__tpKick = invoke;
+    // Dev-only compatibility alias for existing console snippets.
+    w.__tpKickScroll = invoke;
+    try { console.info('[DEV] __tpKick attached'); } catch {}
+  } catch {}
 }
 
 function devLog(...args: any[]) {
@@ -2321,6 +2335,7 @@ try {
 					// Attach scroll writer only once after auth + router + UI are live
 					try {
 						attachScrollWriterOnce();
+						attachKickDevGlobalOnce();
 						if (import.meta.env.DEV && !(window as any).__tpScrollWriter) {
 							console.error('[BOOT] Scroll writer missing');
 						}

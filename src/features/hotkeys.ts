@@ -1,4 +1,4 @@
-import { installKickDevGlobal, kick } from './kick/kick';
+import { kick } from './kick/kick';
 
 let initialized = false;
 
@@ -27,7 +27,6 @@ export function initHotkeys(): void {
   if (initialized) return;
   if (typeof window === 'undefined') return;
   window.addEventListener('keydown', onKeydown, { capture: true });
-  installKickDevGlobal();
   initialized = true;
   try { console.log('[src/features/hotkeys] initHotkeys'); } catch {}
 }

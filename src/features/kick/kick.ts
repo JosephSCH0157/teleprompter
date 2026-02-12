@@ -15,13 +15,6 @@ export interface KickOptions {
   reason?: string;
 }
 
-declare global {
-  interface Window {
-    kick?: (options?: KickOptions) => boolean;
-    __tpKickScroll?: (options?: KickOptions) => boolean;
-  }
-}
-
 function normalizeDeltaPx(rawDelta: number | undefined): number {
   const next = Number(rawDelta);
   if (!Number.isFinite(next) || next === 0) return DEFAULT_KICK_DELTA_PX;
@@ -99,15 +92,3 @@ export function kick(options: KickOptions = {}): boolean {
 
   return Math.abs(to - from) >= 0.5;
 }
-
-export function installKickDevGlobal(): void {
-  if (!import.meta.env.DEV) return;
-  try {
-    window.kick = kick;
-    // Keep old debug alias during dev so existing console snippets still work.
-    window.__tpKickScroll = (options?: KickOptions) => kick(options);
-  } catch {
-    // ignore global assignment failures
-  }
-}
-
