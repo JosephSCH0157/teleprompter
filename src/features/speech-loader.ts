@@ -266,6 +266,20 @@ function dispatchSessionIntent(active: boolean, detail?: { source?: string; reas
     // ignore
   }
 }
+
+function armAsrForSessionStart(mode: string, source: string): void {
+  const normalizedMode = String(mode || '').toLowerCase();
+  if (normalizedMode !== 'asr') return;
+  const store = window.__tpStore;
+  if (!store || typeof store.set !== 'function') return;
+  try { store.set('session.asrDesired' as any, true as any); } catch {}
+  try { store.set('session.asrArmed' as any, true as any); } catch {}
+  try { store.set('session.asrReady' as any, true as any); } catch {}
+  try {
+    console.info('[ASR] armed for session start', { source, mode: normalizedMode });
+  } catch {}
+}
+
 function rememberMode(mode: string): void {
   if (typeof mode === 'string') {
     lastScrollMode = mode;
@@ -1853,7 +1867,9 @@ export function installSpeech(): void {
             return;
           }
           try { console.debug('[session/start] phase', session.phase, '→ preroll'); } catch {}
-          const startIntent = { source: 'recBtn', reason: 'user' };
+          const mode = getScrollMode();
+          armAsrForSessionStart(mode, 'recBtn');
+          const startIntent = { source: 'recBtn', reason: 'user', mode };
           try { setSessionPhase('preroll'); } catch {}
           try {
             window.dispatchEvent(

@@ -51,6 +51,7 @@ Everything else (`auto`, `off`, `manual`) is a UI/legacy convenience state, not 
 - **Owner:** `src/state/session.ts`
 - **Type:** `boolean`
 - **Contract:** Must gate ASR subscription and commit handling.
+- **Arm path:** `Start speech sync` while `scrollMode='asr'` must set `session.asrArmed=true` before preroll/live driver creation.
 
 ### 1.3 ASR Mode Invariants (Hard Boundaries)
 

@@ -105,6 +105,13 @@ function computeAsrDesired(): boolean {
 function computeAsrArmed(desired: boolean): boolean {
   if (!desired) return false;
   try {
+    if (appStore.get('session.asrArmed') === true) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  try {
     const readiness = computeAsrReadiness();
     return !!readiness.ready;
   } catch {

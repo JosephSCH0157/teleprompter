@@ -16,6 +16,7 @@ This document is the executable contract for scroll behavior.
 
 When `scrollMode='asr'`:
 
+- `Start speech sync` must arm ASR for the session (`session.asrArmed=true`) before preroll/live begin.
 - No timed/hybrid/wpm motor may run.
 - No auto-intent flow may drive scroll.
 - No preroll event may trigger movement.
@@ -52,4 +53,3 @@ When `scrollMode='asr'`:
 - Unattributed hydrate mode writes.
 - Publishing scroll globals outside `src/index-app.ts`.
 - Defining new local ScrollMode unions instead of importing canonical types.
-

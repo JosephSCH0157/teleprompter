@@ -1142,9 +1142,14 @@ function initScrollModeUiSync(): void {
         : `${defaultAsrLabel || 'ASR'} (enable mic to use)`;
     }
     if (help) {
-      help.textContent = ready
-        ? defaultHelpText
-        : `${baseHelpText} - ${reasonLabel || 'enable mic to use ASR'}.`;
+      if (ready) {
+        const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+        try { applyScrollModeUI(current as any); } catch {
+          help.textContent = defaultHelpText;
+        }
+      } else {
+        help.textContent = `${baseHelpText} - ${reasonLabel || 'enable mic to use ASR'}.`;
+      }
     }
     if (hint) {
       if (ready) {
