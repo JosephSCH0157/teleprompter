@@ -1,5 +1,5 @@
 # Anvil Manifest (SSOT Map)
-Version: v1.8.2 (2026-02-06)
+Version: v1.8.2 (2026-02-12)
 
 This is the canonical manifest for Anvil's runtime architecture.
 Purpose: **one map, one truth** -- where state lives, who owns it, and which modules are allowed to publish globals.
@@ -14,6 +14,7 @@ If a behavior is confusing, start here before editing code.
 2. **One owner per truth.** If two modules can "own" the same state, we will eventually get split-brain.
 3. **Globals are views.** `window.*` exports are allowed only as thin wrappers around SSOT.
 4. **Dialects must translate.** Any subsystem with its own mode vocabulary must map into canonical types.
+5. **ASR is an isolated lane.** In `scrollMode='asr'`, scrolling is commit-driven only. No motor/auto-intent/tick-driven scrolling is allowed. Movement must come from ASR commit -> writer seek, with pixel fallback only when writer/block mapping is unavailable.
 
 ---
 
@@ -32,17 +33,34 @@ These are the only real engine modes:
 
 Everything else (`auto`, `off`, `manual`) is a UI/legacy convenience state, not an engine mode.
 
-### 1.2 Runtime SSOT Owner
+### 1.2 Runtime SSOT Keys
 
+`scrollMode`
 - **Owner:** `appStore`
-- **Canonical key:** `scrollMode`
 - **Type:** `EngineScrollMode`
+- **Read:** `appStore.get('scrollMode')`
+- **Write:** `appStore.set('scrollMode', nextMode)`
 
-Read:
-- `appStore.get('scrollMode')`
+`scrollEnabled`
+- **Owner:** `appStore`
+- **Type:** `boolean`
+- **Purpose:** Represents run-state (`on/off`) without mutating engine mode identity.
+- **Contract:** Required SSOT key. `Auto Off but mode=hybrid` must be representable as `scrollMode='hybrid' && scrollEnabled=false`.
 
-Write:
-- `appStore.set('scrollMode', nextMode)`
+`session.asrEngaged` / `session.asrArmed`
+- **Owner:** `src/state/session.ts`
+- **Type:** `boolean`
+- **Contract:** Must gate ASR subscription and commit handling.
+
+### 1.3 ASR Mode Invariants (Hard Boundaries)
+
+In `scrollMode='asr'`:
+- Must not wire auto-intent listeners.
+- Must not start timed/hybrid/wpm motors.
+- Must not use preroll to trigger any scrolling.
+- Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
+- Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
+- Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.
 
 ---
 
@@ -93,6 +111,19 @@ Write:
 
 ---
 
+### `src/features/kick/`
+**Manual scroll nudge contract.**
+- `src/features/kick/kick.ts`
+  - Kick is manual movement and must not depend on motors or auto-intent.
+  - Kick resolves scroller by viewer role (`main` vs `display`) before moving.
+  - Kick path:
+    - prefer writer seek when block mapping is available
+    - otherwise perform a small pixel nudge fallback
+  - Kick must be wired from typed bindings only (hotkeys + button).
+  - Dev-only debug global is allowed; production global publish is forbidden.
+
+---
+
 ### `src/ui/`
 **UI rendering and user interactions.**
 - `src/ui/scrollMode.ts`
@@ -134,6 +165,8 @@ Write:
   - profile scroll mode dialect: `timed | wpm | asr | hybrid | off`
 
 **Rule:** profile is a dialect; must map into canonical engine modes.
+**Hydrate rule:** profile hydration may not change runtime `scrollMode` unless ASR is already engaged or the user explicitly selected ASR in this session.
+**Audit rule:** hydrate writes must be attributable (`withScrollModeWriter` metadata) so scroll-audit output identifies source.
 
 ---
 
@@ -147,6 +180,11 @@ Write:
   - `window.__tpScrollMode = { setMode, getMode }`
 
 **Rule:** This is the only approved publisher of the above window globals.
+**Forbidden outside `src/index-app.ts`:**
+- `window.setScrollMode = ...`
+- `window.getScrollMode = ...`
+- `window.__tpScrollMode = ...`
+- `window.kick = ...` or `window.__tpKickScroll = ...` (allowed only as dev-only export path from `index-app.ts`)
 
 ---
 
@@ -170,8 +208,8 @@ Write:
 - asr       -> asr
 - step      -> step
 - rehearsal -> rehearsal
-- auto      -> lastEngineMode (fallback hybrid) + enabled=true
-- off       -> keep engineMode + enabled=false
+- auto      -> keep `scrollMode` (fallback `hybrid`) + `scrollEnabled=true`
+- off       -> keep `scrollMode` + `scrollEnabled=false`
 
 ### Profile dialect (`timed | wpm | asr | hybrid | off`)
 -> Canon engineMode:
@@ -180,7 +218,7 @@ Write:
 - wpm    -> wpm
 - asr    -> asr
 - hybrid -> hybrid
-- off    -> keep engineMode + enabled=false
+- off    -> keep `scrollMode` + `scrollEnabled=false`
 
 ---
 
@@ -206,3 +244,4 @@ Primary modernization objective:
 - Ensure only `index-app.ts` publishes scroll-related window globals
 
 See `scroll-mode-ssot.md` for detailed Phase 1A tasks.
+See `docs/scroll-contract.md` for executable runtime boundaries and allowed/forbidden flows.
