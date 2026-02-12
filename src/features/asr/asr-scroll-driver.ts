@@ -14,6 +14,7 @@ import { getAsrBlockElements } from '../../scroll/asr-block-store';
 import { seekToBlockAnimated } from '../../scroll/scroll-writer';
 import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
 import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
+import { bootTrace } from '../../boot/boot-trace';
 
 // ASR Training rule: matching should be permissive; committing should be conservative.
 
@@ -1115,6 +1116,12 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
 }
 
 export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDriver {
+  bootTrace('ASRScrollDriver:create', {
+    minLineAdvance: options.minLineAdvance,
+    seekThrottleMs: options.seekThrottleMs,
+    interimConfidenceScale: options.interimConfidenceScale,
+    runKey: options.runKey || null,
+  });
   const minLineAdvance = Number.isFinite(options.minLineAdvance ?? DEFAULT_MIN_LINE_ADVANCE)
     ? Math.max(0, options.minLineAdvance ?? DEFAULT_MIN_LINE_ADVANCE)
     : DEFAULT_MIN_LINE_ADVANCE;

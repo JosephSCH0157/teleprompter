@@ -15,6 +15,7 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../scroll/scroller';
+import { bootTrace } from '../boot/boot-trace';
 
 try {
   (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v4-2026-02-10-a';
@@ -159,7 +160,14 @@ function maybeStartOnLive(phase: SessionPhase): void {
     (session.asrArmed && (canonicalMode === 'asr' || brain === 'asr'));
   if (shouldStartSpeech) {
     try { console.debug('[ASR] about to call startSpeech/startBackend', { mode: canonicalMode, reason: 'live-enter' }); } catch {}
-    void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode });
+    bootTrace('scroll-session:live-speech:start', { mode: canonicalMode, reason: 'live-enter' });
+    void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode })
+      .then((ok) => {
+        bootTrace('scroll-session:live-speech:done', { mode: canonicalMode, ok });
+      })
+      .catch((error) => {
+        bootTrace('scroll-session:live-speech:error', { mode: canonicalMode, error: String(error) });
+      });
   } else if (!asrOffLogged) {
     asrOffLogged = true;
     const reason = !session.asrDesired

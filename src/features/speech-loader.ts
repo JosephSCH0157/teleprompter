@@ -11,6 +11,7 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../scroll/scroller';
+import { bootTrace } from '../boot/boot-trace';
 import { maybePromptSaveSpeakerProfiles } from '../ui/save-speaker-profiles-prompt';
 import {
   getSessionLearnedPatches,
@@ -1384,10 +1385,21 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
 function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
   if (typeof window === 'undefined') return;
   const mode = String(opts?.mode || getScrollMode() || '').toLowerCase();
+  bootTrace('speech-loader:attach-asr-driver:start', {
+    reason: opts?.reason || 'attach',
+    mode,
+    allowCreate: opts?.allowCreate === true,
+    runKey: opts?.runKey || null,
+  });
   if (isAsrLikeMode(mode) && !isAsrDriverArmed()) {
     if (isDevMode()) {
       try { console.info('[ASR] driver attach blocked (unarmed)', { mode, reason: opts?.reason || 'attach' }); } catch {}
     }
+    bootTrace('speech-loader:attach-asr-driver:blocked', {
+      reason: opts?.reason || 'attach',
+      mode,
+      cause: 'unarmed',
+    });
     return;
   }
   ensureAsrScrollDriver(opts?.reason || 'attach', {
@@ -1395,7 +1407,14 @@ function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCre
     allowCreate: opts?.allowCreate === true,
     runKey: opts?.runKey,
   });
-  if (transcriptListener) return;
+  if (transcriptListener) {
+    bootTrace('speech-loader:attach-asr-driver:done', {
+      reason: opts?.reason || 'attach',
+      mode,
+      listener: 'existing',
+    });
+    return;
+  }
   transcriptListener = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
     if ((detail as any).__tpDirectIngest === true) return;
@@ -1427,6 +1446,11 @@ function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCre
     pushAsrTranscript(text, isFinal, payload as any);
   };
   window.addEventListener('tp:speech:transcript', transcriptListener, TRANSCRIPT_EVENT_OPTIONS);
+  bootTrace('speech-loader:attach-asr-driver:done', {
+    reason: opts?.reason || 'attach',
+    mode,
+    listener: 'new',
+  });
 }
 
 function ensureAsrDriverLifecycleHooks(): void {
@@ -1683,20 +1707,37 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
 
 export async function startSpeechBackendForSession(info?: { reason?: string; mode?: string }): Promise<boolean> {
   const mode = (info?.mode || getScrollMode()).toLowerCase();
+  bootTrace('speech-loader:live-path:enter', {
+    reason: info?.reason || null,
+    mode,
+  });
   const wantsSpeech = mode === 'asr' || mode === 'hybrid';
-  if (!wantsSpeech) return false;
+  if (!wantsSpeech) {
+    bootTrace('speech-loader:live-path:skip', { reason: 'mode-not-speech', mode });
+    return false;
+  }
   ensureAsrDriverLifecycleHooks();
   if (isSettingsHydrating()) {
     try { console.debug('[ASR] startSpeech blocked during settings hydration', { mode, reason: info?.reason }); } catch {}
+    bootTrace('speech-loader:live-path:skip', { reason: 'settings-hydrating', mode });
     return false;
   }
-  if (running) return true;
+  if (running) {
+    bootTrace('speech-loader:live-path:skip', { reason: 'already-running', mode });
+    return true;
+  }
   speechStartInFlight = true;
 
   try {
     const layoutReady = await waitForAsrLayoutReady(info?.reason);
-    if (!layoutReady) return false;
-    if (running) return true;
+    if (!layoutReady) {
+      bootTrace('speech-loader:live-path:skip', { reason: 'layout-not-ready', mode });
+      return false;
+    }
+    if (running) {
+      bootTrace('speech-loader:live-path:skip', { reason: 'running-after-layout', mode });
+      return true;
+    }
     const runKey = beginAsrRunKey(mode, info?.reason);
 
     attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true, runKey });
@@ -1774,6 +1815,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       const ok = await startBackendForSession(mode, info?.reason);
       try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
       try { await window.__tpMic?.requestMic?.(); } catch {}
+      bootTrace('speech-loader:live-path:done', { mode, ok, runKey });
       return ok;
     } catch {
       running = false;
@@ -1781,6 +1823,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       setListeningUi(false);
       setReadyUi();
       clearAsrRunKey('start-failed');
+      bootTrace('speech-loader:live-path:error', { mode, reason: info?.reason || null, runKey });
       return false;
     }
   } finally {
