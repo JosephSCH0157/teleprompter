@@ -15,6 +15,7 @@ If a behavior is confusing, start here before editing code.
 3. **Globals are views.** `window.*` exports are allowed only as thin wrappers around SSOT.
 4. **Dialects must translate.** Any subsystem with its own mode vocabulary must map into canonical types.
 5. **ASR is an isolated lane.** In `scrollMode='asr'`, scrolling is commit-driven only. No motor/auto-intent/tick-driven scrolling is allowed. Movement must come from ASR commit -> writer seek, with pixel fallback only when writer/block mapping is unavailable.
+6. **Viewer is the canonical scroller.** Runtime scroll reads/writes must resolve through `getScrollerEl()` and target `main#viewer.viewer` (fallback `#viewer`) for main viewer role.
 
 ---
 
@@ -96,6 +97,10 @@ In `scrollMode='asr'`:
   - clamp/guard behavior for rehearsal mode
 - `src/scroll/scroll-control.ts`
   - core tick/RAF controller for continuous movement
+- `src/scroll/scroller.ts`
+  - canonical scroller resolver (`getScrollerEl('main'|'display')`)
+  - `main` role resolves `main#viewer.viewer` then `#viewer`
+  - all movement paths must reuse this resolver (no direct `document.scrollingElement` fallbacks)
 
 **Rule:** This folder controls engines. It should not invent new mode unions outside canon.
 

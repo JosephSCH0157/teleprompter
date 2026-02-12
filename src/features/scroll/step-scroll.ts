@@ -4,7 +4,7 @@
 
 import { computeAnchorLineIndex } from '../../scroll/scroll-helpers';
 import { getScrollWriter } from '../../scroll/scroll-writer';
-import { getFallbackScroller, getPrimaryScroller, isWindowScroller } from '../../scroll/scroller';
+import { getScrollerEl } from '../../scroll/scroller';
 import { DEFAULT_SCRIPT_FONT_PX } from '../../ui/typography-ssot';
 
 export interface StepScrollConfig {
@@ -70,25 +70,15 @@ function safePreventDefault(e: Event | KeyboardEvent | undefined | null): void {
 }
 
 function getViewer(): HTMLElement | null {
-  return document.getElementById('viewer');
+  return getScrollerEl('main');
 }
 
 function getScroller(): HTMLElement | null {
-  return getPrimaryScroller() || getViewer() || getFallbackScroller();
+  return getScrollerEl('main') || getScrollerEl('display');
 }
 
 function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
   try {
-    const isWin =
-      scroller === document.scrollingElement ||
-      scroller === document.documentElement ||
-      scroller === document.body;
-    if (isWin) {
-      const rect = el.getBoundingClientRect();
-      const scrollTop =
-        window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-      return rect.top + scrollTop;
-    }
     const rect = el.getBoundingClientRect();
     const scRect = scroller.getBoundingClientRect();
     return rect.top - scRect.top + scroller.scrollTop;
@@ -131,7 +121,7 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
     : (el.offsetTop || 0) - offsetPx;
   const targetY = Math.max(0, y);
 
-  if (!sc || isWindowScroller(sc)) {
+  if (!sc) {
     scrollWriter.scrollTo(targetY, { behavior: 'auto' });
     return;
   }
@@ -143,7 +133,7 @@ function scrollToEl(el: HTMLElement, offsetPx: number): void {
 
 function scrollByPx(px: number): void {
   const sc = getScroller();
-  if (!sc || isWindowScroller(sc)) {
+  if (!sc) {
     scrollWriter.scrollBy(px, { behavior: 'auto' });
     return;
   }
@@ -405,13 +395,13 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
     } else if (key === 'Home') {
       safePreventDefault(e);
       const sc = getScroller();
-      if (sc && !isWindowScroller(sc)) sc.scrollTop = 0;
+      if (sc) sc.scrollTop = 0;
       else scrollWriter.scrollTo(0, { behavior: 'auto' });
     } else if (key === 'End') {
       safePreventDefault(e);
       const sc = getScroller();
       const max = sc ? Math.max(0, sc.scrollHeight - sc.clientHeight) : 0;
-      if (sc && !isWindowScroller(sc)) sc.scrollTop = max;
+      if (sc) sc.scrollTop = max;
       else scrollWriter.scrollTo(max, { behavior: 'auto' });
     }
   };
@@ -498,6 +488,4 @@ export function installStepScroll(cfg: StepScrollConfig = {}): StepScrollAPI {
 }
 
 export default installStepScroll;
-
-
 

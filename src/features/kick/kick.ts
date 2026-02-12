@@ -1,9 +1,7 @@
 import {
   describeElement,
-  getFallbackScroller,
-  getPrimaryScroller,
+  getScrollerEl,
   getScriptRoot,
-  isWindowScroller,
   resolveActiveScroller,
 } from '../../scroll/scroller';
 import { getScrollWriter } from '../../scroll/scroll-writer';
@@ -22,26 +20,40 @@ function normalizeDeltaPx(rawDelta: number | undefined): number {
 }
 
 function getResolvedScroller(): HTMLElement | null {
-  return resolveActiveScroller(
-    getPrimaryScroller(),
-    getScriptRoot() || getFallbackScroller(),
-  );
+  const role = resolveKickRole();
+  const primary = getScrollerEl(role);
+  const fallback =
+    role === 'display'
+      ? ((document.getElementById('wrap') as HTMLElement | null) || getScriptRoot())
+      : getScriptRoot();
+  return resolveActiveScroller(primary, fallback);
+}
+
+function resolveKickRole(): 'main' | 'display' {
+  if (typeof window === 'undefined') return 'main';
+  try {
+    const explicit = String((window as any).__TP_VIEWER_ROLE || '').toLowerCase();
+    if (explicit === 'display') return 'display';
+    if (explicit === 'main') return 'main';
+    const bodyRole = String(window.document?.body?.dataset?.viewerRole || '').toLowerCase();
+    if (bodyRole === 'display') return 'display';
+    if (bodyRole === 'main') return 'main';
+    if ((window as any).__TP_FORCE_DISPLAY) return 'display';
+    const path = String(window.location?.pathname || '').toLowerCase();
+    if (path.includes('display')) return 'display';
+  } catch {
+    // ignore
+  }
+  return 'main';
 }
 
 function readScrollTop(scroller: HTMLElement): number {
-  if (isWindowScroller(scroller)) {
-    return window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-  }
   return scroller.scrollTop || 0;
 }
 
 function writeScrollTop(scroller: HTMLElement, top: number): void {
   const nextTop = Math.max(0, Number(top) || 0);
   try {
-    if (isWindowScroller(scroller)) {
-      window.scrollTo({ top: nextTop, behavior: 'auto' });
-      return;
-    }
     if (typeof scroller.scrollTo === 'function') {
       scroller.scrollTo({ top: nextTop, behavior: 'auto' });
       return;

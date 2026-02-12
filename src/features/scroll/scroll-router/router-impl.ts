@@ -5,6 +5,7 @@ import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-wri
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { getAsrBlockElements } from '../../../scroll/asr-block-store';
+import { getScrollerEl } from '../../../scroll/scroller';
 import {
   DEFAULT_COMPLETION_POLICY,
   decideBlockCompletion,
@@ -2936,6 +2937,7 @@ function applyMode(m) {
 function installScrollRouter(opts) {
   const { auto: autoMotor, viewer: viewerInstallFlag = false, hostEl = null } = opts;
   auto = autoMotor || auto || null;
+  const canonicalScroller = getScrollerEl(viewerRole) || getScrollerEl('main');
   const docViewer = document.getElementById('viewer') as HTMLElement | null;
   if (!viewer) {
     if (docViewer) {
@@ -2945,14 +2947,15 @@ function installScrollRouter(opts) {
     }
   }
   if (hostEl instanceof HTMLElement) {
-    scrollerEl = docViewer || viewer || hostEl;
+    scrollerEl = canonicalScroller || docViewer || viewer || hostEl;
   }
   if (!scrollerEl) {
-    scrollerEl = docViewer || document.querySelector<HTMLElement>('#viewer') || document.querySelector<HTMLElement>('#script');
-  }
-  if (!scrollerEl) {
-    const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
-    scrollerEl = fallback;
+    scrollerEl =
+      canonicalScroller ||
+      docViewer ||
+      document.querySelector<HTMLElement>('main#viewer.viewer, #viewer') ||
+      document.querySelector<HTMLElement>('#script') ||
+      (viewerRole === 'display' ? (document.getElementById('wrap') as HTMLElement | null) : null);
   }
     if (!hybridScrollGraceListenerInstalled) {
     try {

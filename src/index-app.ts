@@ -1607,6 +1607,7 @@ import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './
 import { triggerSettingsDownload } from './features/settings/exportSettings';
 import { triggerSettingsImport } from './features/settings/importSettings';
 import { installScrollWriteGuard } from './dev/scroll-write-guard';
+import { getScrollerEl } from './scroll/scroller';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
@@ -1664,11 +1665,10 @@ function onDomReady(fn: () => void): void {
 		// Dev-only guard: log direct scroll writes on the main scroller.
 		try {
 			const scroller =
+				getScrollerEl('main') ||
+				getScrollerEl('display') ||
 				(document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-				(document.getElementById('viewer') as HTMLElement | null) ||
-				(document.scrollingElement as HTMLElement | null) ||
-				(document.documentElement as HTMLElement | null) ||
-				(document.body as HTMLElement | null);
+				(document.getElementById('viewer') as HTMLElement | null);
 			installScrollWriteGuard(scroller);
 		} catch {}
 

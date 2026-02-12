@@ -26,6 +26,7 @@ When `scrollMode='asr'`:
 - ASR index seeding from `blocks:scroll-mode` must resolve block-first, then derive line within block.
 - If derived line is cue-only (`[pause]`, `[beat]`, `[reflective pause]`), advance to the first speakable line in that block.
 - ASR anchor/cursor/evidence scans operate on speakable lines only; cue/tag/note-only render lines stay visible in UI but are excluded from ASR match domain.
+- Scroll target identity is canonical: resolve scroller via `getScrollerEl()`; for main role this must be `main#viewer.viewer` with `#viewer` fallback.
 
 ## 3) Allowed Flows by Mode
 
@@ -49,7 +50,13 @@ When `scrollMode='asr'`:
 - Hotkeys and buttons call typed kick entrypoints only.
 - Dev globals are allowed only in dev mode and must not leak to production.
 
-## 6) Forbidden Flows
+## 6) Scroller Resolution Contract
+
+- All runtime scroll reads/writes (kick, writer, router apply, step, restore, scheduler bridge) must use shared scroller resolution from `src/scroll/scroller.ts`.
+- Do not target `document.scrollingElement`/`document.body` for script movement in normal runtime paths.
+- Main viewer role target is `main#viewer.viewer` (fallback `#viewer`); display role target is display viewer element (`__tpDisplayViewerEl`) or `#wrap`.
+
+## 7) Forbidden Flows
 
 - Motor tick writes while `scrollMode='asr'`.
 - Auto-intent writes while `scrollMode='asr'`.

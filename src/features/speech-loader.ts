@@ -6,7 +6,7 @@ import { createAsrScrollDriver, type AsrScrollDriver } from '../features/asr/asr
 import { getAsrBlockElements, getAsrBlockIndex } from '../scroll/asr-block-store';
 import {
   describeElement,
-  getFallbackScroller,
+  getScrollerEl,
   getPrimaryScroller,
   getScriptRoot,
   isWindowScroller,
@@ -1146,7 +1146,7 @@ function computeMarkerLineIndex(): number {
       (container || document).querySelectorAll<HTMLElement>('.line'),
     );
     if (!lineEls.length) return 0;
-    const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
+    const scroller = resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
     const scrollTop = scroller?.scrollTop ?? 0;
     const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
     const topEpsilon = Math.max(24, firstLineHeight * 0.5);
@@ -1440,7 +1440,7 @@ function syncAsrBlockCursor(
 function syncAsrIndices(startIdx: number, reason: string): void {
   const viewer = getPrimaryScroller();
   const root = getScriptRoot() || viewer;
-  const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
+  const scroller = resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
   const scrollTop = scroller?.scrollTop ?? 0;
   const lineEl = (root || viewer || document).querySelector<HTMLElement>('.line');
   const lineHeight = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
@@ -2064,7 +2064,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
         const session = getSession();
         const scroller = resolveActiveScroller(
           getPrimaryScroller(),
-          getScriptRoot() || getFallbackScroller(),
+          getScriptRoot() || getScrollerEl('main') || getScrollerEl('display'),
         );
         console.warn('ASR_BRAIN_READY', {
           asrDesired: session.asrDesired,
@@ -2079,7 +2079,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       const currentIdx = Number((window as any).currentIndex ?? startIdx);
       const viewer = getPrimaryScroller();
       const root = getScriptRoot() || viewer;
-      const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
+      const scroller = resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
       const scrollerTop = scroller?.scrollTop ?? 0;
       const firstLine = (root || viewer || document).querySelector<HTMLElement>('.line');
       const firstLineHeight = firstLine?.offsetHeight || firstLine?.clientHeight || 0;

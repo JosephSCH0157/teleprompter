@@ -1,9 +1,9 @@
+import { getScrollerEl } from '../../scroll/scroller';
+
 function fallbackStep(deltaFactor = 0.9, sign: 1 | -1) {
-  const viewer = document.getElementById('viewer') as HTMLElement | null;
-  const scroller = (viewer ||
-    document.scrollingElement ||
-    document.documentElement ||
-    document.body) as HTMLElement;
+  const viewer = getScrollerEl('main');
+  const scroller = (viewer || getScrollerEl('display')) as HTMLElement | null;
+  if (!scroller) return;
   const viewport =
     viewer?.clientHeight || window.innerHeight || scroller.clientHeight || 800;
   const delta = viewport * deltaFactor * sign;

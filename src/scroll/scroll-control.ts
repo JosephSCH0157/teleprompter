@@ -1,4 +1,5 @@
 import { requestWrite } from '../boot/scheduler';
+import { getScrollerEl } from './scroller';
 
 export type Adapters = Partial<{
   getViewerTop: () => number;
@@ -69,20 +70,33 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
     return r.top + viewer.clientHeight * (markerPct ?? 0.4);
   }
 
-  const root = (document.scrollingElement as HTMLElement) || document.documentElement;
+  const getRootScroller = (): HTMLElement | null =>
+    adapters.getViewerElement?.() || getScrollerEl('main') || getScrollerEl('display');
   const A = {
-    getViewerTop: adapters.getViewerTop || (() => (root && (root.scrollTop || 0)) || 0),
+    getViewerTop:
+      adapters.getViewerTop ||
+      (() => {
+        const root = getRootScroller();
+        return (root && (root.scrollTop || 0)) || 0;
+      }),
     requestScroll:
       adapters.requestScroll ||
       ((top: number) => {
         requestWrite(() => {
+          const root = getRootScroller();
+          if (!root) return;
           try {
             root.scrollTop = top;
           } catch {}
         });
       }),
-    getViewportHeight: adapters.getViewportHeight || (() => root.clientHeight || window.innerHeight || 0),
-    getViewerElement: adapters.getViewerElement || (() => document.getElementById('viewer')),
+    getViewportHeight:
+      adapters.getViewportHeight ||
+      (() => {
+        const root = getRootScroller();
+        return root?.clientHeight || window.innerHeight || 0;
+      }),
+    getViewerElement: adapters.getViewerElement || (() => getRootScroller()),
     emit: adapters.emit || ((event: string, data?: any) => window.dispatchEvent(new CustomEvent(event, { detail: data }))),
     now: adapters.now || (() => (window.performance ? performance.now() : Date.now())),
     raf: adapters.raf || ((cb: FrameRequestCallback) => requestAnimationFrame(cb)),
@@ -138,7 +152,8 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
     lastT = t;
 
     const viewerTop = A.getViewerTop();
-    const maxScrollTop = Math.max(0, (root.scrollHeight || 0) - (A.getViewportHeight() || 0));
+    const viewerEl = A.getViewerElement();
+    const maxScrollTop = Math.max(0, (viewerEl?.scrollHeight || 0) - (A.getViewportHeight() || 0));
     const asrState = consumeAsrScrollState();
     const ctrl = controlScroll({
       yActive: targetTop,
@@ -158,7 +173,6 @@ export default function createScrollController(adapters: Adapters = {}, telemetr
         const error = targetTop - viewerTop;
         const topDelta = error;
 
-        const viewerEl = A.getViewerElement();
         const maxTop = viewerEl ? Math.max(0, viewerEl.scrollHeight - viewerEl.clientHeight) : 0;
         const atBottom = viewerTop >= maxTop - 0.5;
 

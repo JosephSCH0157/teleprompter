@@ -2,7 +2,7 @@
 // All code that moves the main script viewport should route through this helper.
 
 import { getAsrBlockElements } from './asr-block-store';
-import { getDisplayViewerElement, getViewerElement } from './scroller';
+import { getDisplayViewerElement, getScrollerEl, getViewerElement } from './scroller';
 
 export interface ScrollWriter {
   /** Absolute scroll in CSS px from top of script viewport. */
@@ -39,45 +39,18 @@ function withWriteEnabled<T>(reason: string, delta: number, fn: () => T): T {
   finally { w.__tpScrollWriteActive = prev; }
 }
 
-function isWindowScroller(scroller: HTMLElement): boolean {
-  return (
-    scroller === document.scrollingElement ||
-    scroller === document.documentElement ||
-    scroller === document.body
-  );
-}
-
 function findScroller(el: HTMLElement): HTMLElement {
-  let node = el?.parentElement as HTMLElement | null;
-  while (node) {
-    try {
-      const st = getComputedStyle(node);
-      if (/(auto|scroll)/.test(st.overflowY || '')) return node;
-    } catch {
-      // ignore
-    }
-    node = node.parentElement as HTMLElement | null;
-  }
   return (
-    (document.scrollingElement as HTMLElement | null) ||
-    (document.documentElement as HTMLElement | null) ||
-    (document.body as HTMLElement | null) ||
+    getScrollerEl('main') ||
+    getScrollerEl('display') ||
+    getDisplayViewerElement() ||
+    getViewerElement() ||
     el
   );
 }
 
 function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
   try {
-    const isWin =
-      scroller === document.scrollingElement ||
-      scroller === document.documentElement ||
-      scroller === document.body;
-    if (isWin) {
-      const rect = el.getBoundingClientRect();
-      const scrollTop =
-        window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-      return rect.top + scrollTop;
-    }
     const rect = el.getBoundingClientRect();
     const scRect = scroller.getBoundingClientRect();
     return rect.top - scRect.top + scroller.scrollTop;
@@ -145,21 +118,15 @@ function cancelSeekAnimation(): void {
 }
 
 function readScrollTop(scroller: HTMLElement): number {
-  if (isWindowScroller(scroller)) {
-    return window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-  }
   return scroller.scrollTop || 0;
 }
 
 function getDeltaScroller(): HTMLElement | null {
   return (
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-    (document.getElementById('viewer') as HTMLElement | null) ||
-    (document.getElementById('wrap') as HTMLElement | null) ||
+    getScrollerEl('main') ||
+    getScrollerEl('display') ||
     getDisplayViewerElement() ||
-    (document.scrollingElement as HTMLElement | null) ||
-    (document.documentElement as HTMLElement | null) ||
-    (document.body as HTMLElement | null)
+    (document.getElementById('wrap') as HTMLElement | null)
   );
 }
 
@@ -177,10 +144,10 @@ function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrol
   const from = readScrollTop(scroller);
   const delta = (Number(top) || 0) - (Number(from) || 0);
   withWriteEnabled(reason, delta, () => {
-    if (isWindowScroller(scroller)) {
-      window.scrollTo({ top, behavior: 'auto' });
-    } else {
+    if (typeof scroller.scrollTo === 'function') {
       scroller.scrollTo({ top, behavior: 'auto' });
+    } else {
+      scroller.scrollTop = top;
     }
   });
 }
@@ -205,11 +172,9 @@ export function getScrollWriter(): ScrollWriter {
     if (typeof maybe === 'function') {
       const fn = maybe as (_top: number) => void;
       const getScroller = () =>
-        (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-        (document.getElementById('viewer') as HTMLElement | null) ||
-        (document.scrollingElement as HTMLElement | null) ||
-        (document.documentElement as HTMLElement | null) ||
-        (document.body as HTMLElement | null);
+        getScrollerEl('main') ||
+        getScrollerEl('display') ||
+        getDisplayViewerElement();
       cached = {
         scrollTo(top: number) {
           try {

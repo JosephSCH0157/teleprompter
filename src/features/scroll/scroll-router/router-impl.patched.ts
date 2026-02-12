@@ -3,6 +3,7 @@ export {};
 
 import { getScrollWriter } from '../../../scroll/scroll-writer';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
+import { getScrollerEl } from '../../../scroll/scroller';
 import { createTimedEngine } from '../../../scroll/autoscroll';
 import { getScrollBrain } from '../../../scroll/brain-access';
 import { createHybridWpmMotor } from '../hybrid-wpm-motor';
@@ -2366,18 +2367,19 @@ function applyMode(m) {
 }
 function installScrollRouter(opts) {
   const { auto, viewer: viewerInstallFlag = false, hostEl = null } = opts;
+  const canonicalScroller = getScrollerEl(viewerRole) || getScrollerEl('main');
   if (!viewer && hostEl) {
     viewer = hostEl;
   }
   if (hostEl instanceof HTMLElement) {
-    scrollerEl = hostEl;
+    scrollerEl = canonicalScroller || hostEl;
   }
   if (!scrollerEl) {
-    scrollerEl = document.querySelector<HTMLElement>('#viewer') || document.querySelector<HTMLElement>('#script');
-  }
-  if (!scrollerEl) {
-    const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
-    scrollerEl = fallback;
+    scrollerEl =
+      canonicalScroller ||
+      document.querySelector<HTMLElement>('main#viewer.viewer, #viewer') ||
+      document.querySelector<HTMLElement>('#script') ||
+      (viewerRole === 'display' ? (document.getElementById('wrap') as HTMLElement | null) : null);
   }
     if (!hybridScrollGraceListenerInstalled) {
     try {

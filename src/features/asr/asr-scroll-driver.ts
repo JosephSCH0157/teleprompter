@@ -5,7 +5,7 @@ import { ensureAsrTuningProfile, getActiveAsrTuningProfile, onAsrTuning, type As
 import {
   applyCanonicalScrollTop,
   describeElement,
-  getFallbackScroller,
+  getScrollerEl,
   getPrimaryScroller,
   getScriptRoot,
   resolveActiveScroller,
@@ -843,10 +843,6 @@ function emitHybridTargetHint(
 
 type ViewerRole = 'main' | 'display';
 
-function isElementLike(node: unknown): node is HTMLElement {
-  return !!node && typeof node === 'object' && (node as any).nodeType === 1;
-}
-
 function resolveViewerRole(): ViewerRole {
   if (typeof window === 'undefined') return 'main';
   try {
@@ -866,20 +862,7 @@ function resolveViewerRole(): ViewerRole {
 }
 
 function resolveRolePrimaryScroller(role: ViewerRole): HTMLElement | null {
-  if (typeof document === 'undefined') return null;
-  if (role === 'display') {
-    try {
-      const direct = (window as any).__tpDisplayViewerEl;
-      if (isElementLike(direct)) return direct as HTMLElement;
-    } catch {
-      // ignore
-    }
-    return document.getElementById('wrap') as HTMLElement | null;
-  }
-  return (
-    (document.querySelector('main#viewer') as HTMLElement | null) ||
-    (document.getElementById('viewer') as HTMLElement | null)
-  );
+  return getScrollerEl(role);
 }
 
 function hasActiveScrollWriter(): boolean {
@@ -927,20 +910,11 @@ function getScroller(): HTMLElement | null {
   const root = getScriptRoot();
   if (role === 'display') {
     const primary = resolveRolePrimaryScroller('display');
-    const fallback =
-      (document.getElementById('wrap') as HTMLElement | null) ||
-      root ||
-      getFallbackScroller();
+    const fallback = (document.getElementById('wrap') as HTMLElement | null) || root;
     return resolveActiveScroller(primary, fallback);
   }
-  const primary =
-    resolveRolePrimaryScroller('main') ||
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-    root;
-  const fallback =
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-    root ||
-    getFallbackScroller();
+  const primary = resolveRolePrimaryScroller('main') || root;
+  const fallback = root;
   return resolveActiveScroller(primary, fallback);
 }
 
@@ -3822,7 +3796,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       try {
         const viewer = getScroller();
         const root = getScriptRoot() || viewer;
-        const scroller = resolveActiveScroller(viewer, root || getFallbackScroller());
+        const scroller = resolveActiveScroller(viewer, root);
         const scrollTop = scroller?.scrollTop ?? 0;
         const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
           ? (window as any).__TP_MARKER_PCT

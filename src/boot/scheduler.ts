@@ -1,3 +1,5 @@
+import { getScrollerEl } from '../scroll/scroller';
+
 // Single-writer DOM scheduler: coalesce writes/reads into one rAF pass.
 type Job = () => void;
 
@@ -77,7 +79,7 @@ export function installScrollScheduler(): void {
     (window as any).__tpScrollWrite = {
       scrollTo(y: number) {
         try {
-          const sc: any = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+          const sc: any = getScrollerEl('main') || getScrollerEl('display');
           if (!sc) return;
           requestWrite(() => {
             try {
@@ -90,7 +92,7 @@ export function installScrollScheduler(): void {
       },
       scrollBy(dy: number) {
         try {
-          const sc: any = document.getElementById('viewer') || document.scrollingElement || document.documentElement || document.body;
+          const sc: any = getScrollerEl('main') || getScrollerEl('display');
           if (!sc) return;
           const next = (sc.scrollTop || 0) + (Number(dy) || 0);
           requestWrite(() => {
