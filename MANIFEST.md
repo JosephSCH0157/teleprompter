@@ -157,6 +157,10 @@ In `scrollMode='asr'`:
 - (varies)
 - `src/features/speech-loader.ts`
   - tracks last scroll mode as observed and may react to mode changes
+  - for `reason='blocks:scroll-mode'`, ASR index seeding is block-native:
+    - resolve block cursor first
+    - derive line cursor from block range
+    - skip cue-only lines (`[pause]`, `[beat]`, `[reflective pause]`) to first speakable line in the block
 
 ---
 

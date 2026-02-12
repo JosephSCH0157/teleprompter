@@ -23,6 +23,8 @@ When `scrollMode='asr'`:
 - Movement trigger is ASR commit only.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
+- ASR index seeding from `blocks:scroll-mode` must resolve block-first, then derive line within block.
+- If derived line is cue-only (`[pause]`, `[beat]`, `[reflective pause]`), advance to the first speakable line in that block.
 
 ## 3) Allowed Flows by Mode
 

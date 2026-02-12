@@ -9,6 +9,7 @@ import {
   getFallbackScroller,
   getPrimaryScroller,
   getScriptRoot,
+  isWindowScroller,
   resolveActiveScroller,
 } from '../scroll/scroller';
 import { bootTrace } from '../boot/boot-trace';
@@ -423,6 +424,19 @@ function shouldPromoteInterimToFinal(text: string): boolean {
 
 function normalizeComparableText(value: string): string {
   return normTokens(String(value || '')).join(' ');
+}
+
+const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
+const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
+
+function isCueOnlyLineText(value: string): boolean {
+  const raw = String(value || '').trim();
+  if (!raw) return true;
+  const normalized = normalizeComparableText(raw);
+  if (!normalized) return true;
+  if (CUE_LINE_BRACKET_RE.test(raw)) return true;
+  const tokenCount = normalized.split(' ').filter(Boolean).length;
+  return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized);
 }
 
 function nextFallbackTranscriptMatchId(): string {
@@ -1159,6 +1173,197 @@ function getLineSnapshot(index: number) {
   }
 }
 
+type AsrBlockCursorCandidate = {
+  blockIdx: number;
+  lineStart: number;
+  lineEnd: number;
+  speakableStartLine: number;
+  blockTopPx: number;
+  cueOnlyByLine: Map<number, boolean>;
+};
+
+function parseLineIndexFromElement(lineEl: HTMLElement, fallback: number): number {
+  const raw =
+    lineEl.dataset.line ||
+    lineEl.dataset.lineIdx ||
+    lineEl.dataset.i ||
+    lineEl.dataset.index ||
+    lineEl.getAttribute('data-line-idx');
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : Math.max(0, fallback);
+}
+
+function elementTopRelativeToScroller(el: HTMLElement, scroller: HTMLElement | null): number {
+  try {
+    if (!scroller) return el.offsetTop || 0;
+    if (isWindowScroller(scroller)) {
+      const rect = el.getBoundingClientRect();
+      const scrollTop = window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
+      return rect.top + scrollTop;
+    }
+    const rect = el.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    return rect.top - scrollerRect.top + (scroller.scrollTop || 0);
+  } catch {
+    return el.offsetTop || 0;
+  }
+}
+
+function getAsrBlockCursorCandidates(scroller: HTMLElement | null): AsrBlockCursorCandidate[] {
+  const blocks = getAsrBlockElements();
+  if (!Array.isArray(blocks) || !blocks.length) return [];
+  const candidates: AsrBlockCursorCandidate[] = [];
+  for (let i = 0; i < blocks.length; i += 1) {
+    const blockEl = blocks[i];
+    if (!blockEl) continue;
+    const blockIdxRaw = Number(blockEl.dataset.tpBlock ?? i);
+    const blockIdx = Number.isFinite(blockIdxRaw) ? Math.max(0, Math.floor(blockIdxRaw)) : i;
+    const lineEls = Array.from(blockEl.querySelectorAll<HTMLElement>('.line'));
+    if (!lineEls.length) continue;
+    const entries = lineEls
+      .map((lineEl, linePos) => {
+        const idx = parseLineIndexFromElement(lineEl, linePos);
+        const text = String(lineEl.textContent || '').replace(/\s+/g, ' ').trim();
+        return {
+          idx,
+          cueOnly: isCueOnlyLineText(text),
+        };
+      })
+      .filter((entry) => Number.isFinite(entry.idx))
+      .sort((a, b) => a.idx - b.idx);
+    if (!entries.length) continue;
+    const lineStart = entries[0].idx;
+    const lineEnd = entries[entries.length - 1].idx;
+    const speakable = entries.find((entry) => !entry.cueOnly);
+    const speakableStartLine = speakable ? speakable.idx : lineStart;
+    const cueOnlyByLine = new Map<number, boolean>();
+    entries.forEach((entry) => {
+      cueOnlyByLine.set(entry.idx, entry.cueOnly);
+    });
+    candidates.push({
+      blockIdx,
+      lineStart,
+      lineEnd,
+      speakableStartLine,
+      blockTopPx: elementTopRelativeToScroller(blockEl, scroller),
+      cueOnlyByLine,
+    });
+  }
+  return candidates.sort((a, b) => a.blockIdx - b.blockIdx || a.lineStart - b.lineStart);
+}
+
+function resolveAsrBlockCursor(
+  startIdx: number,
+  scroller: HTMLElement | null,
+  topEpsilon: number,
+): (AsrBlockCursorCandidate & { lineIdx: number; sourceLine: number; cueAdjusted: boolean; clamped: boolean }) | null {
+  const sourceLine = Math.max(0, Math.floor(Number(startIdx) || 0));
+  const candidates = getAsrBlockCursorCandidates(scroller);
+  if (!candidates.length) return null;
+  let chosen =
+    candidates.find((candidate) => sourceLine >= candidate.lineStart && sourceLine <= candidate.lineEnd) ||
+    null;
+  if (!chosen) {
+    chosen = candidates.reduce<AsrBlockCursorCandidate | null>((best, candidate) => {
+      if (!best) return candidate;
+      const bestDist =
+        sourceLine < best.lineStart
+          ? best.lineStart - sourceLine
+          : (sourceLine > best.lineEnd ? sourceLine - best.lineEnd : 0);
+      const candidateDist =
+        sourceLine < candidate.lineStart
+          ? candidate.lineStart - sourceLine
+          : (sourceLine > candidate.lineEnd ? sourceLine - candidate.lineEnd : 0);
+      return candidateDist < bestDist ? candidate : best;
+    }, null);
+  }
+  if (!chosen) return null;
+  let clamped = chosen.blockTopPx <= topEpsilon;
+  if (clamped) {
+    const first = candidates
+      .slice()
+      .sort((a, b) => a.blockTopPx - b.blockTopPx || a.blockIdx - b.blockIdx)[0];
+    if (first) {
+      chosen = first;
+      clamped = chosen.blockTopPx <= topEpsilon;
+    }
+  }
+  let lineIdx = sourceLine;
+  if (lineIdx < chosen.lineStart || lineIdx > chosen.lineEnd) {
+    lineIdx = chosen.speakableStartLine;
+  }
+  const cueAdjusted =
+    chosen.cueOnlyByLine.get(lineIdx) === true || lineIdx !== sourceLine;
+  if (chosen.cueOnlyByLine.get(lineIdx) === true) {
+    lineIdx = chosen.speakableStartLine;
+  }
+  lineIdx = Math.max(chosen.lineStart, Math.min(chosen.lineEnd, lineIdx));
+  return {
+    ...chosen,
+    lineIdx,
+    sourceLine,
+    cueAdjusted,
+    clamped,
+  };
+}
+
+function resolveBlockIdxForLine(lineIdx: number, scroller: HTMLElement | null): number | null {
+  const target = Math.max(0, Math.floor(Number(lineIdx) || 0));
+  const candidates = getAsrBlockCursorCandidates(scroller);
+  const hit = candidates.find((candidate) => target >= candidate.lineStart && target <= candidate.lineEnd);
+  return hit ? hit.blockIdx : null;
+}
+
+function syncAsrBlockCursor(
+  startIdx: number,
+  reason: string,
+  scroller: HTMLElement | null,
+  scrollTop: number,
+  topEpsilon: number,
+): boolean {
+  if (reason !== 'blocks:scroll-mode') return false;
+  const cursor = resolveAsrBlockCursor(startIdx, scroller, topEpsilon);
+  if (!cursor) return false;
+  const idx = cursor.lineIdx;
+  const blockTopPx = Number.isFinite(cursor.blockTopPx) ? Math.round(cursor.blockTopPx) : cursor.blockTopPx;
+  try { (window as any).currentIndex = idx; } catch {}
+  try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
+  try {
+    console.debug('[ASR] block sync', {
+      idx,
+      interpretedAs: 'block',
+      blockIdx: cursor.blockIdx,
+      lineIdx: idx,
+      lineStart: cursor.lineStart,
+      lineEnd: cursor.lineEnd,
+      speakableStartLine: cursor.speakableStartLine,
+      blockTopPx,
+      reason,
+      clamped: cursor.clamped,
+      cueAdjusted: cursor.cueAdjusted,
+      sourceLine: cursor.sourceLine,
+      scrollTop: Math.round(scrollTop),
+      topEpsilon: Math.round(topEpsilon),
+    });
+  } catch {}
+  try {
+    console.debug('[ASR] index sync', {
+      idx,
+      interpretedAs: 'block',
+      blockIdx: cursor.blockIdx,
+      lineIdx: idx,
+      reason,
+      clamped: cursor.clamped,
+      cueAdjusted: cursor.cueAdjusted,
+      sourceLine: cursor.sourceLine,
+      scrollTop: Math.round(scrollTop),
+      topEpsilon: Math.round(topEpsilon),
+      blockTopPx,
+    });
+  } catch {}
+  return true;
+}
+
 function syncAsrIndices(startIdx: number, reason: string): void {
   const viewer = getPrimaryScroller();
   const root = getScriptRoot() || viewer;
@@ -1167,11 +1372,24 @@ function syncAsrIndices(startIdx: number, reason: string): void {
   const lineEl = (root || viewer || document).querySelector<HTMLElement>('.line');
   const lineHeight = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
   const topEpsilon = Math.max(24, lineHeight * 0.5);
+  if (syncAsrBlockCursor(startIdx, reason, scroller, scrollTop, topEpsilon)) return;
   const clamped = scrollTop <= topEpsilon;
   const idx = clamped ? 0 : Math.max(0, Math.floor(Number(startIdx) || 0));
+  const blockIdx = resolveBlockIdxForLine(idx, scroller);
   try { (window as any).currentIndex = idx; } catch {}
   try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
-  try { console.debug('[ASR] index sync', { idx, reason, clamped, scrollTop, topEpsilon }); } catch {}
+  try {
+    console.debug('[ASR] index sync', {
+      idx,
+      interpretedAs: 'line',
+      blockIdx,
+      lineIdx: idx,
+      reason,
+      clamped,
+      scrollTop: Math.round(scrollTop),
+      topEpsilon: Math.round(topEpsilon),
+    });
+  } catch {}
 }
 
 const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
