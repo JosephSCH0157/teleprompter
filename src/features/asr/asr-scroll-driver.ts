@@ -3463,13 +3463,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       pursuitTargetTop = nextTargetTop;
       const modeNow = getScrollMode();
       if (modeNow === 'asr' && !isSessionAsrArmed()) {
-        warnGuard('asr_unarmed', [
-          `current=${lastLineIndex}`,
-          `best=${targetLine}`,
-          `delta=${targetLine - lastLineIndex}`,
-          `sim=${formatLogScore(conf)}`,
-        ]);
-        emitHudStatus('asr_unarmed', 'ASR commit blocked: unarmed');
+        if (isDevMode()) {
+          try {
+            console.info('[ASR] movement blocked: not armed', {
+              current: lastLineIndex,
+              best: targetLine,
+              delta: targetLine - lastLineIndex,
+              sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+              mode: modeNow,
+            });
+          } catch {}
+        }
+        bootTrace('ASR:movement:blocked', {
+          reason: 'not-armed',
+          current: lastLineIndex,
+          best: targetLine,
+          delta: targetLine - lastLineIndex,
+          sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : null,
+        });
         return;
       }
       const hasWriter = hasActiveScrollWriter();
@@ -3703,12 +3714,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const ingest = (text: string, isFinal: boolean, detail?: TranscriptDetail) => {
     if (disposed) return;
-    if (getScrollMode() === 'asr' && !isSessionAsrArmed()) {
-      if (isDevMode()) {
-        try { console.info('[ASR] ingest ignored (session unarmed)'); } catch {}
-      }
-      return;
-    }
     const normalized = String(text || '').trim();
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();

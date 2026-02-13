@@ -21,6 +21,7 @@ export interface SessionState {
   recordReason: RecordReason;
   asrReady: boolean;
   asrDesired: boolean;
+  // Movement permission for ASR commit writes; driver attach/ingest may exist while false.
   asrArmed: boolean;
 }
 

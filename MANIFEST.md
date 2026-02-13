@@ -61,6 +61,8 @@ In `scrollMode='asr'`:
 - Must not start timed/hybrid/wpm motors.
 - Must not use preroll to trigger any scrolling.
 - `session.scrollAutoOnLive` must not gate ASR startup/attach decisions.
+- ASR driver attach/readiness is independent from movement arming: mode selection with script blocks present should attach/create driver + ingest path before live.
+- `session.asrArmed` gates ASR movement permission only (commit may process bookkeeping while unarmed, but must not write scroll).
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
 - ASR writer seek target is block-top aligned (scroll block into view); marker-centered anchoring is for continuous modes, not ASR commits.

@@ -17,6 +17,8 @@ This document is the executable contract for scroll behavior.
 When `scrollMode='asr'`:
 
 - `Start speech sync` must arm ASR for the session (`session.asrArmed=true`) before preroll/live begin.
+- Driver attach/create and transcript ingest readiness should occur on ASR mode selection when script blocks are available (do not require `session.asrArmed`).
+- `session.asrArmed` is movement permission only: ASR may ingest/match/bookkeep while unarmed, but must not write scroll.
 - No timed/hybrid/wpm motor may run.
 - No auto-intent flow may drive scroll.
 - No preroll event may trigger movement.
