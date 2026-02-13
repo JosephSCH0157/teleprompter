@@ -345,6 +345,9 @@ const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
 const POST_COMMIT_MIN_NUDGE_PX = 1;
 const POST_COMMIT_WRITER_SETTLE_MS = 230;
+const COMMIT_BAND_RESEED_BACK_LINES = 2;
+const COMMIT_BAND_RESEED_AHEAD_LINES = 60;
+const COMMIT_BAND_RESEED_TTL_MS = 2200;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -554,10 +557,12 @@ const HUD_STATUS_THROTTLE_MS = 500;
 const HUD_PURSUE_THROTTLE_MS = 200;
 let lastPursueHudAt = 0;
 const SUMMARY_TOAST_DEDUPE_MS = 1000;
+const NAN_GUARD_THROTTLE_MS = 1000;
 const MAX_REPORTED_RUN_KEYS = 128;
 const reportedSummaryRunKeys = new Set<string>();
 let lastSummaryToastKey = '';
 let lastSummaryToastAt = 0;
+const nanGuardLastAt = new Map<string, number>();
 
 function markRunSummaryReported(runKey: string | null | undefined): boolean {
   const key = String(runKey || '').trim();
@@ -616,6 +621,38 @@ function warnGuard(reason: string, parts: Array<string | number | null | undefin
     console.warn(line.join(' '));
   } catch {}
   logThrottled(`ASR_GUARD:${reason}`, 'warn', 'ASR_GUARD', { reason, parts: parts.filter(Boolean) });
+}
+
+function warnAsrNanGuard(
+  key: string,
+  value: unknown,
+  detail?: Record<string, unknown>,
+) {
+  const now = Date.now();
+  const last = nanGuardLastAt.get(key) ?? 0;
+  if (now - last < NAN_GUARD_THROTTLE_MS) return;
+  nanGuardLastAt.set(key, now);
+  if (!isDevMode()) return;
+  try {
+    console.warn('[ASR NAN GUARD]', {
+      key,
+      value,
+      ...(detail || {}),
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function finiteNumberOrNull(
+  key: string,
+  value: unknown,
+  detail?: Record<string, unknown>,
+): number | null {
+  const next = Number(value);
+  if (Number.isFinite(next)) return next;
+  warnAsrNanGuard(key, value, detail);
+  return null;
 }
 
 function emitHudStatus(key: string, text: string, detail?: Record<string, unknown>) {
@@ -1149,6 +1186,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let resyncReason: string | null = null;
   let resyncLookaheadBonus = DEFAULT_RESYNC_LOOKAHEAD_BONUS;
   let resyncBacktrackOverride = DEFAULT_MATCH_BACKTRACK_LINES;
+  let commitBandReseed: {
+    start: number;
+    end: number;
+    anchor: number;
+    until: number;
+    reason: string;
+  } | null = null;
   let matchAnchorIdx = -1;
   let lastCommittedBlockId = -1;
   let blockCorpusCacheRef: HTMLElement[] | null = null;
@@ -2008,6 +2052,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     resyncUntil = 0;
     resyncAnchorIdx = null;
     resyncReason = null;
+    clearCommitBandReseed('manual-adopt');
     catchUpModeUntil = 0;
     postCatchupUntil = 0;
     postCatchupSamplesLeft = 0;
@@ -3048,6 +3093,46 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     logDev('lag relock reset', { reason });
   };
 
+  function clearCommitBandReseed(reason?: string) {
+    if (!commitBandReseed) return;
+    commitBandReseed = null;
+    if (reason) {
+      logDev('commit band reseed cleared', { reason });
+    }
+  }
+
+  function reseedCommitBandFromIndex(index: number, now: number, reason: string) {
+    const anchorRaw = finiteNumberOrNull('band-reseed.anchor', index, { reason });
+    if (anchorRaw == null) return;
+    const anchor = Math.max(0, Math.floor(anchorRaw));
+    const start = Math.max(0, anchor - COMMIT_BAND_RESEED_BACK_LINES);
+    const end = Math.max(start, anchor + COMMIT_BAND_RESEED_AHEAD_LINES);
+    commitBandReseed = {
+      start,
+      end,
+      anchor,
+      until: now + COMMIT_BAND_RESEED_TTL_MS,
+      reason,
+    };
+    resetLagRelock('band-reseed');
+    if (isDevMode()) {
+      try {
+        console.info('[ASR_BAND_RESEEDED]', { anchor, start, end, reason });
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  function getCommitBandReseedWindow(now: number) {
+    if (!commitBandReseed) return null;
+    if (now > commitBandReseed.until) {
+      clearCommitBandReseed('expired');
+      return null;
+    }
+    return commitBandReseed;
+  }
+
   const activateStuckResync = (anchorIdx: number, now: number) => {
     resyncUntil = now + DEFAULT_STUCK_RESYNC_WINDOW_MS;
     resyncAnchorIdx = Math.max(0, Math.floor(anchorIdx));
@@ -3256,9 +3341,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     commit: AsrCommit,
     deps: AsrCommitMoveDeps,
   ): AsrMoveResult => {
-    const beforeTop = Number.isFinite(commit.fromTop)
+    const beforeTopRaw = Number.isFinite(commit.fromTop)
       ? commit.fromTop
-      : (deps.scroller.scrollTop || 0);
+      : deps.scroller.scrollTop;
+    const beforeTop = finiteNumberOrNull('commit.beforeTop', beforeTopRaw, {
+      lineIdx: commit.lineIdx,
+      blockId: commit.blockId,
+    }) ?? 0;
     const reason = commit.forced ? 'asr-forced-commit' : 'asr-commit';
     if (isDevMode()) {
       try {
@@ -3279,7 +3368,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     };
     const readAfterTop = () => {
       const next = deps.scroller.scrollTop;
-      return Number.isFinite(next) ? Number(next) : beforeTop;
+      return finiteNumberOrNull('commit.afterTop.readback', next, {
+        reason,
+        lineIdx: commit.lineIdx,
+      }) ?? beforeTop;
     };
     if (deps.writerAvailable && commit.blockId >= 0) {
       stopCommitPursuit('writer-commit');
@@ -3293,7 +3385,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       if (writerSeekOk) {
         const writerScroller = getScroller() || deps.scroller;
-        const afterTop = Number(writerScroller?.scrollTop ?? beforeTop);
+        const afterTop =
+          finiteNumberOrNull('commit.afterTop.writer', writerScroller?.scrollTop, {
+            reason,
+            lineIdx: commit.lineIdx,
+            blockId: commit.blockId,
+          }) ?? beforeTop;
         bootTrace('SCROLL:apply', {
           y: Math.round(afterTop),
           from: Math.round(beforeTop),
@@ -3317,16 +3414,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     stopCommitPursuit('pixel-commit');
     const max = Math.max(0, deps.scroller.scrollHeight - deps.scroller.clientHeight);
-    const targetTopRaw = Number.isFinite(commit.targetTop)
+    const targetTopRawCandidate = Number.isFinite(commit.targetTop)
       ? commit.targetTop
       : (Number.isFinite(commit.nextTargetTop) ? commit.nextTargetTop : beforeTop);
+    const targetTopRaw =
+      finiteNumberOrNull('commit.targetTop.raw', targetTopRawCandidate, {
+        reason,
+        lineIdx: commit.lineIdx,
+        blockId: commit.blockId,
+      }) ?? beforeTop;
     const targetTop = clamp(targetTopRaw, 0, max);
     const appliedTop = applyCanonicalScrollTop(targetTop, {
       scroller: deps.scroller,
       reason,
       source: 'asr-commit',
     });
-    const afterTop = Number.isFinite(appliedTop) ? appliedTop : readAfterTop();
+    const afterTop =
+      finiteNumberOrNull(
+        'commit.afterTop.pixel',
+        Number.isFinite(appliedTop) ? appliedTop : readAfterTop(),
+        { reason, lineIdx: commit.lineIdx, blockId: commit.blockId },
+      ) ?? beforeTop;
     bootTrace('SCROLL:apply', {
       y: Math.round(afterTop),
       from: Math.round(beforeTop),
@@ -3512,7 +3620,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
       let targetTop = computeLineTargetTop(scroller, lineEl);
-      const currentTop = scroller.scrollTop || 0;
+      const currentTop =
+        finiteNumberOrNull('pending.currentTop', scroller.scrollTop, {
+          line: targetLine,
+          cursor: lastLineIndex,
+        }) ?? 0;
+      if (targetTop != null) {
+        const safeTargetTop = finiteNumberOrNull('pending.targetTop', targetTop, {
+          line: targetLine,
+          cursor: lastLineIndex,
+        });
+        if (safeTargetTop == null) {
+          warnGuard('invalid_target_top', [
+            `current=${lastLineIndex}`,
+            `best=${targetLine}`,
+          ]);
+          emitHudStatus('invalid_target_top', 'Blocked: invalid target top');
+          return;
+        }
+        targetTop = safeTargetTop;
+      }
       let deltaPx = targetTop != null ? targetTop - currentTop : 0;
 
         if (targetTop == null) {
@@ -4022,6 +4149,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       resetLowSimStreak();
       setCurrentIndex(lastLineIndex, forceReason === 'catchup' ? 'catchup-commit' : 'commit');
+      if (forced || targetLine > prevLineIndex) {
+        reseedCommitBandFromIndex(targetLine, now, forced ? 'forced-commit' : 'forward-commit');
+      }
       const commitTopAfterForLogs = modeNow === 'asr'
         ? commitAfterTop
         : (writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop));
@@ -4539,14 +4669,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     const totalLines = getTotalLines();
-    const bandStart = Number.isFinite((match as any)?.bandStart)
+    const baseBandStart = Number.isFinite((match as any)?.bandStart)
       ? Math.max(0, Math.floor((match as any).bandStart))
       : Math.max(0, cursorLine - matchWindowBack);
-    const bandEnd = Number.isFinite((match as any)?.bandEnd)
-      ? Math.max(bandStart, Math.floor((match as any).bandEnd))
+    const baseBandEnd = Number.isFinite((match as any)?.bandEnd)
+      ? Math.max(baseBandStart, Math.floor((match as any).bandEnd))
       : (totalLines > 0
         ? Math.min(totalLines - 1, cursorLine + matchWindowAhead)
         : cursorLine + matchWindowAhead);
+    let bandStart = baseBandStart;
+    let bandEnd = baseBandEnd;
+    const reseededBand = getCommitBandReseedWindow(now);
+    if (reseededBand) {
+      bandStart = Math.max(0, Math.min(bandStart, reseededBand.start));
+      bandEnd = Math.max(bandStart, Math.max(bandEnd, reseededBand.end));
+      if (isDevMode() && rawIdx >= bandStart && rawIdx <= bandEnd && (rawIdx < baseBandStart || rawIdx > baseBandEnd)) {
+        try {
+          console.info('[ASR_BAND_RESEED_HIT]', {
+            current: cursorLine,
+            best: rawIdx,
+            baseBandStart,
+            baseBandEnd,
+            bandStart,
+            bandEnd,
+            reseedAnchor: reseededBand.anchor,
+            reseedReason: reseededBand.reason,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
     const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
     const manualAnchorEnabled = isManualAnchorAdoptEnabled();
     if (manualAnchorPending && manualAnchorEnabled && now - manualAnchorPending.ts >= MANUAL_ANCHOR_PENDING_TIMEOUT_MS) {
@@ -4557,6 +4710,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `current=${cursorLine}`,
         `best=${rawIdx}`,
         `delta=${rawIdx - cursorLine}`,
+        `baseBandStart=${baseBandStart}`,
+        `baseBandEnd=${baseBandEnd}`,
         `bandStart=${bandStart}`,
         `bandEnd=${bandEnd}`,
         `inBand=${inBand ? 1 : 0}`,
@@ -5929,6 +6084,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     resyncUntil = 0;
     resyncAnchorIdx = null;
     resyncReason = null;
+    clearCommitBandReseed('sync-index');
     resetResyncOverrides();
     lastBehindStrongIdx = -1;
     lastBehindStrongAt = 0;

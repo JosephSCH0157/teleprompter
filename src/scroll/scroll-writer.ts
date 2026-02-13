@@ -25,9 +25,11 @@ let warned = false;
 let activeSeekAnim: { cancel: () => void } | null = null;
 let lastWriteMismatchAt = 0;
 let lastWriteMismatchKey = '';
+let lastNonFiniteGuardAt = 0;
 
 const WRITE_MISMATCH_LOG_THROTTLE_MS = 2000;
 const WRITE_MISMATCH_EPSILON_PX = 1;
+const NON_FINITE_GUARD_THROTTLE_MS = 1000;
 
 function shouldTraceWrites(): boolean {
   try {
@@ -38,6 +40,22 @@ function shouldTraceWrites(): boolean {
     if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
   } catch {}
   return false;
+}
+
+function logNonFiniteGuard(reason: string, value: unknown, detail?: Record<string, unknown>): void {
+  if (!shouldTraceWrites()) return;
+  const now = Date.now();
+  if (now - lastNonFiniteGuardAt < NON_FINITE_GUARD_THROTTLE_MS) return;
+  lastNonFiniteGuardAt = now;
+  try {
+    console.warn('[scroll-writer] non-finite value', {
+      reason,
+      value,
+      ...(detail || {}),
+    });
+  } catch {
+    // ignore
+  }
 }
 
 function withWriteEnabled<T>(reason: string, delta: number, fn: () => T): T {
@@ -181,10 +199,25 @@ function logWriteMismatch(scroller: HTMLElement, target: number, before: number,
 }
 
 function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrollTop'): void {
-  const from = readScrollTop(scroller);
+  const rawFrom = scroller.scrollTop;
+  const from = Number.isFinite(rawFrom) ? rawFrom : 0;
+  if (!Number.isFinite(rawFrom)) {
+    logNonFiniteGuard('writeScrollTop:from', rawFrom, {
+      scroller: describeElement(scroller),
+      reason,
+    });
+  }
+  const rawTop = Number(top);
+  if (!Number.isFinite(rawTop)) {
+    logNonFiniteGuard('writeScrollTop:target', top, {
+      scroller: describeElement(scroller),
+      reason,
+    });
+    return;
+  }
   const maxTop = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
-  const target = Math.max(0, Math.min(Number(top) || 0, maxTop));
-  const delta = target - (Number(from) || 0);
+  const target = Math.max(0, Math.min(rawTop, maxTop));
+  const delta = target - from;
   withWriteEnabled(reason, delta, () => {
     if (typeof scroller.scrollTo === 'function') {
       scroller.scrollTo({ top: target, behavior: 'auto' });
@@ -208,9 +241,17 @@ function resolveSeekTarget(blockIdx: number): {
   const scroller = findScroller(el);
   const mode = getScrollMode();
   const blockTopPx = elementTopRelativeTo(el, scroller);
+  if (!Number.isFinite(blockTopPx)) {
+    logNonFiniteGuard('resolveSeekTarget:blockTopPx', blockTopPx, { blockIdx });
+    return null;
+  }
   const top = mode === 'asr'
     ? blockTopPx
     : blockTopPx - markerOffsetPx(scroller);
+  if (!Number.isFinite(top)) {
+    logNonFiniteGuard('resolveSeekTarget:top', top, { blockIdx, mode });
+    return null;
+  }
   let lineIdx: number | null = null;
   try {
     const firstLine = el.querySelector<HTMLElement>('.line[data-line], .line[data-line-idx], .line');
