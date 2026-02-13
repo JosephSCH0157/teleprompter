@@ -68,6 +68,7 @@ In `scrollMode='asr'`:
 - ASR writer seek target is block-top aligned (scroll block into view); marker-centered anchoring is for continuous modes, not ASR commits.
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line in the upper viewport band and preserve forward readable lines (minimum lookahead target) so commits never strand the reader at the bottom with no upcoming text visible.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
+- Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.
 

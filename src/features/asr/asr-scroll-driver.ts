@@ -245,6 +245,8 @@ const DEFAULT_SHORT_FINAL_MAX_TOKENS = 6;
 const DEFAULT_SHORT_FINAL_WINDOW_MS = DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
 const DEFAULT_SHORT_FINAL_LOOKAHEAD_LINES = 10;
 const DEFAULT_SHORT_FINAL_SIM_SLACK = 0.12;
+const DEFAULT_FORWARD_WINDOW_MAX_LINES = 4;
+const DEFAULT_FORWARD_WINDOW_MIN_TOKENS = 2;
 const DEFAULT_OUTRUN_RELAXED_SIM = 0.5;
 const DEFAULT_OUTRUN_WINDOW_MS = DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
 const DEFAULT_OUTRUN_LOOKAHEAD_LINES = 6;
@@ -406,6 +408,31 @@ function formatLogScore(value: number) {
 
 function normalizeComparableText(value: string): string {
   return normTokens(String(value || '')).join(' ');
+}
+
+function splitFinalTranscriptChunks(value: string): string[] {
+  const raw = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return [];
+  const dedupe = new Set<string>();
+  const chunks: string[] = [];
+  const pushChunk = (chunk: string) => {
+    const normalized = normalizeComparableText(chunk);
+    if (!normalized) return;
+    const tokenLen = normTokens(normalized).length;
+    if (tokenLen < DEFAULT_FORWARD_WINDOW_MIN_TOKENS) return;
+    if (dedupe.has(normalized)) return;
+    dedupe.add(normalized);
+    chunks.push(normalized);
+  };
+  pushChunk(raw);
+  const parts = raw
+    .split(/[.!?;:]+(?:\s+|$)|,\s+|--+/g)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  for (const part of parts) {
+    pushChunk(part);
+  }
+  return chunks;
 }
 
 function getOverlapTokens(leftNormalized: string, rightNormalized: string): string[] {
@@ -2305,6 +2332,88 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return null;
   };
 
+  const buildForwardMatcherInputs = (
+    bufferedTextValue: string,
+    compactedTextValue: string,
+    final: boolean,
+  ): string[] => {
+    const dedupe = new Set<string>();
+    const inputs: string[] = [];
+    const pushInput = (value: string) => {
+      const normalized = normalizeComparableText(value);
+      if (!normalized) return;
+      if (dedupe.has(normalized)) return;
+      dedupe.add(normalized);
+      inputs.push(normalized);
+    };
+    pushInput(bufferedTextValue);
+    pushInput(compactedTextValue);
+    if (final) {
+      const chunks = splitFinalTranscriptChunks(compactedTextValue);
+      for (const chunk of chunks) {
+        pushInput(chunk);
+      }
+    }
+    return inputs;
+  };
+
+  const buildForwardWindowScores = (
+    candidateLineIdx: number[],
+    matcherInputs: string[],
+    maxWindowLines = DEFAULT_FORWARD_WINDOW_MAX_LINES,
+  ): Array<{ idx: number; score: number; span: number; startIdx: number; source: 'window' }> => {
+    if (!candidateLineIdx.length || !matcherInputs.length) return [];
+    const maxSpan = Math.max(1, Math.floor(maxWindowLines));
+    const matcherTokenSets = matcherInputs
+      .map((value) => normTokens(value))
+      .filter((tokens) => tokens.length > 0);
+    if (!matcherTokenSets.length) return [];
+    const lineTokenCache = new Map<number, string[]>();
+    const getSpeakableLineTokens = (lineIndex: number): string[] => {
+      const idx = Math.max(0, Math.floor(lineIndex));
+      const cached = lineTokenCache.get(idx);
+      if (cached) return cached;
+      const raw = getLineTextAt(idx);
+      if (!raw || isIgnorableCueLineText(raw)) {
+        lineTokenCache.set(idx, []);
+        return [];
+      }
+      const normalized = normalizeComparableText(raw);
+      const tokens = normalized ? normTokens(normalized) : [];
+      lineTokenCache.set(idx, tokens);
+      return tokens;
+    };
+    const windowScores: Array<{ idx: number; score: number; span: number; startIdx: number; source: 'window' }> = [];
+    for (let startPos = 0; startPos < candidateLineIdx.length; startPos += 1) {
+      const startIdx = candidateLineIdx[startPos];
+      const windowTokens: string[] = [];
+      for (
+        let span = 1;
+        span <= maxSpan && startPos + span - 1 < candidateLineIdx.length;
+        span += 1
+      ) {
+        const lineIdx = candidateLineIdx[startPos + span - 1];
+        const lineTokens = getSpeakableLineTokens(lineIdx);
+        if (!lineTokens.length) continue;
+        windowTokens.push(...lineTokens);
+        if (windowTokens.length < DEFAULT_FORWARD_WINDOW_MIN_TOKENS) continue;
+        let bestScore = 0;
+        for (const tokenSet of matcherTokenSets) {
+          const score = computeLineSimilarityFromTokens(tokenSet, windowTokens);
+          if (score > bestScore) bestScore = score;
+        }
+        windowScores.push({
+          idx: lineIdx,
+          score: bestScore,
+          span,
+          startIdx,
+          source: 'window',
+        });
+      }
+    }
+    return windowScores;
+  };
+
   const measurePostCommitReadability = (scroller: HTMLElement, activeLineIndex: number) => {
     const activeLine = getLineElementByIndex(scroller, activeLineIndex);
     if (!activeLine) {
@@ -2799,8 +2908,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     rangeStart: number;
     rangeEnd: number;
     candidatesChecked: number;
+    windowCandidatesChecked?: number;
+    matcherInputCount?: number;
     bestForwardIdx: number | null;
     bestForwardSim: number;
+    bestForwardSpan?: number;
+    bestForwardSource?: 'line' | 'window' | null;
     floor: number;
   }) => {
     if (!isDevMode()) return;
@@ -2810,8 +2923,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       payload.rangeStart,
       payload.rangeEnd,
       payload.candidatesChecked,
+      payload.windowCandidatesChecked ?? -1,
+      payload.matcherInputCount ?? -1,
       payload.bestForwardIdx ?? -1,
       Number.isFinite(payload.bestForwardSim) ? payload.bestForwardSim.toFixed(3) : 'NaN',
+      payload.bestForwardSpan ?? -1,
+      payload.bestForwardSource || '',
       Number.isFinite(payload.floor) ? payload.floor.toFixed(3) : 'NaN',
     ].join('|');
     const now = Date.now();
@@ -2829,10 +2946,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         cursorLine: payload.cursorLine,
         forwardRange: `${payload.rangeStart}-${payload.rangeEnd}`,
         forwardCandidatesChecked: payload.candidatesChecked,
+        forwardWindowCandidatesChecked: payload.windowCandidatesChecked,
+        matcherInputCount: payload.matcherInputCount,
         bestForwardIdx: payload.bestForwardIdx,
         bestForwardSim: Number.isFinite(payload.bestForwardSim)
           ? Number(payload.bestForwardSim.toFixed(3))
           : payload.bestForwardSim,
+        bestForwardSpan: payload.bestForwardSpan,
+        bestForwardSource: payload.bestForwardSource || null,
         floor: Number.isFinite(payload.floor) ? Number(payload.floor.toFixed(3)) : payload.floor,
       });
     } catch {}
@@ -4676,6 +4797,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : requiredThreshold;
     const outrunRecent =
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
+    const forwardMatcherInputs = buildForwardMatcherInputs(bufferedText, compacted, isFinal);
     const forwardRangeStart = Math.max(0, cursorLine + 1);
     const forwardInitialEnd = cursorLine + Math.max(1, outrunLookaheadLines);
     const totalForwardLines = getTotalLines();
@@ -4732,14 +4854,41 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       0,
       forwardRangeEnd - Math.max(forwardRangeStart, Math.min(forwardHardEnd, forwardInitialEnd)),
     );
-    const forwardBandScores = forwardCandidateLineIdx
+    const forwardLineScores = forwardCandidateLineIdx
       .map((idx) => {
         const score = Number(rawScoreByIdx.get(idx));
         if (!Number.isFinite(score)) return null;
-        return { idx, score };
+        return { idx, score, span: 1, startIdx: idx, source: 'line' as const };
       })
-      .filter((entry): entry is { idx: number; score: number } => !!entry);
+      .filter((entry): entry is { idx: number; score: number; span: number; startIdx: number; source: 'line' } => !!entry);
+    const forwardWindowScores = buildForwardWindowScores(
+      forwardCandidateLineIdx,
+      forwardMatcherInputs,
+      DEFAULT_FORWARD_WINDOW_MAX_LINES,
+    );
+    const forwardScoreByIdx = new Map<
+      number,
+      { idx: number; score: number; span: number; startIdx: number; source: 'line' | 'window' }
+    >();
+    const adoptForwardScore = (entry: { idx: number; score: number; span: number; startIdx: number; source: 'line' | 'window' }) => {
+      const existing = forwardScoreByIdx.get(entry.idx);
+      if (!existing) {
+        forwardScoreByIdx.set(entry.idx, entry);
+        return;
+      }
+      if (entry.score > existing.score) {
+        forwardScoreByIdx.set(entry.idx, entry);
+        return;
+      }
+      if (entry.score === existing.score && entry.span < existing.span) {
+        forwardScoreByIdx.set(entry.idx, entry);
+      }
+    };
+    forwardLineScores.forEach(adoptForwardScore);
+    forwardWindowScores.forEach(adoptForwardScore);
+    const forwardBandScores = Array.from(forwardScoreByIdx.values());
     const forwardCandidatesChecked = forwardCandidateLineIdx.length;
+    const forwardWindowCandidatesChecked = forwardWindowScores.length;
     if (outrunRecent && forwardCandidatesChecked === 0 && isDevMode()) {
       const rangeStart = Math.max(0, Math.floor(forwardRangeStart));
       const rangeEnd = Math.max(rangeStart, Math.floor(forwardRangeEnd));
@@ -4761,9 +4910,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     }
     const outrunCandidate = forwardBandScores
-      .sort((a, b) => b.score - a.score || a.idx - b.idx)[0] || null;
+      .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
     const bestForwardIdx = outrunCandidate ? outrunCandidate.idx : null;
     const bestForwardSim = outrunCandidate ? outrunCandidate.score : 0;
+    const bestForwardSpan = outrunCandidate ? outrunCandidate.span : null;
+    const bestForwardSource = outrunCandidate ? outrunCandidate.source : null;
     const outrunPick = outrunCandidate;
     const outrunFloor = shortFinalRecent ? shortFinalNeed : outrunRelaxedSim;
     const forwardCandidateOk = !!outrunCandidate && bestForwardSim >= outrunFloor;
@@ -4853,8 +5004,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         rangeStart: forwardRangeStart,
         rangeEnd: forwardRangeEnd,
         candidatesChecked: forwardCandidatesChecked,
+        windowCandidatesChecked: forwardWindowCandidatesChecked,
+        matcherInputCount: forwardMatcherInputs.length,
         bestForwardIdx,
         bestForwardSim,
+        bestForwardSpan: bestForwardSpan ?? undefined,
+        bestForwardSource: bestForwardSource,
         floor: outrunFloor,
       });
       if (!outrunPick) {
@@ -4862,9 +5017,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
           `forwardCandidates=${forwardCandidatesChecked}`,
+          `forwardWindowCandidates=${forwardWindowCandidatesChecked}`,
+          `matcherInputs=${forwardMatcherInputs.length}`,
           `forwardRange=${forwardRangeStart}-${forwardRangeEnd}`,
           `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
+          `bestForwardSpan=${bestForwardSpan ?? -1}`,
+          `bestForwardSource=${bestForwardSource || 'none'}`,
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
@@ -4873,9 +5032,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
           `forwardCandidates=${forwardCandidatesChecked}`,
+          `forwardWindowCandidates=${forwardWindowCandidatesChecked}`,
+          `matcherInputs=${forwardMatcherInputs.length}`,
           `forwardRange=${forwardRangeStart}-${forwardRangeEnd}`,
           `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
+          `bestForwardSpan=${bestForwardSpan ?? -1}`,
+          `bestForwardSource=${bestForwardSource || 'none'}`,
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
@@ -4942,8 +5105,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         rangeStart: forwardRangeStart,
         rangeEnd: forwardRangeEnd,
         candidatesChecked: forwardCandidatesChecked,
+        windowCandidatesChecked: forwardWindowCandidatesChecked,
+        matcherInputCount: forwardMatcherInputs.length,
         bestForwardIdx,
         bestForwardSim,
+        bestForwardSpan: bestForwardSpan ?? undefined,
+        bestForwardSource: bestForwardSource,
         floor: outrunFloor,
       });
       if (!forcedEvidenceOk) {
@@ -4951,9 +5118,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
           `forwardCandidates=${forwardCandidatesChecked}`,
+          `forwardWindowCandidates=${forwardWindowCandidatesChecked}`,
+          `matcherInputs=${forwardMatcherInputs.length}`,
           `forwardRange=${forwardRangeStart}-${forwardRangeEnd}`,
           `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
+          `bestForwardSpan=${bestForwardSpan ?? -1}`,
+          `bestForwardSource=${bestForwardSource || 'none'}`,
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
@@ -4979,7 +5150,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `cooldownMs=${forcedCooldownMs}`,
           ]);
         } else {
-          if (forwardCandidate.idx !== rawIdx || forwardCandidate.score !== conf) {
+          if (forwardCandidate && (forwardCandidate.idx !== rawIdx || forwardCandidate.score !== conf)) {
             rawIdx = forwardCandidate.idx;
             conf = forwardCandidate.score;
           }
