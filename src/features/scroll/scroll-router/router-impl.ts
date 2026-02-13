@@ -5516,6 +5516,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       liveSessionWpmLocked = false;
       return;
     }
+    if (getScrollMode() === "asr") {
+      liveSessionWpmLocked = false;
+      return;
+    }
     if (userWpmLocked) {
       liveSessionWpmLocked = false;
       return;
@@ -5562,6 +5566,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
   function applyWpmBaselinePx(pxs: number, source: string, wpmValue?: number) {
     if (!Number.isFinite(pxs) || pxs <= 0) return;
+    if (getScrollMode() === "asr") return;
     const storeWpm = (() => {
       try {
         const raw = localStorage.getItem('tp_baseline_wpm');
