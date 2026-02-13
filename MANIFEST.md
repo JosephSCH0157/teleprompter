@@ -133,6 +133,7 @@ In `scrollMode='asr'`:
     - prefer writer seek when block mapping is available
     - otherwise perform a small pixel nudge fallback
   - Kick must be wired from typed bindings only (hotkeys + button).
+  - Hotkey typing-target suppression may only block true typing surfaces (`input`, `textarea`, or contenteditable); actionable buttons (including `#recBtn`) must not suppress Kick.
   - Dev-only debug global is allowed; production global publish is forbidden.
 
 ---

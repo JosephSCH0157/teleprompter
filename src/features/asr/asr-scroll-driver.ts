@@ -2645,6 +2645,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     sampleLines: string[];
     totalLines: number;
     sampleTruncated: boolean;
+    skippedBlank: number;
+    skippedCueOrMeta: number;
+    expandedByLines: number;
   }) => {
     if (!isDevMode()) return;
     const fingerprint = [
@@ -2652,6 +2655,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       payload.rangeEnd,
       payload.totalLines,
       payload.sampleLines.length,
+      payload.skippedBlank,
+      payload.skippedCueOrMeta,
+      payload.expandedByLines,
       payload.sampleLines[0] || '',
       payload.sampleLines[payload.sampleLines.length - 1] || '',
     ].join('|');
@@ -4423,37 +4429,88 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : requiredThreshold;
     const outrunRecent =
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
-    const forwardRangeStart = cursorLine + 1;
-    const outrunMax = cursorLine + Math.max(1, outrunLookaheadLines);
-    const forwardBandScores = topScoresSpeakable.length
-      ? topScoresSpeakable
-        .filter((entry) => entry.idx > cursorLine && entry.idx <= outrunMax)
-      : [];
-    const forwardCandidatesChecked = forwardBandScores.length;
+    const forwardRangeStart = Math.max(0, cursorLine + 1);
+    const forwardInitialEnd = cursorLine + Math.max(1, outrunLookaheadLines);
+    const totalForwardLines = getTotalLines();
+    const forwardHardEnd = totalForwardLines > 0
+      ? Math.max(forwardRangeStart, totalForwardLines - 1)
+      : Math.max(forwardRangeStart, cursorLine + Math.max(outrunLookaheadLines * 4, 120));
+    const forwardMinCandidates = 6;
+    const forwardExpandStep = Math.max(12, Math.floor(outrunLookaheadLines));
+    const forwardMaxExpandLines = Math.max(forwardExpandStep, Math.floor(outrunLookaheadLines * 3));
+    let forwardRangeEnd = Math.min(
+      forwardHardEnd,
+      Math.max(forwardRangeStart, forwardInitialEnd),
+    );
+    let skippedBlank = 0;
+    let skippedCueOrMeta = 0;
+    let scanIdx = forwardRangeStart;
+    const forwardCandidateLineIdx: number[] = [];
+    while (scanIdx <= forwardRangeEnd) {
+      const lineText = getLineTextAt(scanIdx);
+      if (!lineText) {
+        skippedBlank += 1;
+        scanIdx += 1;
+        continue;
+      }
+      if (isIgnorableCueLineText(lineText)) {
+        skippedCueOrMeta += 1;
+        scanIdx += 1;
+        continue;
+      }
+      forwardCandidateLineIdx.push(scanIdx);
+      scanIdx += 1;
+    }
+    while (
+      forwardCandidateLineIdx.length < forwardMinCandidates &&
+      forwardRangeEnd < forwardHardEnd &&
+      (forwardRangeEnd - Math.max(forwardRangeStart, forwardInitialEnd)) < forwardMaxExpandLines
+    ) {
+      const nextEnd = Math.min(forwardHardEnd, forwardRangeEnd + forwardExpandStep);
+      for (let idx = forwardRangeEnd + 1; idx <= nextEnd; idx += 1) {
+        const lineText = getLineTextAt(idx);
+        if (!lineText) {
+          skippedBlank += 1;
+          continue;
+        }
+        if (isIgnorableCueLineText(lineText)) {
+          skippedCueOrMeta += 1;
+          continue;
+        }
+        forwardCandidateLineIdx.push(idx);
+      }
+      forwardRangeEnd = nextEnd;
+    }
+    const expandedByLines = Math.max(
+      0,
+      forwardRangeEnd - Math.max(forwardRangeStart, Math.min(forwardHardEnd, forwardInitialEnd)),
+    );
+    const forwardBandScores = forwardCandidateLineIdx
+      .map((idx) => {
+        const score = Number(rawScoreByIdx.get(idx));
+        if (!Number.isFinite(score)) return null;
+        return { idx, score };
+      })
+      .filter((entry): entry is { idx: number; score: number } => !!entry);
+    const forwardCandidatesChecked = forwardCandidateLineIdx.length;
     if (outrunRecent && forwardCandidatesChecked === 0 && isDevMode()) {
-      const totalLines = getTotalLines();
       const rangeStart = Math.max(0, Math.floor(forwardRangeStart));
-      const rangeEnd = Math.max(rangeStart, Math.floor(outrunMax));
+      const rangeEnd = Math.max(rangeStart, Math.floor(forwardRangeEnd));
       const maxSampleLines = 48;
-      const safeEndExclusive = Math.max(
-        rangeStart,
-        Math.min(totalLines, rangeEnd),
+      const sampleEnd = Math.min(rangeEnd + 1, rangeStart + maxSampleLines);
+      const sampleLines = Array.from(
+        { length: Math.max(0, sampleEnd - rangeStart) },
+        (_unused, offset) => getLineTextAt(rangeStart + offset),
       );
-      const sampleEndExclusive = Math.min(
-        safeEndExclusive,
-        rangeStart + maxSampleLines,
-      );
-      const scriptLines = Array.from(
-        { length: Math.max(0, sampleEndExclusive) },
-        (_unused, idx) => getLineTextAt(idx),
-      );
-      const sampleLines = scriptLines.slice(rangeStart, sampleEndExclusive);
       logForwardScanZero({
         rangeStart,
         rangeEnd,
         sampleLines,
-        totalLines,
-        sampleTruncated: safeEndExclusive > sampleEndExclusive,
+        totalLines: totalForwardLines,
+        sampleTruncated: rangeEnd + 1 > sampleEnd,
+        skippedBlank,
+        skippedCueOrMeta,
+        expandedByLines,
       });
     }
     const outrunCandidate = forwardBandScores
@@ -4547,7 +4604,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         reason: 'forced-check',
         cursorLine,
         rangeStart: forwardRangeStart,
-        rangeEnd: outrunMax,
+        rangeEnd: forwardRangeEnd,
         candidatesChecked: forwardCandidatesChecked,
         bestForwardIdx,
         bestForwardSim,
@@ -4558,7 +4615,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
           `forwardCandidates=${forwardCandidatesChecked}`,
-          `forwardRange=${forwardRangeStart}-${outrunMax}`,
+          `forwardRange=${forwardRangeStart}-${forwardRangeEnd}`,
           `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
           `floor=${formatLogScore(outrunFloor)}`,
@@ -4569,7 +4626,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
           `forwardCandidates=${forwardCandidatesChecked}`,
-          `forwardRange=${forwardRangeStart}-${outrunMax}`,
+          `forwardRange=${forwardRangeStart}-${forwardRangeEnd}`,
           `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
           `floor=${formatLogScore(outrunFloor)}`,
@@ -4636,7 +4693,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         reason: 'short-final-check',
         cursorLine,
         rangeStart: forwardRangeStart,
-        rangeEnd: outrunMax,
+        rangeEnd: forwardRangeEnd,
         candidatesChecked: forwardCandidatesChecked,
         bestForwardIdx,
         bestForwardSim,
@@ -4647,7 +4704,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
           `forwardCandidates=${forwardCandidatesChecked}`,
-          `forwardRange=${forwardRangeStart}-${outrunMax}`,
+          `forwardRange=${forwardRangeStart}-${forwardRangeEnd}`,
           `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
           `floor=${formatLogScore(outrunFloor)}`,
@@ -5248,11 +5305,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       deltaFromCursor <= smallForwardEvidenceMaxDelta &&
       conf >= requiredThreshold &&
       !hasAmbiguousForwardCollision;
-    const hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
+    let hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
       ? true
       : isFinal
         ? finalEvidence
         : interimEvidence;
+    const extraDeltaLines = Math.max(0, deltaFromCursor - minLineAdvance);
+    if (hasEvidence && extraDeltaLines > 0) {
+      const multiLineNeed = clamp(
+        requiredThreshold + Math.min(0.2, extraDeltaLines * 0.04),
+        0,
+        1,
+      );
+      const forwardConfirmed = forwardCandidatesChecked > 0;
+      if (!forwardConfirmed && conf < multiLineNeed) {
+        warnGuard('multi_line_low_sim', [
+          matchId ? `matchId=${matchId}` : '',
+          `current=${cursorLine}`,
+          `best=${rawIdx}`,
+          `delta=${deltaFromCursor}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(multiLineNeed)}`,
+          `forwardCandidates=${forwardCandidatesChecked}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        emitHudStatus(
+          'multi_line_wait',
+          `Waiting: multi-line confirmation (sim=${formatLogScore(conf)} < ${formatLogScore(multiLineNeed)})`,
+        );
+        return;
+      }
+    }
     adoptPendingMatch({
       line: Math.max(0, Math.floor(rawIdx)),
       conf,

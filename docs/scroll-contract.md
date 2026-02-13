@@ -55,6 +55,7 @@ When `scrollMode='asr'`:
 - In `scrollMode='asr'`, Kick acts as manual forward assist (advance one ASR block when available).
 - Kick prefers writer path; pixel nudge is fallback.
 - Hotkeys and buttons call typed kick entrypoints only.
+- Hotkey typing-target suppression may block only `input`, `textarea`, and contenteditable targets; it must not suppress Kick on actionable controls like `button`/`#recBtn`.
 - Dev globals are allowed only in dev mode and must not leak to production.
 
 ## 6) Scroller Resolution Contract

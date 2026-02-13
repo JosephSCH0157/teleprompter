@@ -17,9 +17,12 @@ function isDevMode(): boolean {
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el) return false;
+  // Buttons (including #recBtn) are actionable controls, not typing surfaces.
+  if (el.closest?.('button, #recBtn')) return false;
   const tag = (el.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') return true;
-  return !!el.isContentEditable;
+  if (tag === 'input' || tag === 'textarea') return true;
+  if (el.isContentEditable) return true;
+  return !!el.closest?.('[contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]');
 }
 
 function isKickHotkey(event: KeyboardEvent): boolean {
