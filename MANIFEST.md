@@ -63,6 +63,7 @@ In `scrollMode='asr'`:
 - `session.scrollAutoOnLive` must not gate ASR startup/attach decisions.
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
+- ASR writer seek target is block-top aligned (scroll block into view); marker-centered anchoring is for continuous modes, not ASR commits.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.

@@ -89,20 +89,6 @@ function getScrollMode(): string {
   return '';
 }
 
-function asrLandingBiasPx(fallbackScroller: HTMLElement): number {
-  const viewer = getViewerElement();
-  const host = viewer || fallbackScroller;
-  const h = host?.clientHeight || window.innerHeight || 0;
-  const overridePx = (window as any).__TP_ASR_LANDING_BIAS_PX;
-  if (typeof overridePx === 'number' && Number.isFinite(overridePx)) {
-    return Math.max(0, Math.round(overridePx));
-  }
-  const overridePct = (window as any).__TP_ASR_LANDING_BIAS_PCT;
-  const pctRaw = typeof overridePct === 'number' ? overridePct : 0.12;
-  const pct = Math.max(0, Math.min(0.5, pctRaw));
-  return Math.max(0, Math.round(h * pct));
-}
-
 function prefersReducedMotion(): boolean {
   try {
     return !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
@@ -162,11 +148,11 @@ function resolveSeekTarget(blockIdx: number): {
   const el = blocks[blockIdx];
   if (!el) return null;
   const scroller = findScroller(el);
-  const baseOffset = markerOffsetPx(scroller);
   const mode = getScrollMode();
-  const bias = mode === 'asr' ? asrLandingBiasPx(scroller) : 0;
   const blockTopPx = elementTopRelativeTo(el, scroller);
-  const top = blockTopPx - (baseOffset + bias);
+  const top = mode === 'asr'
+    ? blockTopPx
+    : blockTopPx - markerOffsetPx(scroller);
   let lineIdx: number | null = null;
   try {
     const firstLine = el.querySelector<HTMLElement>('.line[data-line], .line[data-line-idx], .line');
