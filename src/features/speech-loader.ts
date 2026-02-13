@@ -74,6 +74,19 @@ type TranscriptPayload = {
   currentIdx?: number | null;
 };
 
+type HudSnapshotPayload = {
+  reason: string;
+  ts: number;
+  scrollMode: string;
+  sessionPhase: string;
+  speechRunning: boolean;
+  asrDesired: boolean;
+  asrArmed: boolean;
+  driver: boolean;
+  driverId: string | null;
+  lastLineIndex: number | null;
+};
+
 declare global {
   interface Window {
     __tpBus?: { emit?: AnyFn };
@@ -150,10 +163,13 @@ let lastResultTs = 0;
 let speechWatchdogTimer: number | null = null;
 let activeRecognizer: RecognizerLike | null = null;
 let pendingManualRestartCount = 0;
+let lastHudSnapshotFingerprint = '';
+let lastHudSnapshotAt = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
 const ASR_WATCHDOG_THRESHOLD_MS = 4000;
+const HUD_SNAPSHOT_THROTTLE_MS = 120;
 
 function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -255,6 +271,71 @@ function getTpSpeechStoreSnapshot(): any {
   }
 }
 
+function resolveAsrDriverRef(): any {
+  if (typeof window === 'undefined') return null;
+  const w = window as any;
+  return asrScrollDriver || w.__tpAsrScrollDriver || w.__tpAsrDriver || null;
+}
+
+function buildHudSnapshot(reason: string): HudSnapshotPayload {
+  const session = getSession();
+  const driverRef = resolveAsrDriverRef();
+  const mode = String(getScrollMode() || '').toLowerCase() || 'unknown';
+  let lastLineIndex: number | null = null;
+  let driverId: string | null = null;
+  try {
+    const raw = Number(driverRef?.getLastLineIndex?.());
+    if (Number.isFinite(raw)) lastLineIndex = Math.max(0, Math.floor(raw));
+  } catch {
+    lastLineIndex = null;
+  }
+  try {
+    const rawId = (driverRef as any)?.__instanceId ?? (driverRef as any)?._instanceId;
+    if (rawId != null && String(rawId).trim()) driverId = String(rawId).trim();
+  } catch {
+    driverId = null;
+  }
+  return {
+    reason: String(reason || 'state'),
+    ts: Date.now(),
+    scrollMode: mode,
+    sessionPhase: String(session.phase || 'idle').toLowerCase() || 'idle',
+    speechRunning: !!running,
+    asrDesired: !!session.asrDesired,
+    asrArmed: !!session.asrArmed,
+    driver: !!driverRef,
+    driverId,
+    lastLineIndex,
+  };
+}
+
+function emitHudSnapshot(reason: string, opts?: { force?: boolean }): void {
+  if (typeof window === 'undefined') return;
+  const payload = buildHudSnapshot(reason);
+  const fingerprint = [
+    payload.scrollMode,
+    payload.sessionPhase,
+    payload.speechRunning ? 1 : 0,
+    payload.asrDesired ? 1 : 0,
+    payload.asrArmed ? 1 : 0,
+    payload.driver ? 1 : 0,
+    payload.driverId || '',
+    payload.lastLineIndex ?? -1,
+  ].join('|');
+  const now = Date.now();
+  if (!opts?.force) {
+    if (fingerprint === lastHudSnapshotFingerprint && now - lastHudSnapshotAt < HUD_SNAPSHOT_THROTTLE_MS) {
+      return;
+    }
+  }
+  lastHudSnapshotFingerprint = fingerprint;
+  lastHudSnapshotAt = now;
+  try { (window as any).__tpHudSnapshotLast = payload; } catch {}
+  try { window.__tpBus?.emit?.('tp:hud:snapshot', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:hud:snapshot', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:hud:snapshot', { detail: payload })); } catch {}
+}
+
 function dispatchSessionIntent(active: boolean, detail?: { source?: string; reason?: string; mode?: string; phase?: string }): void {
   try {
     const payload: Record<string, unknown> = {
@@ -295,6 +376,7 @@ function armAsrForSessionStart(mode: string, source: string): void {
   try {
     console.info('[ASR] armed for session start', { source, mode: normalizedMode });
   } catch {}
+  emitHudSnapshot('asr-arm', { force: true });
 }
 
 function rememberMode(mode: string): void {
@@ -365,6 +447,7 @@ function startSpeechWatchdog(): void {
         emitAsrState('idle', 'recognition-watchdog-failed');
         running = false;
         setActiveRecognizer(null);
+        emitHudSnapshot('watchdog-failed', { force: true });
         _showToast('ASR recovery failed: recognizer restart blocked.');
       } else {
         _showToast('ASR recovered (no results).');
@@ -843,6 +926,7 @@ function emitAsrState(state: string, reason?: string): void {
   try { window.__tpBus?.emit?.('tp:asr:state', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:asr:state', { detail: payload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:asr:state', { detail: payload })); } catch {}
+  emitHudSnapshot(`asr-state:${String(state || '').toLowerCase() || 'unknown'}`);
 }
 
 function shouldAutoRestartSpeech(): boolean {
@@ -886,30 +970,33 @@ function installAsrHudDev(): void {
       'max-width:420px; white-space:pre; pointer-events:none;',
     ].join(' ');
     document.body.appendChild(el);
-
-    const readStore = () => {
-      const ns = w.__tpSpeech;
-      const store = ns?.store;
-      const getState = store?.getState || store?.get;
-      return typeof getState === 'function' ? getState.call(store) : null;
-    };
-
-    window.setInterval(() => {
-      const s = readStore() || {};
-      const d = w.__tpAsrScrollDriver;
+    const formatBool = (value: unknown) => (value ? 'true' : 'false');
+    const render = (snap: HudSnapshotPayload) => {
       el.textContent =
 `ASR HUD
 href: ${location.pathname}${location.search}${location.hash}
-scrollMode: ${s.scrollMode ?? s.mode ?? '?'}
-sessionPhase: ${s.sessionPhase ?? s.phase ?? '?'}
-speechRunning: ${s.speechRunning ?? s.running ?? '?'}
-asrDesired: ${s.asrDesired ?? '?'}
-asrArmed: ${s.asrArmed ?? '?'}
+scrollMode: ${snap.scrollMode || 'unknown'}
+sessionPhase: ${snap.sessionPhase || 'idle'}
+speechRunning: ${formatBool(snap.speechRunning)}
+asrDesired: ${formatBool(snap.asrDesired)}
+asrArmed: ${formatBool(snap.asrArmed)}
 
-driver: ${d ? 'YES' : 'NO'}
-driverId: ${d?._instanceId ?? '-'}
-lastLineIndex: ${typeof d?.getLastLineIndex === 'function' ? d.getLastLineIndex() : '-'}
+driver: ${snap.driver ? 'YES' : 'NO'}
+driverId: ${snap.driverId || 'none'}
+lastLineIndex: ${snap.lastLineIndex ?? '-'}
 `;
+    };
+
+    const onSnapshot = (event: Event) => {
+      const detail = (event as CustomEvent)?.detail;
+      if (!detail || typeof detail !== 'object') return;
+      render(detail as HudSnapshotPayload);
+    };
+
+    try { window.addEventListener('tp:hud:snapshot', onSnapshot, { capture: false }); } catch {}
+    render(buildHudSnapshot('dev-hud:init'));
+    window.setInterval(() => {
+      render(buildHudSnapshot('dev-hud:poll'));
     }, 250);
   };
 
@@ -1765,6 +1852,7 @@ function ensureAsrScrollDriver(
   asrScrollDriver = createAsrScrollDriver({ runKey: runKey || undefined });
   try { (window as any).__tpAsrScrollDriver = asrScrollDriver; } catch {}
   try { console.info('[ASR] driver created', { reason, mode, phase: getSession().phase, runKey: runKey || null }); } catch {}
+  emitHudSnapshot('driver-created', { force: true });
   return asrScrollDriver;
 }
 
@@ -1817,6 +1905,7 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
       scriptSig: blocks.scriptSig,
     });
   }
+  emitHudSnapshot(`block-sync:${reason}`);
 }
 
 function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
@@ -1909,6 +1998,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     if (!asrSessionIntentActive && !running) {
       detachAsrScrollDriver();
     }
+    emitHudSnapshot('session-intent');
   };
   const onScrollMode = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
@@ -1921,6 +2011,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     if (!running) {
       detachAsrScrollDriver();
     }
+    emitHudSnapshot('scroll-mode');
   };
   const onSessionStart = () => {
     const session = getSession();
@@ -1930,6 +2021,7 @@ function ensureAsrDriverLifecycleHooks(): void {
       attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true });
       syncAsrDriverFromBlocks('session-start', { mode, allowCreate: true });
     }
+    emitHudSnapshot('session-start', { force: true });
   };
   const onBlocksReady = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
@@ -1957,6 +2049,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     asrSessionIntentActive = false;
     resetAsrInterimStabilizer();
     clearAsrRunKey('lifecycle-session-stop');
+    emitHudSnapshot('session-stop', { force: true });
   };
   const onSessionPhase = (event: Event) => {
     const phase = String((event as CustomEvent)?.detail?.phase || '').toLowerCase();
@@ -1965,6 +2058,7 @@ function ensureAsrDriverLifecycleHooks(): void {
       resetAsrInterimStabilizer();
       clearAsrRunKey(`phase-${phase}`);
     }
+    emitHudSnapshot(`session-phase:${phase || 'unknown'}`);
   };
   window.addEventListener('tp:session:intent', onSessionIntent, TRANSCRIPT_EVENT_OPTIONS);
   document.addEventListener('tp:session:intent', onSessionIntent as EventListener, TRANSCRIPT_EVENT_OPTIONS);
@@ -1985,6 +2079,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     attachAsrScrollDriver({ reason: 'bootstrap', mode: initialMode, allowCreate: true });
     syncAsrDriverFromBlocks('bootstrap', { mode: initialMode, allowCreate: true });
   }
+  emitHudSnapshot('lifecycle-hooks-bootstrap', { force: true });
 }
 
 function detachAsrScrollDriver(): void {
@@ -1997,6 +2092,7 @@ function detachAsrScrollDriver(): void {
     asrScrollDriver = null;
     try { (window as any).__tpAsrScrollDriver = null; } catch {}
   }
+  emitHudSnapshot('driver-detach', { force: true });
 }
 
 function ensureSessionStopHooked(): void {
@@ -2244,6 +2340,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     try { window.speechOn = true; } catch {}
     setListeningUi(true);
     try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
+    emitHudSnapshot('speech-running:true', { force: true });
 
     try {
       console.debug('[ASR] willStartRecognizer', {
@@ -2265,6 +2362,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       setListeningUi(false);
       setReadyUi();
       clearAsrRunKey('start-failed');
+      emitHudSnapshot('speech-start-failed', { force: true });
       bootTrace('speech-loader:live-path:error', { mode, reason: info?.reason || null, runKey });
       return false;
     }
@@ -2295,10 +2393,12 @@ export function stopSpeechBackendForSession(reason?: string): void {
   setListeningUi(false);
   setReadyUi();
   try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false, reason } })); } catch {}
+  emitHudSnapshot('speech-running:false', { force: true });
 }
 
 export function installSpeech(): void {
   ensureAsrDriverLifecycleHooks();
+  emitHudSnapshot('installSpeech:init', { force: true });
   installAsrHudDev();
   // Session-first: recBtn only starts preroll/session
   (async () => {
@@ -2520,6 +2620,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
               running = true;
               setListeningUi(true);
               try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
+              emitHudSnapshot('legacy-speech-running:true', { force: true });
               await beginCountdownThen(sec, async () => {
             try { window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: true, reason: 'speech' } })); } catch {}
                 try {
@@ -2542,6 +2643,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
           try { window.speechOn = true; } catch {}
           setListeningUi(true);
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
+          emitHudSnapshot('legacy-speech-running:true', { force: true });
           // NOTE: Do NOT start auto-scroll yet - wait for countdown to finish
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'start' }); } catch {}
           if (isDevMode()) {
@@ -2589,6 +2691,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
           setActiveRecognizer(null);
           setListeningUi(false);
           setReadyUi();
+          emitHudSnapshot('legacy-speech-start-failed', { force: true });
           const msg = err instanceof Error ? err.message : String(err);
           try { (window.HUD?.log || console.warn)?.('speech', { startError: msg }); } catch {}
         } finally {
@@ -2634,6 +2737,7 @@ async function resolveOrchestratorUrl(): Promise<string> {
             sendToDisplay({ type: 'auto', op: 'stop' });
           } catch {}
           try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false } })); } catch {}
+          emitHudSnapshot('legacy-speech-running:false', { force: true });
           // Optionally flip user intent OFF when speech stops
           try { (window.HUD?.log || console.debug)?.('speech', { state: 'stop' }); } catch {}
         } finally {
