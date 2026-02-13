@@ -839,7 +839,10 @@ function beginCountdownThen(sec: number, cb: () => Promise<void> | void, source 
 }
 
 function emitAsrState(state: string, reason?: string): void {
-  try { window.__tpBus?.emit?.('tp:asr:state', { state, reason }); } catch {}
+  const payload = { state, reason };
+  try { window.__tpBus?.emit?.('tp:asr:state', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:state', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:state', { detail: payload })); } catch {}
 }
 
 function shouldAutoRestartSpeech(): boolean {

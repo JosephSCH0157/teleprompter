@@ -8,6 +8,15 @@ interface ScrollStatusDetail {
   lineCount?: number;
 }
 
+interface ScrollModeDetail {
+  mode?: ScrollMode | string;
+  phase?: string;
+  autoRunning?: boolean;
+  hybridRunning?: boolean;
+  userEnabled?: boolean;
+  sessionIntentOn?: boolean;
+}
+
 interface ScrollCommitDetail {
   mode?: ScrollMode;
   delta: number;
@@ -281,6 +290,46 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
     updateFromStatus(detail);
   }
 
+  function normalizeMode(raw: unknown): ScrollMode {
+    const mode = String(raw || '').toLowerCase();
+    switch (mode) {
+      case 'timed':
+      case 'wpm':
+      case 'hybrid':
+      case 'asr':
+      case 'step':
+      case 'rehearsal':
+        return mode;
+      default:
+        return 'hybrid';
+    }
+  }
+
+  function deriveRunningFromMode(detail: ScrollModeDetail): boolean {
+    const mode = normalizeMode(detail.mode);
+    if (mode === 'asr') {
+      // ASR lane movement is commit-driven and considered active while in live phase.
+      return String(detail.phase || '').toLowerCase() === 'live';
+    }
+    if (mode === 'hybrid') {
+      return !!detail.hybridRunning;
+    }
+    return !!detail.autoRunning && !!detail.userEnabled && !!detail.sessionIntentOn;
+  }
+
+  function handleModeSnapshot(ev: Event) {
+    const detail = (ev as CustomEvent<ScrollModeDetail>).detail;
+    if (!detail) return;
+    const mode = normalizeMode(detail.mode);
+    const status: ScrollStatusDetail = {
+      mode,
+      strategy: mode,
+      running: deriveRunningFromMode(detail),
+    };
+    lastMode = mode;
+    updateFromStatus(status);
+  }
+
   function handleCommit(ev: Event) {
     const detail = (ev as CustomEvent<ScrollCommitDetail>).detail;
     if (!detail) return;
@@ -288,6 +337,7 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   }
 
   window.addEventListener('tp:scroll:status', handleStatus);
+  window.addEventListener('tp:scroll:mode', handleModeSnapshot as EventListener);
   window.addEventListener('tp:scroll:commit', handleCommit);
   window.addEventListener('tp:asr:guard', handleGuard as EventListener);
   window.addEventListener('asr:advance', handleAdvance as EventListener);
@@ -308,6 +358,7 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
 
   function destroy() {
     window.removeEventListener('tp:scroll:status', handleStatus);
+    window.removeEventListener('tp:scroll:mode', handleModeSnapshot as EventListener);
     window.removeEventListener('tp:scroll:commit', handleCommit);
     window.removeEventListener('tp:asr:guard', handleGuard as EventListener);
     window.removeEventListener('asr:advance', handleAdvance as EventListener);
