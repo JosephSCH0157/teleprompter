@@ -2590,7 +2590,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   let lastForwardScanProbeAt = 0;
   let lastForwardScanProbeFingerprint = '';
+  let lastForwardScanZeroAt = 0;
+  let lastForwardScanZeroFingerprint = '';
   const FORWARD_SCAN_PROBE_THROTTLE_MS = 500;
+  const FORWARD_SCAN_ZERO_THROTTLE_MS = 750;
   const logForwardScanProbe = (payload: {
     reason: string;
     cursorLine: number;
@@ -2633,6 +2636,36 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           : payload.bestForwardSim,
         floor: Number.isFinite(payload.floor) ? Number(payload.floor.toFixed(3)) : payload.floor,
       });
+    } catch {}
+  };
+
+  const logForwardScanZero = (payload: {
+    rangeStart: number;
+    rangeEnd: number;
+    sampleLines: string[];
+    totalLines: number;
+    sampleTruncated: boolean;
+  }) => {
+    if (!isDevMode()) return;
+    const fingerprint = [
+      payload.rangeStart,
+      payload.rangeEnd,
+      payload.totalLines,
+      payload.sampleLines.length,
+      payload.sampleLines[0] || '',
+      payload.sampleLines[payload.sampleLines.length - 1] || '',
+    ].join('|');
+    const now = Date.now();
+    if (
+      fingerprint === lastForwardScanZeroFingerprint &&
+      now - lastForwardScanZeroAt < FORWARD_SCAN_ZERO_THROTTLE_MS
+    ) {
+      return;
+    }
+    lastForwardScanZeroFingerprint = fingerprint;
+    lastForwardScanZeroAt = now;
+    try {
+      console.warn('[ASR_FORWARD_SCAN_ZERO]', payload);
     } catch {}
   };
 
@@ -4397,6 +4430,32 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         .filter((entry) => entry.idx > cursorLine && entry.idx <= outrunMax)
       : [];
     const forwardCandidatesChecked = forwardBandScores.length;
+    if (outrunRecent && forwardCandidatesChecked === 0 && isDevMode()) {
+      const totalLines = getTotalLines();
+      const rangeStart = Math.max(0, Math.floor(forwardRangeStart));
+      const rangeEnd = Math.max(rangeStart, Math.floor(outrunMax));
+      const maxSampleLines = 48;
+      const safeEndExclusive = Math.max(
+        rangeStart,
+        Math.min(totalLines, rangeEnd),
+      );
+      const sampleEndExclusive = Math.min(
+        safeEndExclusive,
+        rangeStart + maxSampleLines,
+      );
+      const scriptLines = Array.from(
+        { length: Math.max(0, sampleEndExclusive) },
+        (_unused, idx) => getLineTextAt(idx),
+      );
+      const sampleLines = scriptLines.slice(rangeStart, sampleEndExclusive);
+      logForwardScanZero({
+        rangeStart,
+        rangeEnd,
+        sampleLines,
+        totalLines,
+        sampleTruncated: safeEndExclusive > sampleEndExclusive,
+      });
+    }
     const outrunCandidate = forwardBandScores
       .sort((a, b) => b.score - a.score || a.idx - b.idx)[0] || null;
     const bestForwardIdx = outrunCandidate ? outrunCandidate.idx : null;
