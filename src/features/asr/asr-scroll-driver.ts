@@ -637,26 +637,6 @@ function isDevMode(): boolean {
   return false;
 }
 
-function isForceCommitForDebugEnabled(): boolean {
-  if (!isDevMode()) return false;
-  if (typeof window === 'undefined') return false;
-  try {
-    const w = window as any;
-    if (w.__tpAsrForceCommitDebug === true || w.forceCommitForDebug === true) return true;
-    const params = new URLSearchParams(window.location.search || '');
-    if (
-      params.get('asrForceCommit') === '1' ||
-      params.get('forceCommitForDebug') === '1'
-    ) {
-      return true;
-    }
-    const raw = String(w.localStorage?.getItem('tp_asr_force_commit_debug') || '').trim().toLowerCase();
-    return raw === '1' || raw === 'true';
-  } catch {
-    return false;
-  }
-}
-
 function normalizeSpeechMatchResult(input: unknown): MatchResult | null {
   if (!input || typeof input !== 'object') return null;
   const raw = input as Record<string, unknown>;
@@ -3811,7 +3791,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const fragmentTokenCount = normTokens(compacted).length;
     const tokenCount = normTokens(bufferedText).length;
     const evidenceChars = bufferedText.length;
-    const forceCommitForDebug = isForceCommitForDebugEnabled();
     if (!bootLogged) {
       bootLogged = true;
       try {
@@ -4398,17 +4377,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bestForwardSim = outrunCandidate ? outrunCandidate.score : 0;
     const outrunPick = outrunCandidate;
     const outrunFloor = shortFinalRecent ? shortFinalNeed : outrunRelaxedSim;
-    let forwardCandidateOk = !!outrunCandidate && bestForwardSim >= outrunFloor;
-    if (forceCommitForDebug && !!outrunCandidate && !forwardCandidateOk) {
-      forwardCandidateOk = true;
-      logDev('forward-evidence gate bypass', {
-        matchId,
-        bestForwardSim,
-        outrunFloor,
-        cursorLine,
-        bestIdx: rawIdx,
-      });
-    }
+    const forwardCandidateOk = !!outrunCandidate && bestForwardSim >= outrunFloor;
     const slamDunkFinalEarly = isSlamDunkFinal(rawIdx, conf);
     const forcedEvidenceOk =
       slamDunkFinalEarly ||
@@ -5149,22 +5118,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const slamDunkFinal = isSlamDunkFinal(rawIdx, conf);
     const finalEvidence = hasPairEvidence || consistencyOk || rawIdx >= cursorLine + finalEvidenceLeadLines;
     const interimEvidence = hasPairEvidence || consistencyOk || bufferGrowing;
-    let hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal
+    const deltaFromCursor = rawIdx - cursorLine;
+    const smallForwardEvidenceMaxDelta = Math.max(minLineAdvance, confirmationRelaxedMaxDelta);
+    const hasAmbiguousForwardCollision = topScoresSpeakable.some((entry) => {
+      const idx = Number(entry.idx);
+      const score = Number(entry.score);
+      if (!Number.isFinite(idx) || !Number.isFinite(score)) return false;
+      if (idx === rawIdx) return false;
+      if (Math.abs(idx - rawIdx) > Math.max(1, minLineAdvance + 1)) return false;
+      return score >= conf - forwardTieEps;
+    });
+    const strongSmallForwardEvidence =
+      inBand &&
+      deltaFromCursor >= 0 &&
+      deltaFromCursor <= smallForwardEvidenceMaxDelta &&
+      conf >= requiredThreshold &&
+      !hasAmbiguousForwardCollision;
+    const hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
       ? true
       : isFinal
         ? finalEvidence
         : interimEvidence;
-    if (forceCommitForDebug && !hasEvidence && rawIdx > cursorLine) {
-      hasEvidence = true;
-      logDev('no-evidence gate bypass', {
-        matchId,
-        cursorLine,
-        bestIdx: rawIdx,
-        delta: rawIdx - cursorLine,
-        sim: conf,
-        final: isFinal,
-      });
-    }
     adoptPendingMatch({
       line: Math.max(0, Math.floor(rawIdx)),
       conf,

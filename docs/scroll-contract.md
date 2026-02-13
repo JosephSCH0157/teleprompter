@@ -23,6 +23,8 @@ When `scrollMode='asr'`:
 - Movement trigger is ASR commit only.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
+- Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
+- Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.
 - `session.scrollAutoOnLive` does not gate ASR live attach/start logic.
 - ASR index seeding from `blocks:scroll-mode` must resolve block-first, then derive line within block.
 - If derived line is cue-only (`[pause]`, `[beat]`, `[reflective pause]`), advance to the first speakable line in that block.

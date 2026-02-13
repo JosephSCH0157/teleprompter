@@ -152,7 +152,12 @@ function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrol
   });
 }
 
-function resolveSeekTarget(blockIdx: number): { scroller: HTMLElement; top: number } | null {
+function resolveSeekTarget(blockIdx: number): {
+  scroller: HTMLElement;
+  top: number;
+  blockTopPx: number;
+  lineIdx: number | null;
+} | null {
   const blocks = getAsrBlockElements();
   const el = blocks[blockIdx];
   if (!el) return null;
@@ -160,8 +165,18 @@ function resolveSeekTarget(blockIdx: number): { scroller: HTMLElement; top: numb
   const baseOffset = markerOffsetPx(scroller);
   const mode = getScrollMode();
   const bias = mode === 'asr' ? asrLandingBiasPx(scroller) : 0;
-  const top = elementTopRelativeTo(el, scroller) - (baseOffset + bias);
-  return { scroller, top };
+  const blockTopPx = elementTopRelativeTo(el, scroller);
+  const top = blockTopPx - (baseOffset + bias);
+  let lineIdx: number | null = null;
+  try {
+    const firstLine = el.querySelector<HTMLElement>('.line[data-line], .line[data-line-idx], .line');
+    const rawIdx = firstLine?.dataset?.line ?? firstLine?.dataset?.lineIdx;
+    const parsed = Number(rawIdx);
+    if (Number.isFinite(parsed)) lineIdx = Math.max(0, Math.floor(parsed));
+  } catch {
+    lineIdx = null;
+  }
+  return { scroller, top, blockTopPx, lineIdx };
 }
 
 export function getScrollWriter(): ScrollWriter {
@@ -245,9 +260,23 @@ export function seekToBlock(blockIdx: number, reason: string) {
   cancelSeekAnimation();
   const target = resolveSeekTarget(blockIdx);
   if (!target) return;
-  const { scroller, top } = target;
+  const { scroller, top, blockTopPx, lineIdx } = target;
 
   try {
+    if (shouldTraceWrites()) {
+      const currentScrollTop = readScrollTop(scroller);
+      try {
+        console.log('[scroll-writer] seek target', {
+          blockIdx,
+          lineIdx,
+          blockTopPx: Math.round(blockTopPx),
+          currentScrollTop: Math.round(currentScrollTop),
+          targetTop: Math.round(top),
+          deltaPx: Math.round(top - currentScrollTop),
+          reason: reason || 'seekToBlock',
+        });
+      } catch {}
+    }
     writeScrollTop(scroller, top, reason || 'seekToBlock');
     try {
       if (reason && typeof console !== 'undefined') {
@@ -268,8 +297,21 @@ export function seekToBlockAnimated(blockIdx: number, reason: string) {
   }
   const target = resolveSeekTarget(blockIdx);
   if (!target) return;
-  const { scroller, top: targetTop } = target;
+  const { scroller, top: targetTop, blockTopPx, lineIdx } = target;
   const startTop = readScrollTop(scroller);
+  if (shouldTraceWrites()) {
+    try {
+      console.log('[scroll-writer] seek target', {
+        blockIdx,
+        lineIdx,
+        blockTopPx: Math.round(blockTopPx),
+        currentScrollTop: Math.round(startTop),
+        targetTop: Math.round(targetTop),
+        deltaPx: Math.round(targetTop - startTop),
+        reason: reason || 'seekToBlockAnimated',
+      });
+    } catch {}
+  }
   if (!Number.isFinite(targetTop) || Math.abs(targetTop - startTop) < 0.5) {
     writeScrollTop(scroller, targetTop, reason || 'seekToBlockAnimated');
     return;
