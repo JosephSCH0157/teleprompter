@@ -1,5 +1,6 @@
 import { appStore } from '../state/app-store';
 import { getSession, type SessionPhase } from '../state/session';
+import { shouldLogLevel } from '../env/dev-log';
 import {
   normalizeScrollMode,
   shouldAutoStartForMode,
@@ -45,7 +46,9 @@ type StopAutoScrollContext = {
 
 function dispatchAutoIntent(enabled: boolean): void {
   try {
-    console.trace('[probe] dispatch tp:auto:intent', { enabled });
+    if (shouldLogLevel(3)) {
+      console.trace('[probe] dispatch tp:auto:intent', { enabled });
+    }
   } catch {}
   try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {

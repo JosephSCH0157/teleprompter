@@ -56,6 +56,7 @@ try {
 import './boot/compat-ids';
 import './features/speech/speech-store';
 import { bootTrace, bootTraceDumpToConsole } from './boot/boot-trace';
+import { shouldLogLevel } from './env/dev-log';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
 import { speechStore, type SpeechState } from './state/speech-store';
@@ -920,7 +921,9 @@ function applyUiScrollMode(
   };
   const dispatchAutoIntentEvent = (on: boolean) => {
     try {
-      console.trace('[probe] dispatch tp:auto:intent', { on });
+      if (shouldLogLevel(3)) {
+        console.trace('[probe] dispatch tp:auto:intent', { on });
+      }
     } catch {}
     try {
       document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));

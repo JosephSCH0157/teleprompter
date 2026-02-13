@@ -16,6 +16,7 @@ import { seekToBlockAnimated } from '../../scroll/scroll-writer';
 import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
 import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
 import { bootTrace } from '../../boot/boot-trace';
+import { shouldLogLevel, shouldLogTag } from '../../env/dev-log';
 
 // ASR Training rule: matching should be permissive; committing should be conservative.
 
@@ -774,7 +775,7 @@ function resolveSpeechMatchResult(text: string, isFinal: boolean): MatchResult |
 }
 
 function logDev(...args: any[]) {
-  if (!isDevMode()) return;
+  if (!isDevMode() || !shouldLogLevel(2)) return;
   try {
     console.debug('[ASR→SCROLL]', ...args);
   } catch {
@@ -1214,6 +1215,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let pursuitLastTs = 0;
     let pursuitActive = false;
   const logDriverActive = (reason: string) => {
+    if (!shouldLogLevel(1)) return;
     const durationMs = Math.max(0, Date.now() - sessionStartAt);
     if (reason === 'dispose' && commitCount <= 0 && durationMs < DRIVER_ACTIVE_DISPOSE_MIN_MS) {
       return;
@@ -2614,7 +2616,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       afterReadableLinesBelow: number;
     },
   ) => {
-    if (!isDevMode()) return;
+    if (!isDevMode() || !shouldLogLevel(2)) return;
     try {
       console.log('[ASR_POST_COMMIT_READABILITY]', {
         phase,
@@ -3013,7 +3015,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     bestForwardSource?: 'line' | 'window' | null;
     floor: number;
   }) => {
-    if (!isDevMode()) return;
+    if (!isDevMode() || !shouldLogLevel(2)) return;
     const fingerprint = [
       payload.reason,
       payload.cursorLine,
@@ -3066,7 +3068,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     skippedCueOrMeta: number;
     expandedByLines: number;
   }) => {
-    if (!isDevMode()) return;
+    if (!isDevMode() || !shouldLogLevel(2)) return;
     const fingerprint = [
       payload.rangeStart,
       payload.rangeEnd,
@@ -3401,7 +3403,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       blockId: commit.blockId,
     }) ?? 0;
     const reason = commit.forced ? 'asr-forced-commit' : 'asr-commit';
-    if (isDevMode()) {
+    if (isDevMode() && shouldLogLevel(2)) {
       try {
         console.debug('[ASR_COMMIT_MOVE]', {
           line: commit.lineIdx,
@@ -4036,7 +4038,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       pursuitTargetTop = nextTargetTop;
       const modeNow = getScrollMode();
       if (modeNow === 'asr' && !isSessionAsrArmed()) {
-        if (isDevMode()) {
+        if (isDevMode() && shouldLogTag('ASR:movement-blocked:not-armed', 1, 1000)) {
           try {
             console.info('[ASR] movement blocked: not armed', {
               current: lastLineIndex,
@@ -4063,7 +4065,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       } catch {
         targetBlockId = -1;
       }
-      if (isDevMode()) {
+      if (isDevMode() && shouldLogLevel(2)) {
         console.log('[ASR] commit->seek', {
           commitCount: commitCount + 1,
           blockId: targetBlockId,
@@ -4207,22 +4209,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const commitTopAfterForLogs = modeNow === 'asr'
         ? commitAfterTop
         : (writerCommitted ? commitAfterTop : (pursuitTargetTop ?? currentTop));
-      try {
-        const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
-        const fromTop = Number.isFinite(commitBeforeTop) ? Math.round(commitBeforeTop) : commitBeforeTop;
-        const toTopRaw = commitTopAfterForLogs;
-        const toTop = Number.isFinite(toTopRaw) ? Math.round(toTopRaw as number) : toTopRaw;
-        const movedPx =
-          typeof fromTop === 'number' && typeof toTop === 'number' ? Math.round(toTop - fromTop) : 0;
-        const targetElFound = !!lineEl;
-        const action = writerCommitted ? 'writerCommit' : (modeNow === 'asr' ? 'pixelFallback' : 'driveToLine');
-        const actionReason = writerCommitted ? 'writer' : (modeNow === 'asr' ? 'pixel-fallback' : 'transcript');
-        console.log(
-          `[ASR_DRIVER] ${action} best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=${actionReason} fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
-        );
-      } catch {}
+      if (shouldLogLevel(2)) {
+        try {
+          const simStr = Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf;
+          const fromTop = Number.isFinite(commitBeforeTop) ? Math.round(commitBeforeTop) : commitBeforeTop;
+          const toTopRaw = commitTopAfterForLogs;
+          const toTop = Number.isFinite(toTopRaw) ? Math.round(toTopRaw as number) : toTopRaw;
+          const movedPx =
+            typeof fromTop === 'number' && typeof toTop === 'number' ? Math.round(toTop - fromTop) : 0;
+          const targetElFound = !!lineEl;
+          const action = writerCommitted ? 'writerCommit' : (modeNow === 'asr' ? 'pixelFallback' : 'driveToLine');
+          const actionReason = writerCommitted ? 'writer' : (modeNow === 'asr' ? 'pixel-fallback' : 'transcript');
+          console.log(
+            `[ASR_DRIVER] ${action} best=${targetLine} cur=${prevLineIndex} delta=${targetLine - prevLineIndex} sim=${simStr} reason=${actionReason} fromTop=${fromTop} toTop=${toTop} movedPx=${movedPx} targetElFound=${targetElFound ? 1 : 0}`,
+          );
+        } catch {}
+      }
       const intendedTargetTop = commitTopAfterForLogs;
-      try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
+      if (shouldLogLevel(2)) {
+        try { console.info('[ASR_COMMIT_TARGET]', { line: targetLine, targetTop: Math.round(intendedTargetTop) }); } catch {}
+      }
       bootTrace('ASR:commit', {
         matchId,
         prev: prevLineIndex,
@@ -4261,48 +4267,50 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (modeNow !== 'asr' && !writerCommitted && !didGlide) {
         ensurePursuitActive();
       }
-      try {
-        const forcedCount = getForcedCount(now);
-        const forcedCooldown = getForcedCooldownRemaining(now);
-        const logScroller = scrollerForStamp || scroller;
-        const markerIdx = computeMarkerLineIndex(logScroller);
-        const currentEl = getLineElementByIndex(logScroller, prevLineIndex);
-        const bestEl = getLineElementByIndex(logScroller, targetLine);
-        const markerEl = getLineElementByIndex(logScroller, markerIdx);
-        const currentText = currentEl ? formatLogSnippet(currentEl.textContent || '', 60) : '';
-        const bestText = bestEl ? formatLogSnippet(bestEl.textContent || '', 60) : '';
-        const markerText = markerEl ? formatLogSnippet(markerEl.textContent || '', 60) : '';
-        const lineHeight = bestEl?.offsetHeight || currentEl?.offsetHeight || 0;
-        const commitLine = [
-          'ASR_COMMIT',
-          `line=${targetLine}`,
-          `prev=${prevLineIndex}`,
-          `delta=${targetLine - prevLineIndex}`,
-          `sim=${formatLogScore(conf)}`,
-          `final=${isFinal ? 1 : 0}`,
-          `via=${writerCommitted ? 'writer' : 'pixel'}`,
-          `marker=${markerIdx}`,
-          `scrollTop=${Math.round(logScroller?.scrollTop || 0)}`,
-          `lineH=${lineHeight}`,
-          matchId ? `matchId=${matchId}` : '',
-          `forced=${forced ? 1 : 0}`,
-          forced ? `forceReason=${forceReason || 1}` : '',
-          relockOverride ? `relock=1` : '',
-          relockReason ? `relockReason=${relockReason}` : '',
-          Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
-          typeof relockOverlapRatio === 'number' && Number.isFinite(relockOverlapRatio)
-            ? `overlap=${formatLogScore(relockOverlapRatio)}`
-            : '',
-          Number.isFinite(relockRepeat) ? `repeat=${relockRepeat}` : '',
-          `forcedCount10s=${forcedCount}`,
-          forcedCooldown ? `cooldown=${forcedCooldown}` : 'cooldown=0',
-          currentText ? `currentText="${currentText}"` : '',
-          bestText ? `bestText="${bestText}"` : '',
-          markerText ? `markerText="${markerText}"` : '',
-          snippet ? `clue="${snippet}"` : '',
-        ].filter(Boolean).join(' ');
-        console.log(commitLine);
-      } catch {}
+      if (shouldLogLevel(2)) {
+        try {
+          const forcedCount = getForcedCount(now);
+          const forcedCooldown = getForcedCooldownRemaining(now);
+          const logScroller = scrollerForStamp || scroller;
+          const markerIdx = computeMarkerLineIndex(logScroller);
+          const currentEl = getLineElementByIndex(logScroller, prevLineIndex);
+          const bestEl = getLineElementByIndex(logScroller, targetLine);
+          const markerEl = getLineElementByIndex(logScroller, markerIdx);
+          const currentText = currentEl ? formatLogSnippet(currentEl.textContent || '', 60) : '';
+          const bestText = bestEl ? formatLogSnippet(bestEl.textContent || '', 60) : '';
+          const markerText = markerEl ? formatLogSnippet(markerEl.textContent || '', 60) : '';
+          const lineHeight = bestEl?.offsetHeight || currentEl?.offsetHeight || 0;
+          const commitLine = [
+            'ASR_COMMIT',
+            `line=${targetLine}`,
+            `prev=${prevLineIndex}`,
+            `delta=${targetLine - prevLineIndex}`,
+            `sim=${formatLogScore(conf)}`,
+            `final=${isFinal ? 1 : 0}`,
+            `via=${writerCommitted ? 'writer' : 'pixel'}`,
+            `marker=${markerIdx}`,
+            `scrollTop=${Math.round(logScroller?.scrollTop || 0)}`,
+            `lineH=${lineHeight}`,
+            matchId ? `matchId=${matchId}` : '',
+            `forced=${forced ? 1 : 0}`,
+            forced ? `forceReason=${forceReason || 1}` : '',
+            relockOverride ? `relock=1` : '',
+            relockReason ? `relockReason=${relockReason}` : '',
+            Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
+            typeof relockOverlapRatio === 'number' && Number.isFinite(relockOverlapRatio)
+              ? `overlap=${formatLogScore(relockOverlapRatio)}`
+              : '',
+            Number.isFinite(relockRepeat) ? `repeat=${relockRepeat}` : '',
+            `forcedCount10s=${forcedCount}`,
+            forcedCooldown ? `cooldown=${forcedCooldown}` : 'cooldown=0',
+            currentText ? `currentText="${currentText}"` : '',
+            bestText ? `bestText="${bestText}"` : '',
+            markerText ? `markerText="${markerText}"` : '',
+            snippet ? `clue="${snippet}"` : '',
+          ].filter(Boolean).join(' ');
+          console.log(commitLine);
+        } catch {}
+      }
       if (forced && forceReason === 'catchup') {
         emitHudStatus('catchup_commit', `Catch-up commit +${targetLine - prevLineIndex}`);
       }
@@ -4685,7 +4693,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       meta: !!metaTranscript,
       clue: snippet || undefined,
     });
-    if (isDevMode() && rawIdx !== cursorLine) {
+    if (isDevMode() && rawIdx !== cursorLine && shouldLogTag('ASR_EVENT_IDX', 2, 250)) {
       const bestOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) : rawIdx;
       const deltaOut = Number.isFinite(rawIdx) ? Math.floor(rawIdx) - cursorLine : NaN;
       try {
@@ -4735,7 +4743,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (reseededBand) {
       bandStart = Math.max(0, Math.min(bandStart, reseededBand.start));
       bandEnd = Math.max(bandStart, Math.max(bandEnd, reseededBand.end));
-      if (isDevMode() && rawIdx >= bandStart && rawIdx <= bandEnd && (rawIdx < baseBandStart || rawIdx > baseBandEnd)) {
+      if (
+        isDevMode() &&
+        rawIdx >= bandStart &&
+        rawIdx <= bandEnd &&
+        (rawIdx < baseBandStart || rawIdx > baseBandEnd) &&
+        shouldLogTag('ASR_BAND_RESEED_HIT', 2, 500)
+      ) {
         try {
           console.info('[ASR_BAND_RESEED_HIT]', {
             current: cursorLine,

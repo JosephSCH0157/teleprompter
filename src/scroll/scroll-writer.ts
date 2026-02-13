@@ -10,6 +10,7 @@ import {
   getViewerElement,
   resolveViewerRole,
 } from './scroller';
+import { shouldLogLevel } from '../env/dev-log';
 
 export interface ScrollWriter {
   /** Absolute scroll in CSS px from top of script viewport. */
@@ -31,19 +32,20 @@ const WRITE_MISMATCH_LOG_THROTTLE_MS = 2000;
 const WRITE_MISMATCH_EPSILON_PX = 1;
 const NON_FINITE_GUARD_THROTTLE_MS = 1000;
 
+function shouldWarnWrites(): boolean {
+  return shouldLogLevel(1);
+}
+
+function shouldVerboseWrites(): boolean {
+  return shouldLogLevel(2);
+}
+
 function shouldTraceWrites(): boolean {
-  try {
-    const w = window as any;
-    if (w.__TP_DEV || w.__TP_DEV1) return true;
-    const qs = new URLSearchParams(String(location.search || ''));
-    if (qs.get('dev') === '1' || qs.has('dev')) return true;
-    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
-  } catch {}
-  return false;
+  return shouldLogLevel(3);
 }
 
 function logNonFiniteGuard(reason: string, value: unknown, detail?: Record<string, unknown>): void {
-  if (!shouldTraceWrites()) return;
+  if (!shouldWarnWrites()) return;
   const now = Date.now();
   if (now - lastNonFiniteGuardAt < NON_FINITE_GUARD_THROTTLE_MS) return;
   lastNonFiniteGuardAt = now;
@@ -160,7 +162,7 @@ function estimateDelta(targetTop: number): number {
 }
 
 function logWriteMismatch(scroller: HTMLElement, target: number, before: number, after: number, reason: string): void {
-  if (!shouldTraceWrites()) return;
+  if (!shouldWarnWrites()) return;
   if (Math.abs(after - target) <= WRITE_MISMATCH_EPSILON_PX) return;
   const now = Date.now();
   const key = `${reason}|${describeElement(scroller)}|${Math.round(target)}|${Math.round(after)}`;
@@ -349,7 +351,7 @@ export function seekToBlock(blockIdx: number, reason: string) {
   const { scroller, top, blockTopPx, lineIdx } = target;
 
   try {
-    if (shouldTraceWrites()) {
+    if (shouldVerboseWrites()) {
       const currentScrollTop = readScrollTop(scroller);
       try {
         console.log('[scroll-writer] seek target', {
@@ -385,7 +387,7 @@ export function seekToBlockAnimated(blockIdx: number, reason: string) {
   if (!target) return;
   const { scroller, top: targetTop, blockTopPx, lineIdx } = target;
   const startTop = readScrollTop(scroller);
-  if (shouldTraceWrites()) {
+  if (shouldVerboseWrites()) {
     try {
       console.log('[scroll-writer] seek target', {
         blockIdx,

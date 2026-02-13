@@ -31,6 +31,7 @@ import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
 import { normTokens } from '../speech/matcher';
 import type { SpeakerSlot } from '../types/speaker-profiles';
 import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
+import { shouldLogLevel, shouldLogTag } from '../env/dev-log';
 
 ensureSpeechGlobals();
 
@@ -1617,6 +1618,8 @@ let lastAsrBlockSyncUnchangedAt = 0;
 
 function logAsrBlockSyncSkip(mode: string, phase: string, reason: 'live-skip' | 'throttled', now: number): void {
   if (!isDevMode()) return;
+  if (!shouldLogLevel(2)) return;
+  if (!shouldLogTag(`ASR:block-sync-skip:${reason}:${mode}:${phase}`, 2, ASR_BLOCK_SYNC_LOG_THROTTLE_MS)) return;
   if (now - lastAsrBlockSyncLogAt < ASR_BLOCK_SYNC_LOG_THROTTLE_MS) return;
   lastAsrBlockSyncLogAt = now;
   const lastSyncAgeMs = lastAsrBlockSyncAt > 0 ? Math.max(0, now - lastAsrBlockSyncAt) : -1;
@@ -1743,7 +1746,7 @@ function beginAsrRunKey(mode: string, reason?: string): string {
   if (typeof window !== 'undefined') {
     try { window.__tpAsrRunKey = activeAsrRunKey; } catch {}
   }
-  if (isDevMode()) {
+  if (isDevMode() && shouldLogLevel(1)) {
     try { console.info('[ASR] run begin', { runKey: activeAsrRunKey, mode, reason }); } catch {}
   }
   return activeAsrRunKey;
@@ -1752,7 +1755,7 @@ function beginAsrRunKey(mode: string, reason?: string): string {
 function clearAsrRunKey(reason: string): void {
   if (!activeAsrRunKey) return;
   const endedRunKey = activeAsrRunKey;
-  if (isDevMode()) {
+  if (isDevMode() && shouldLogLevel(1)) {
     try { console.info('[ASR] run clear', { runKey: endedRunKey, reason }); } catch {}
   }
   activeAsrRunKey = '';
@@ -1779,6 +1782,7 @@ function buildAsrSyncLogFingerprint(payload: Record<string, unknown>): string {
 
 function logAsrSync(kind: 'block sync' | 'index sync', payload: Record<string, unknown>): void {
   if (!isDevMode()) return;
+  if (!shouldLogLevel(2)) return;
   const now = Date.now();
   const fingerprint = buildAsrSyncLogFingerprint(payload);
   const prevFingerprint = lastAsrSyncFingerprintByType[kind];
@@ -1821,6 +1825,7 @@ function logAsrBlockSyncComplete(payload: {
   scriptSig?: string;
 }): void {
   if (!isDevMode()) return;
+  if (!shouldLogLevel(2)) return;
   const fingerprint = buildAsrBlockSyncCompleteFingerprint(payload);
   if (fingerprint === lastAsrBlockSyncCompleteFingerprint) {
     const now = Date.now();
@@ -1856,7 +1861,9 @@ function ensureAsrScrollDriver(
   const runKey = String(opts?.runKey || activeAsrRunKey || '').trim();
   asrScrollDriver = createAsrScrollDriver({ runKey: runKey || undefined });
   try { (window as any).__tpAsrScrollDriver = asrScrollDriver; } catch {}
-  try { console.info('[ASR] driver created', { reason, mode, phase: getSession().phase, runKey: runKey || null }); } catch {}
+  if (isDevMode() && shouldLogLevel(1)) {
+    try { console.info('[ASR] driver created', { reason, mode, phase: getSession().phase, runKey: runKey || null }); } catch {}
+  }
   emitHudSnapshot('driver-created', { force: true });
   return asrScrollDriver;
 }
@@ -1885,7 +1892,11 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
   }
   const blocks = getAsrBlockSnapshot();
   if (!blocks.ready || blocks.count <= 0) {
-    if (isDevMode()) {
+    if (
+      isDevMode()
+      && shouldLogLevel(2)
+      && shouldLogTag(`ASR:block-sync-not-ready:${mode}:${phase}`, 2, ASR_BLOCK_SYNC_LOG_THROTTLE_MS)
+    ) {
       try { console.debug('[ASR] block sync skipped (not ready)', { reason, mode, blocks }); } catch {}
     }
     return;
@@ -1921,11 +1932,13 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
     isFinal: !!isFinal,
     source: detail?.source,
   };
-  if (isDevMode()) console.log('[ASR] ingest', {
-    isFinal: payload.isFinal,
-    text: payload.text?.slice(0, 60),
-    source: payload.source,
-  });
+  if (isDevMode() && shouldLogTag('ASR:ingest', 2, 250)) {
+    console.log('[ASR] ingest', {
+      isFinal: payload.isFinal,
+      text: payload.text?.slice(0, 60),
+      source: payload.source,
+    });
+  }
   const mode = String(detail?.mode || getScrollMode() || '').toLowerCase();
   attachAsrScrollDriver({ reason: 'transcript', mode, allowCreate: true });
   bootTrace('ASR:ingest', {
@@ -2175,18 +2188,20 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     return false;
   }
   if (isDevMode()) {
-    const w = typeof window !== 'undefined' ? (window as any) : null;
-    const info = {
-      mode,
-      reason,
-      hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
-      hasRecognizerStart: typeof speechNs?.startRecognizer === 'function',
-      hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
-      sessionPhase: (speechStoreState as any)?.sessionPhase,
-      scrollMode: (speechStoreState as any)?.scrollMode,
-      speechRunning: (speechStoreState as any)?.speechRunning,
-    };
-    try { console.log('[ASR] lifecycle startBackend: invoking backend', info); } catch {}
+    if (shouldLogLevel(2)) {
+      const w = typeof window !== 'undefined' ? (window as any) : null;
+      const info = {
+        mode,
+        reason,
+        hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
+        hasRecognizerStart: typeof speechNs?.startRecognizer === 'function',
+        hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
+        sessionPhase: (speechStoreState as any)?.sessionPhase,
+        scrollMode: (speechStoreState as any)?.scrollMode,
+        speechRunning: (speechStoreState as any)?.speechRunning,
+      };
+      try { console.log('[ASR] lifecycle startBackend: invoking backend', info); } catch {}
+    }
   }
 
   try {
@@ -2258,7 +2273,9 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
   }
   ensureAsrDriverLifecycleHooks();
   if (isSettingsHydrating()) {
-    try { console.debug('[ASR] startSpeech blocked during settings hydration', { mode, reason: info?.reason }); } catch {}
+    if (shouldLogLevel(2)) {
+      try { console.debug('[ASR] startSpeech blocked during settings hydration', { mode, reason: info?.reason }); } catch {}
+    }
     bootTrace('speech-loader:live-path:skip', { reason: 'settings-hydrating', mode });
     return false;
   }
@@ -2347,17 +2364,21 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: true } })); } catch {}
     emitHudSnapshot('speech-running:true', { force: true });
 
-    try {
-      console.debug('[ASR] willStartRecognizer', {
-        phase: 'session-live',
-        mode,
-        hasSR: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
-      });
-    } catch {}
+    if (shouldLogLevel(2)) {
+      try {
+        console.debug('[ASR] willStartRecognizer', {
+          phase: 'session-live',
+          mode,
+          hasSR: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+        });
+      } catch {}
+    }
 
     try {
       const ok = await startBackendForSession(mode, info?.reason);
-      try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
+      if (shouldLogLevel(2)) {
+        try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
+      }
       try { await window.__tpMic?.requestMic?.(); } catch {}
       bootTrace('speech-loader:live-path:done', { mode, ok, runKey });
       return ok;
