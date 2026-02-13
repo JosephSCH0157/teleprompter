@@ -25,6 +25,7 @@ When `scrollMode='asr'`:
 - Movement trigger is ASR commit only.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - ASR writer seek target is block-top aligned (scroll matched block into view), not marker-centered.
+- After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays in an upper viewport band and forward readable lookahead remains visible.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.

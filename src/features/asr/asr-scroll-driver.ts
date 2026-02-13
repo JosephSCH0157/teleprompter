@@ -335,6 +335,14 @@ const MICRO_DELTA_LINE_RATIO = 0.8;
 const MICRO_PURSUE_MS = 320;
 const MICRO_PURSUE_MAX_PXPS = 60;
 const MIN_PX_PER_SEC = 18;
+const WITHIN_BLOCK_CONTINUITY_SIM_SLACK = 0.04;
+const POST_COMMIT_ACTIVE_MAX_RATIO = 0.58;
+const POST_COMMIT_ACTIVE_TARGET_RATIO = 0.42;
+const POST_COMMIT_MIN_READABLE_LINES_BELOW = 8;
+const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
+const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
+const POST_COMMIT_MIN_NUDGE_PX = 1;
+const POST_COMMIT_WRITER_SETTLE_MS = 230;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -1620,6 +1628,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return pendingMatch;
     };
     let pendingRaf = 0;
+    let postCommitReadabilitySeq = 0;
+    const postCommitReadabilityTimers = new Set<number>();
     let bootLogged = false;
     let forcedCooldownUntil = 0;
     const forcedCommitTimes: number[] = [];
@@ -2293,6 +2303,195 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     return null;
+  };
+
+  const measurePostCommitReadability = (scroller: HTMLElement, activeLineIndex: number) => {
+    const activeLine = getLineElementByIndex(scroller, activeLineIndex);
+    if (!activeLine) {
+      return {
+        activeLineViewportRatio: null as number | null,
+        activeCenterY: null as number | null,
+        viewportTop: 0,
+        viewportHeight: Math.max(1, scroller.clientHeight || 0),
+        readableLinesBelowCount: 0,
+        requiredLookaheadOverflowPx: 0,
+      };
+    }
+    const scrollerRect = scroller.getBoundingClientRect();
+    const viewportTop = scrollerRect.top;
+    const viewportBottom = scrollerRect.bottom;
+    const viewportHeight = Math.max(1, scroller.clientHeight || scrollerRect.height || 0);
+    const activeRect = activeLine.getBoundingClientRect();
+    const activeCenterY = activeRect.top + activeRect.height * 0.5;
+    const activeLineViewportRatio = clamp((activeCenterY - viewportTop) / viewportHeight, 0, 1);
+    const visibleBottom = viewportBottom - POST_COMMIT_READABLE_BOTTOM_PAD_PX;
+    const total = getTotalLines();
+    const maxLookahead = Math.min(
+      Math.max(0, total - 1),
+      Math.max(0, activeLineIndex + POST_COMMIT_READABILITY_LOOKAHEAD_LINES),
+    );
+    let readableLinesBelowCount = 0;
+    let speakableSeen = 0;
+    let requiredLookaheadOverflowPx = 0;
+    for (let idx = activeLineIndex + 1; idx <= maxLookahead; idx += 1) {
+      const lineText = getLineTextAt(idx);
+      if (isIgnorableCueLineText(lineText)) continue;
+      const lineEl = getLineElementByIndex(scroller, idx);
+      if (!lineEl) continue;
+      const lineRect = lineEl.getBoundingClientRect();
+      if (lineRect.top >= viewportTop && lineRect.bottom <= visibleBottom) {
+        readableLinesBelowCount += 1;
+      }
+      speakableSeen += 1;
+      if (speakableSeen === POST_COMMIT_MIN_READABLE_LINES_BELOW) {
+        requiredLookaheadOverflowPx = Math.max(0, lineRect.bottom - visibleBottom);
+        break;
+      }
+    }
+    return {
+      activeLineViewportRatio,
+      activeCenterY,
+      viewportTop,
+      viewportHeight,
+      readableLinesBelowCount,
+      requiredLookaheadOverflowPx,
+    };
+  };
+
+  const applyPostCommitReadabilityGuarantee = (
+    scroller: HTMLElement,
+    activeLineIndex: number,
+    opts?: { allowNudge?: boolean },
+  ) => {
+    const beforeTop = Number(scroller.scrollTop || 0);
+    const beforeMetrics = measurePostCommitReadability(scroller, activeLineIndex);
+    let targetTop = beforeTop;
+    const ratio = beforeMetrics.activeLineViewportRatio;
+    if (
+      ratio != null &&
+      beforeMetrics.activeCenterY != null &&
+      ratio > POST_COMMIT_ACTIVE_MAX_RATIO
+    ) {
+      const desiredCenter =
+        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * POST_COMMIT_ACTIVE_TARGET_RATIO;
+      const ratioNudgePx = Math.max(0, beforeMetrics.activeCenterY - desiredCenter);
+      if (ratioNudgePx > 0) {
+        targetTop = Math.max(targetTop, beforeTop + ratioNudgePx);
+      }
+    }
+    if (beforeMetrics.requiredLookaheadOverflowPx > 0) {
+      targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredLookaheadOverflowPx);
+    }
+    const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    targetTop = clamp(targetTop, 0, maxTop);
+    let nudgeApplied = false;
+    let afterTop = beforeTop;
+    if ((opts?.allowNudge ?? true) && targetTop > beforeTop + POST_COMMIT_MIN_NUDGE_PX) {
+      const applied = applyCanonicalScrollTop(targetTop, {
+        scroller,
+        reason: 'asr-post-commit-readability',
+        source: 'asr-commit',
+      });
+      afterTop = Number.isFinite(applied) ? Number(applied) : Number(scroller.scrollTop || targetTop);
+      if (afterTop > beforeTop + POST_COMMIT_MIN_NUDGE_PX) {
+        nudgeApplied = true;
+        pursuitTargetTop = afterTop;
+        lastKnownScrollTop = afterTop;
+        lastMoveAt = Date.now();
+        markProgrammaticScroll();
+        bootTrace('SCROLL:apply', {
+          y: Math.round(afterTop),
+          from: Math.round(beforeTop),
+          via: 'post-commit-readability',
+          reason: 'asr-post-commit-readability',
+          lineIdx: activeLineIndex,
+        });
+      }
+    }
+    const afterMetrics = measurePostCommitReadability(scroller, activeLineIndex);
+    return {
+      beforeTop,
+      afterTop,
+      targetTop,
+      nudgeApplied,
+      beforeRatio: beforeMetrics.activeLineViewportRatio,
+      afterRatio: afterMetrics.activeLineViewportRatio,
+      beforeReadableLinesBelow: beforeMetrics.readableLinesBelowCount,
+      afterReadableLinesBelow: afterMetrics.readableLinesBelowCount,
+    };
+  };
+
+  const logPostCommitReadabilityProbe = (
+    phase: string,
+    lineIdx: number,
+    writerCommitted: boolean,
+    metrics: {
+      beforeTop: number;
+      afterTop: number;
+      targetTop: number;
+      nudgeApplied: boolean;
+      beforeRatio: number | null;
+      afterRatio: number | null;
+      beforeReadableLinesBelow: number;
+      afterReadableLinesBelow: number;
+    },
+  ) => {
+    if (!isDevMode()) return;
+    try {
+      console.log('[ASR_POST_COMMIT_READABILITY]', {
+        phase,
+        lineIdx,
+        writerCommitted,
+        activeLineViewportRatio:
+          metrics.afterRatio != null ? Number(metrics.afterRatio.toFixed(3)) : null,
+        readableLinesBelowCount: metrics.afterReadableLinesBelow,
+        postCommitNudgeApplied: metrics.nudgeApplied,
+        beforeRatio: metrics.beforeRatio != null ? Number(metrics.beforeRatio.toFixed(3)) : null,
+        beforeReadableLinesBelowCount: metrics.beforeReadableLinesBelow,
+        fromTop: Math.round(metrics.beforeTop),
+        toTop: Math.round(metrics.afterTop),
+        targetTop: Math.round(metrics.targetTop),
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  const chooseWithinBlockContinuityLine = (
+    proposedLine: number,
+    candidateScores: Array<{ idx: number; score: number }>,
+    cursorLine: number,
+    bestScore: number,
+  ): number => {
+    const nextLine = Math.max(0, Math.floor(proposedLine));
+    const current = Math.max(0, Math.floor(cursorLine));
+    if (nextLine - current <= 1) return nextLine;
+    const minForwardLine = current + Math.max(1, minLineAdvance);
+    const cursorBlock = findBlockByLine(current);
+    const targetBlock = findBlockByLine(nextLine);
+    if (!cursorBlock || !targetBlock || cursorBlock.blockId !== targetBlock.blockId) {
+      return nextLine;
+    }
+    const scoreFloor = Number.isFinite(bestScore)
+      ? Math.max(0, bestScore - WITHIN_BLOCK_CONTINUITY_SIM_SLACK)
+      : 0;
+    let picked = nextLine;
+    let pickedDelta = nextLine - current;
+    for (const entry of candidateScores) {
+      const candidateLine = Math.max(0, Math.floor(Number(entry.idx)));
+      const candidateScore = Number(entry.score);
+      if (!Number.isFinite(candidateLine) || !Number.isFinite(candidateScore)) continue;
+      if (candidateLine < minForwardLine || candidateLine > nextLine) continue;
+      if (candidateScore < scoreFloor) continue;
+      const candidateBlock = findBlockByLine(candidateLine);
+      if (!candidateBlock || candidateBlock.blockId !== targetBlock.blockId) continue;
+      const candidateDelta = candidateLine - current;
+      if (candidateDelta < pickedDelta) {
+        picked = candidateLine;
+        pickedDelta = candidateDelta;
+      }
+    }
+    return picked;
   };
 
   const maybeSkipCueLine = (cursorLine: number, now: number, reason: string, clue: string): boolean => {
@@ -3146,6 +3345,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
 
       let targetLine = Math.max(0, Math.floor(line));
+      const continuityLine = chooseWithinBlockContinuityLine(
+        targetLine,
+        topScores,
+        lastLineIndex,
+        conf,
+      );
+      if (continuityLine !== targetLine) {
+        if (isDevMode()) {
+          logDev('within-block continuity', {
+            from: targetLine,
+            to: continuityLine,
+            cursor: lastLineIndex,
+            sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+          });
+        }
+        targetLine = continuityLine;
+      }
       const confirmDelta = targetLine - lastLineIndex;
       if (confirmDelta < DELTA_LARGE_MIN_LINES && largeDeltaConfirm) {
         largeDeltaConfirm = null;
@@ -3585,6 +3801,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         writerCommitted = commitMove.writerCommitted;
         commitAfterTop = commitMove.afterTop;
         didGlide = false;
+        const readabilitySeq = ++postCommitReadabilitySeq;
+        const immediateReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
+          allowNudge: !writerCommitted,
+        });
+        logPostCommitReadabilityProbe(
+          writerCommitted ? 'commit:writer-pending' : 'commit:immediate',
+          targetLine,
+          writerCommitted,
+          immediateReadability,
+        );
+        if (!writerCommitted && immediateReadability.nudgeApplied) {
+          commitAfterTop = immediateReadability.afterTop;
+        }
+        if (writerCommitted) {
+          const settleTimer = window.setTimeout(() => {
+            postCommitReadabilityTimers.delete(settleTimer);
+            if (disposed) return;
+            if (readabilitySeq !== postCommitReadabilitySeq) return;
+            if (getScrollMode() !== 'asr') return;
+            const settledReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
+              allowNudge: true,
+            });
+            logPostCommitReadabilityProbe(
+              'commit:writer-settle',
+              targetLine,
+              writerCommitted,
+              settledReadability,
+            );
+          }, POST_COMMIT_WRITER_SETTLE_MS);
+          postCommitReadabilityTimers.add(settleTimer);
+        }
       } else if (!writerCommitted) {
         if (nextTargetTop > base) {
           emitHybridTargetHint(
@@ -5384,6 +5631,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     logDriverActive('dispose');
     emitSummary('dispose');
     disposed = true;
+    postCommitReadabilitySeq += 1;
+    if (postCommitReadabilityTimers.size) {
+      postCommitReadabilityTimers.forEach((timerId) => {
+        try { window.clearTimeout(timerId); } catch {}
+      });
+      postCommitReadabilityTimers.clear();
+    }
     try {
       unsubscribe();
     } catch {
@@ -5408,6 +5662,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const setLastLineIndex = (index: number) => {
     if (!Number.isFinite(index)) return;
     lastLineIndex = Math.max(0, Math.floor(index));
+    postCommitReadabilitySeq += 1;
+    if (postCommitReadabilityTimers.size) {
+      postCommitReadabilityTimers.forEach((timerId) => {
+        try { window.clearTimeout(timerId); } catch {}
+      });
+      postCommitReadabilityTimers.clear();
+    }
     lastSeekTs = 0;
     lastSameLineNudgeTs = 0;
     lastMoveAt = 0;
