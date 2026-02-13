@@ -557,6 +557,8 @@ const HUD_STATUS_THROTTLE_MS = 500;
 const HUD_PURSUE_THROTTLE_MS = 200;
 let lastPursueHudAt = 0;
 const SUMMARY_TOAST_DEDUPE_MS = 1000;
+const SUMMARY_MIN_DURATION_MS = 250;
+const DRIVER_ACTIVE_DISPOSE_MIN_MS = 2000;
 const NAN_GUARD_THROTTLE_MS = 1000;
 const MAX_REPORTED_RUN_KEYS = 128;
 const reportedSummaryRunKeys = new Set<string>();
@@ -653,6 +655,15 @@ function finiteNumberOrNull(
   if (Number.isFinite(next)) return next;
   warnAsrNanGuard(key, value, detail);
   return null;
+}
+
+function readAsrLastEndedRunKey(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return String((window as any).__tpAsrLastEndedRunKey || '').trim();
+  } catch {
+    return '';
+  }
 }
 
 function emitHudStatus(key: string, text: string, detail?: Record<string, unknown>) {
@@ -1203,13 +1214,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let pursuitLastTs = 0;
     let pursuitActive = false;
   const logDriverActive = (reason: string) => {
+    const durationMs = Math.max(0, Date.now() - sessionStartAt);
+    if (reason === 'dispose' && commitCount <= 0 && durationMs < DRIVER_ACTIVE_DISPOSE_MIN_MS) {
+      return;
+    }
+    if (reason === 'commit' && commitCount > 1) {
+      return;
+    }
+    if (reason.startsWith('summary:') && durationMs < SUMMARY_MIN_DURATION_MS) {
+      return;
+    }
     try {
       console.log('[ASR DRIVER ACTIVE]', driverInstanceId, {
         reason,
         commitCount,
+        durationMs,
+        runKey: summaryRunKey || null,
       });
     } catch {}
   };
+  logDriverActive('create');
 
   const getAsrBlockCorpus = (): AsrBlockCorpusEntry[] => {
     const blockEls = getAsrBlockElements();
@@ -2707,12 +2731,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const emitSummary = (source: string) => {
     if (summaryEmitted) return;
-    const duplicateRunSummary = markRunSummaryReported(summaryRunKey);
+    const runKey = String(summaryRunKey || '').trim();
+    const duplicateRunSummary = runKey ? markRunSummaryReported(runKey) : false;
     if (duplicateRunSummary) {
       summaryEmitted = true;
       if (isDevMode()) {
         try {
-          console.info('[ASR] summary deduped', { source, summaryRunKey, driverInstanceId });
+          console.info('[ASR] summary deduped', { source, summaryRunKey: runKey || null, driverInstanceId });
         } catch {}
       }
       return;
@@ -2720,6 +2745,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     summaryEmitted = true;
     const now = Date.now();
     const durationMs = Math.max(0, now - sessionStartAt);
+    const endedRunKey = readAsrLastEndedRunKey();
+    const shortLivedSummary = durationMs < SUMMARY_MIN_DURATION_MS;
+    const liveRunSummary = !!runKey && !!endedRunKey && runKey === endedRunKey;
+    const suppressAsCleanup = !liveRunSummary || shortLivedSummary;
     const scroller = getScroller();
     const scrollerId = describeElement(scroller);
     const scrollTop = scroller?.scrollTop ?? lastKnownScrollTop;
@@ -2750,7 +2779,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       durationMs,
       commitCount,
       driverInstanceId,
-      summaryRunKey: summaryRunKey || undefined,
+      summaryRunKey: runKey || undefined,
       firstIndex,
       lastIndex,
       linesAdvanced,
@@ -2759,15 +2788,38 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastKnownScrollTop: Math.round(scrollTop || 0),
       scrollerId,
       source,
+      liveRunSummary,
+      shortLivedSummary,
+      endedRunKey: endedRunKey || undefined,
     };
-    logDriverActive(`summary:${source}`);
-    try { console.warn('ASR_SESSION_SUMMARY', summary); } catch {}
-    try {
-      window.dispatchEvent(new CustomEvent('tp:asr:summary', { detail: summary }));
-    } catch {}
-    const warnUnsafe = commitCount === 0 || traversedPct < 5;
-    const toastKey = `${summaryRunKey || driverInstanceId}:${warnUnsafe ? 'warn' : 'info'}`;
-    if (warnUnsafe) {
+    if (isDevMode() && durationMs >= SUMMARY_MIN_DURATION_MS) {
+      logDriverActive(`summary:${source}`);
+      try { console.warn('ASR_SESSION_SUMMARY', summary); } catch {}
+    }
+    if (!suppressAsCleanup) {
+      try {
+        window.dispatchEvent(new CustomEvent('tp:asr:summary', { detail: summary }));
+      } catch {}
+    } else if (isDevMode()) {
+      try {
+        console.info('[ASR] summary suppressed', {
+          source,
+          runKey: runKey || null,
+          endedRunKey: endedRunKey || null,
+          durationMs,
+          commitCount,
+          shortLivedSummary,
+          liveRunSummary,
+        });
+      } catch {
+        // ignore
+      }
+    }
+    if (suppressAsCleanup || source !== 'dispose') {
+      return;
+    }
+    const toastKey = `${runKey}:${commitCount === 0 ? 'warn' : 'info'}`;
+    if (commitCount === 0) {
       emitSummaryToastOnce(
         toastKey,
         'ASR did not advance the script (0 commits). This run is not production-safe.',
@@ -6012,7 +6064,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const dispose = () => {
     if (disposed) return;
-    logDriverActive('dispose');
     emitSummary('dispose');
     disposed = true;
     postCommitReadabilitySeq += 1;

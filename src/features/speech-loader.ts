@@ -112,6 +112,8 @@ declare global {
     __tpSpeechOrchestrator?: { start?: () => Promise<RecognizerLike | void> | RecognizerLike | void };
     __tpSpeechCanDynImport?: boolean;
     __tpAsrRunKey?: string | null;
+    __tpAsrLastEndedRunKey?: string | null;
+    __tpAsrLastEndedRunAt?: number | null;
     __tpSpeech?: {
       store?: {
         getState?: () => unknown;
@@ -1749,11 +1751,14 @@ function beginAsrRunKey(mode: string, reason?: string): string {
 
 function clearAsrRunKey(reason: string): void {
   if (!activeAsrRunKey) return;
+  const endedRunKey = activeAsrRunKey;
   if (isDevMode()) {
-    try { console.info('[ASR] run clear', { runKey: activeAsrRunKey, reason }); } catch {}
+    try { console.info('[ASR] run clear', { runKey: endedRunKey, reason }); } catch {}
   }
   activeAsrRunKey = '';
   if (typeof window !== 'undefined') {
+    try { window.__tpAsrLastEndedRunKey = endedRunKey; } catch {}
+    try { window.__tpAsrLastEndedRunAt = Date.now(); } catch {}
     try { window.__tpAsrRunKey = null; } catch {}
   }
 }
