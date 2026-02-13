@@ -129,6 +129,7 @@ In `scrollMode='asr'`:
   - Kick is manual movement and must not depend on motors or auto-intent.
   - Kick resolves scroller by viewer role (`main` vs `display`) before moving.
   - Kick path:
+    - in `scrollMode='asr'`, Kick is manual forward assist (advance to next ASR block via writer seek)
     - prefer writer seek when block mapping is available
     - otherwise perform a small pixel nudge fallback
   - Kick must be wired from typed bindings only (hotkeys + button).

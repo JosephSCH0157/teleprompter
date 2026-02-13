@@ -6,6 +6,7 @@ import { createAsrScrollDriver, type AsrScrollDriver } from '../features/asr/asr
 import { getAsrBlockElements, getAsrBlockIndex } from '../scroll/asr-block-store';
 import {
   describeElement,
+  getRuntimeScroller,
   getScrollerEl,
   getPrimaryScroller,
   getScriptRoot,
@@ -1159,7 +1160,9 @@ function computeMarkerLineIndex(): number {
       (container || document).querySelectorAll<HTMLElement>('.line'),
     );
     if (!lineEls.length) return 0;
-    const scroller = resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
+    const scroller =
+      getRuntimeScroller() ||
+      resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
     const scrollTop = scroller?.scrollTop ?? 0;
     const firstLineHeight = lineEls[0].offsetHeight || lineEls[0].clientHeight || 0;
     const topEpsilon = Math.max(24, firstLineHeight * 0.5);
@@ -1412,48 +1415,49 @@ function syncAsrBlockCursor(
   if (!cursor) return false;
   const idx = cursor.lineIdx;
   const blockTopPx = Number.isFinite(cursor.blockTopPx) ? Math.round(cursor.blockTopPx) : cursor.blockTopPx;
+  const schemaVersion = Number(getAsrBlockIndex()?.schemaVersion || 1);
   try { (window as any).currentIndex = idx; } catch {}
   try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
-  try {
-    console.debug('[ASR] block sync', {
-      idx,
-      interpretedAs: 'block',
-      blockIdx: cursor.blockIdx,
-      lineIdx: idx,
-      lineStart: cursor.lineStart,
-      lineEnd: cursor.lineEnd,
-      speakableStartLine: cursor.speakableStartLine,
-      blockTopPx,
-      reason,
-      clamped: cursor.clamped,
-      cueAdjusted: cursor.cueAdjusted,
-      sourceLine: cursor.sourceLine,
-      scrollTop: Math.round(scrollTop),
-      topEpsilon: Math.round(topEpsilon),
-    });
-  } catch {}
-  try {
-    console.debug('[ASR] index sync', {
-      idx,
-      interpretedAs: 'block',
-      blockIdx: cursor.blockIdx,
-      lineIdx: idx,
-      reason,
-      clamped: cursor.clamped,
-      cueAdjusted: cursor.cueAdjusted,
-      sourceLine: cursor.sourceLine,
-      scrollTop: Math.round(scrollTop),
-      topEpsilon: Math.round(topEpsilon),
-      blockTopPx,
-    });
-  } catch {}
+  logAsrSync('block sync', {
+    idx,
+    interpretedAs: 'block',
+    blockIdx: cursor.blockIdx,
+    lineIdx: idx,
+    lineStart: cursor.lineStart,
+    lineEnd: cursor.lineEnd,
+    speakableStartLine: cursor.speakableStartLine,
+    schemaVersion,
+    blockTopPx,
+    reason,
+    clamped: cursor.clamped,
+    cueAdjusted: cursor.cueAdjusted,
+    sourceLine: cursor.sourceLine,
+    scrollTop: Math.round(scrollTop),
+    topEpsilon: Math.round(topEpsilon),
+  });
+  logAsrSync('index sync', {
+    idx,
+    interpretedAs: 'block',
+    blockIdx: cursor.blockIdx,
+    lineIdx: idx,
+    schemaVersion,
+    reason,
+    clamped: cursor.clamped,
+    cueAdjusted: cursor.cueAdjusted,
+    sourceLine: cursor.sourceLine,
+    scrollTop: Math.round(scrollTop),
+    topEpsilon: Math.round(topEpsilon),
+    blockTopPx,
+  });
   return true;
 }
 
 function syncAsrIndices(startIdx: number, reason: string): void {
   const viewer = getPrimaryScroller();
   const root = getScriptRoot() || viewer;
-  const scroller = resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
+  const scroller =
+    getRuntimeScroller() ||
+    resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
   const scrollTop = scroller?.scrollTop ?? 0;
   const lineEl = (root || viewer || document).querySelector<HTMLElement>('.line');
   const lineHeight = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
@@ -1474,22 +1478,22 @@ function syncAsrIndices(startIdx: number, reason: string): void {
     }
   }
   const blockIdx = resolveBlockIdxForLine(idx, scroller);
+  const schemaVersion = Number(getAsrBlockIndex()?.schemaVersion || 1);
   try { (window as any).currentIndex = idx; } catch {}
   try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
-  try {
-    console.debug('[ASR] index sync', {
-      idx,
-      interpretedAs: 'line',
-      blockIdx,
-      lineIdx: idx,
-      reason,
-      clamped,
-      cueAdjusted,
-      sourceLine: sourceIdx,
-      scrollTop: Math.round(scrollTop),
-      topEpsilon: Math.round(topEpsilon),
-    });
-  } catch {}
+  logAsrSync('index sync', {
+    idx,
+    interpretedAs: 'line',
+    blockIdx,
+    lineIdx: idx,
+    schemaVersion,
+    reason,
+    clamped,
+    cueAdjusted,
+    sourceLine: sourceIdx,
+    scrollTop: Math.round(scrollTop),
+    topEpsilon: Math.round(topEpsilon),
+  });
 }
 
 const TRANSCRIPT_EVENT_OPTIONS: AddEventListenerOptions = { capture: true };
@@ -1503,9 +1507,18 @@ let asrRunCounter = 0;
 let activeAsrRunKey = '';
 let lastAsrBlockSyncAt = 0;
 let lastAsrBlockSyncLogAt = 0;
+let lastAsrSyncLogAtByType: Record<'block sync' | 'index sync', number> = {
+  'block sync': 0,
+  'index sync': 0,
+};
+let lastAsrSyncFingerprintByType: Record<'block sync' | 'index sync', string> = {
+  'block sync': '',
+  'index sync': '',
+};
 
 const ASR_LIVE_BLOCK_SYNC_THROTTLE_MS = 200;
 const ASR_BLOCK_SYNC_LOG_THROTTLE_MS = 1000;
+const ASR_SYNC_LOG_THROTTLE_MS = 750;
 
 function logAsrBlockSyncSkip(mode: string, phase: string, reason: 'live-skip' | 'throttled', now: number): void {
   if (!isDevMode()) return;
@@ -1614,6 +1627,36 @@ function clearAsrRunKey(reason: string): void {
   if (typeof window !== 'undefined') {
     try { window.__tpAsrRunKey = null; } catch {}
   }
+}
+
+function buildAsrSyncLogFingerprint(payload: Record<string, unknown>): string {
+  const bool = (value: unknown) => (value ? '1' : '0');
+  return [
+    payload.reason ?? '',
+    payload.interpretedAs ?? '',
+    payload.blockIdx ?? 'na',
+    payload.lineIdx ?? payload.idx ?? 'na',
+    payload.sourceLine ?? 'na',
+    payload.schemaVersion ?? 'na',
+    bool(payload.clamped),
+    bool(payload.cueAdjusted),
+  ].join('|');
+}
+
+function logAsrSync(kind: 'block sync' | 'index sync', payload: Record<string, unknown>): void {
+  if (!isDevMode()) return;
+  const now = Date.now();
+  const fingerprint = buildAsrSyncLogFingerprint(payload);
+  const prevFingerprint = lastAsrSyncFingerprintByType[kind];
+  const prevAt = lastAsrSyncLogAtByType[kind];
+  if (fingerprint === prevFingerprint && now - prevAt < ASR_SYNC_LOG_THROTTLE_MS) {
+    return;
+  }
+  lastAsrSyncFingerprintByType[kind] = fingerprint;
+  lastAsrSyncLogAtByType[kind] = now;
+  try {
+    console.debug(`[ASR] ${kind}`, payload);
+  } catch {}
 }
 
 function ensureAsrScrollDriver(
@@ -2051,10 +2094,12 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       asrBrainLogged = true;
       try {
         const session = getSession();
-        const scroller = resolveActiveScroller(
-          getPrimaryScroller(),
-          getScriptRoot() || getScrollerEl('main') || getScrollerEl('display'),
-        );
+        const scroller =
+          getRuntimeScroller() ||
+          resolveActiveScroller(
+            getPrimaryScroller(),
+            getScriptRoot() || getScrollerEl('main') || getScrollerEl('display'),
+          );
         console.warn('ASR_BRAIN_READY', {
           asrDesired: session.asrDesired,
           asrArmed: session.asrArmed,
@@ -2068,7 +2113,9 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       const currentIdx = Number((window as any).currentIndex ?? startIdx);
       const viewer = getPrimaryScroller();
       const root = getScriptRoot() || viewer;
-      const scroller = resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
+      const scroller =
+        getRuntimeScroller() ||
+        resolveActiveScroller(viewer, root || getScrollerEl('main') || getScrollerEl('display'));
       const scrollerTop = scroller?.scrollTop ?? 0;
       const firstLine = (root || viewer || document).querySelector<HTMLElement>('.line');
       const firstLineHeight = firstLine?.offsetHeight || firstLine?.clientHeight || 0;

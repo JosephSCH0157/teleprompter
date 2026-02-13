@@ -2,7 +2,14 @@
 // All code that moves the main script viewport should route through this helper.
 
 import { getAsrBlockElements } from './asr-block-store';
-import { getDisplayViewerElement, getScrollerEl, getViewerElement } from './scroller';
+import {
+  describeElement,
+  getDisplayViewerElement,
+  getRuntimeScroller,
+  getScrollerEl,
+  getViewerElement,
+  resolveViewerRole,
+} from './scroller';
 
 export interface ScrollWriter {
   /** Absolute scroll in CSS px from top of script viewport. */
@@ -16,6 +23,11 @@ export interface ScrollWriter {
 let cached: ScrollWriter | null = null;
 let warned = false;
 let activeSeekAnim: { cancel: () => void } | null = null;
+let lastWriteMismatchAt = 0;
+let lastWriteMismatchKey = '';
+
+const WRITE_MISMATCH_LOG_THROTTLE_MS = 2000;
+const WRITE_MISMATCH_EPSILON_PX = 1;
 
 function shouldTraceWrites(): boolean {
   try {
@@ -40,7 +52,9 @@ function withWriteEnabled<T>(reason: string, delta: number, fn: () => T): T {
 }
 
 function findScroller(el: HTMLElement): HTMLElement {
+  const runtime = getRuntimeScroller(resolveViewerRole());
   return (
+    runtime ||
     getScrollerEl('main') ||
     getScrollerEl('display') ||
     getDisplayViewerElement() ||
@@ -109,6 +123,7 @@ function readScrollTop(scroller: HTMLElement): number {
 
 function getDeltaScroller(): HTMLElement | null {
   return (
+    getRuntimeScroller(resolveViewerRole()) ||
     getScrollerEl('main') ||
     getScrollerEl('display') ||
     getDisplayViewerElement() ||
@@ -126,16 +141,59 @@ function estimateDelta(targetTop: number): number {
   }
 }
 
+function logWriteMismatch(scroller: HTMLElement, target: number, before: number, after: number, reason: string): void {
+  if (!shouldTraceWrites()) return;
+  if (Math.abs(after - target) <= WRITE_MISMATCH_EPSILON_PX) return;
+  const now = Date.now();
+  const key = `${reason}|${describeElement(scroller)}|${Math.round(target)}|${Math.round(after)}`;
+  if (key === lastWriteMismatchKey && now - lastWriteMismatchAt < WRITE_MISMATCH_LOG_THROTTLE_MS) return;
+  lastWriteMismatchKey = key;
+  lastWriteMismatchAt = now;
+  let overflow = '';
+  let overflowY = '';
+  try {
+    const style = getComputedStyle(scroller);
+    overflow = String(style.overflow || '');
+    overflowY = String(style.overflowY || '');
+  } catch {
+    overflow = '';
+    overflowY = '';
+  }
+  const maxTop = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const activeScroller = getRuntimeScroller(resolveViewerRole());
+  try {
+    console.warn('[scroll-writer] write mismatch', {
+      reason,
+      scroller: describeElement(scroller),
+      targetTop: Math.round(target),
+      before: Math.round(before),
+      after: Math.round(after),
+      deltaPx: Math.round(after - before),
+      overflow,
+      overflowY,
+      scrollHeight: Math.round(scroller.scrollHeight || 0),
+      clientHeight: Math.round(scroller.clientHeight || 0),
+      maxTop: Math.round(maxTop),
+      activeScroller: describeElement(activeScroller),
+      isActiveScroller: activeScroller === scroller,
+    });
+  } catch {}
+}
+
 function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrollTop'): void {
   const from = readScrollTop(scroller);
-  const delta = (Number(top) || 0) - (Number(from) || 0);
+  const maxTop = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const target = Math.max(0, Math.min(Number(top) || 0, maxTop));
+  const delta = target - (Number(from) || 0);
   withWriteEnabled(reason, delta, () => {
     if (typeof scroller.scrollTo === 'function') {
-      scroller.scrollTo({ top, behavior: 'auto' });
+      scroller.scrollTo({ top: target, behavior: 'auto' });
     } else {
-      scroller.scrollTop = top;
+      scroller.scrollTop = target;
     }
   });
+  const after = readScrollTop(scroller);
+  logWriteMismatch(scroller, target, from, after, reason);
 }
 
 function resolveSeekTarget(blockIdx: number): {
@@ -173,6 +231,7 @@ export function getScrollWriter(): ScrollWriter {
     if (typeof maybe === 'function') {
       const fn = maybe as (_top: number) => void;
       const getScroller = () =>
+        getRuntimeScroller(resolveViewerRole()) ||
         getScrollerEl('main') ||
         getScrollerEl('display') ||
         getDisplayViewerElement();

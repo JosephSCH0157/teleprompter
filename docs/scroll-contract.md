@@ -52,6 +52,7 @@ When `scrollMode='asr'`:
 
 - Kick is manual movement and never depends on motor/auto-intent.
 - Kick resolves scroller by viewer role (`main` vs `display`) before movement.
+- In `scrollMode='asr'`, Kick acts as manual forward assist (advance one ASR block when available).
 - Kick prefers writer path; pixel nudge is fallback.
 - Hotkeys and buttons call typed kick entrypoints only.
 - Dev globals are allowed only in dev mode and must not leak to production.

@@ -5,8 +5,9 @@ import { ensureAsrTuningProfile, getActiveAsrTuningProfile, onAsrTuning, type As
 import {
   applyCanonicalScrollTop,
   describeElement,
-  getScrollerEl,
+  getRuntimeScroller,
   getPrimaryScroller,
+  resolveViewerRole,
   getScriptRoot,
   resolveActiveScroller,
 } from '../../scroll/scroller';
@@ -135,6 +136,8 @@ type AsrCommit = {
   targetTop: number;
   nextTargetTop: number;
 };
+
+type ViewerRole = 'main' | 'display';
 
 type AsrCommitMoveDeps = {
   scroller: HTMLElement;
@@ -841,30 +844,6 @@ function emitHybridTargetHint(
   });
 }
 
-type ViewerRole = 'main' | 'display';
-
-function resolveViewerRole(): ViewerRole {
-  if (typeof window === 'undefined') return 'main';
-  try {
-    const explicit = String((window as any).__TP_VIEWER_ROLE || '').toLowerCase();
-    if (explicit === 'display') return 'display';
-    if (explicit === 'main') return 'main';
-    const bodyRole = String(window.document?.body?.dataset?.viewerRole || '').toLowerCase();
-    if (bodyRole === 'display') return 'display';
-    if (bodyRole === 'main') return 'main';
-    if ((window as any).__TP_FORCE_DISPLAY) return 'display';
-    const path = String(window.location?.pathname || '').toLowerCase();
-    if (path.includes('display')) return 'display';
-  } catch {
-    // ignore
-  }
-  return 'main';
-}
-
-function resolveRolePrimaryScroller(role: ViewerRole): HTMLElement | null {
-  return getScrollerEl(role);
-}
-
 function hasActiveScrollWriter(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -906,16 +885,7 @@ function logCommitScrollStamp(
 }
 
 function getScroller(): HTMLElement | null {
-  const role = resolveViewerRole();
-  const root = getScriptRoot();
-  if (role === 'display') {
-    const primary = resolveRolePrimaryScroller('display');
-    const fallback = (document.getElementById('wrap') as HTMLElement | null) || root;
-    return resolveActiveScroller(primary, fallback);
-  }
-  const primary = resolveRolePrimaryScroller('main') || root;
-  const fallback = root;
-  return resolveActiveScroller(primary, fallback);
+  return getRuntimeScroller(resolveViewerRole());
 }
 
 function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number): HTMLElement | null {

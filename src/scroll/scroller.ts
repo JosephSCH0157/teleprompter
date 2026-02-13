@@ -112,6 +112,37 @@ export function getPrimaryScroller(): HTMLElement | null {
   return getScrollerEl('main') || getScrollerEl('display');
 }
 
+export function resolveViewerRole(): ScrollerRole {
+  if (typeof window === 'undefined') return 'main';
+  try {
+    const explicit = String((window as any).__TP_VIEWER_ROLE || '').toLowerCase();
+    if (explicit === 'display') return 'display';
+    if (explicit === 'main') return 'main';
+    const bodyRole = String(window.document?.body?.dataset?.viewerRole || '').toLowerCase();
+    if (bodyRole === 'display') return 'display';
+    if (bodyRole === 'main') return 'main';
+    if ((window as any).__TP_FORCE_DISPLAY) return 'display';
+    const path = String(window.location?.pathname || '').toLowerCase();
+    if (path.includes('display')) return 'display';
+  } catch {
+    // ignore
+  }
+  return 'main';
+}
+
+export function getRuntimeScroller(role: ScrollerRole = resolveViewerRole()): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  const root = getScriptRoot();
+  if (role === 'display') {
+    const primary = getScrollerEl('display');
+    const fallback = (document.getElementById('wrap') as HTMLElement | null) || root;
+    return resolveActiveScroller(primary, fallback);
+  }
+  const primary = getScrollerEl('main') || root;
+  const fallback = root || getScrollerEl('display');
+  return resolveActiveScroller(primary, fallback);
+}
+
 function isDisplayWindow(): boolean {
   if (typeof window === 'undefined') return false;
   try {

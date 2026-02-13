@@ -5117,19 +5117,20 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     });
   } catch {}
   let applyGateRaf: number | null = null;
-  const MOTOR_IGNORED_LOG_THROTTLE_MS = 750;
+  const MOTOR_IGNORED_LOG_THROTTLE_MS = 2000;
   let lastMotorIgnoredLogAt = 0;
-  let lastMotorIgnoredLogMode = '';
-  function logAutoGateAction(action: string, mode: string, line: string) {
+  let lastMotorIgnoredLogKey = '';
+  function logAutoGateAction(action: string, mode: string, line: string, blockedReason = '') {
     if (action !== 'MOTOR_IGNORED_OFF') {
       try { console.info(line); } catch {}
       return;
     }
     const now = Date.now();
-    if (mode === lastMotorIgnoredLogMode && now - lastMotorIgnoredLogAt < MOTOR_IGNORED_LOG_THROTTLE_MS) {
+    const dedupeKey = `${mode}|${blockedReason}`;
+    if (dedupeKey === lastMotorIgnoredLogKey && now - lastMotorIgnoredLogAt < MOTOR_IGNORED_LOG_THROTTLE_MS) {
       return;
     }
-    lastMotorIgnoredLogMode = mode;
+    lastMotorIgnoredLogKey = dedupeKey;
     lastMotorIgnoredLogAt = now;
     try { console.info(line); } catch {}
   }
@@ -5211,6 +5212,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         action,
         mode,
         `[scroll-router] ${action} mode=${mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+        autoBlocked,
       );
       let emittedAutoStop = false;
       if (want) {
