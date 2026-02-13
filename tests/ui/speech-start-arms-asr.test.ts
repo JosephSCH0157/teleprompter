@@ -11,6 +11,7 @@ describe('speech start arming', () => {
     const { appStore } = await import('../../src/state/app-store');
     const { initSession } = await import('../../src/state/session');
     const { installSpeech } = await import('../../src/features/speech-loader');
+    const addSpy = jest.spyOn(window, 'addEventListener');
 
     initSession();
     (window as any).__tpStore = appStore;
@@ -25,5 +26,10 @@ describe('speech start arming', () => {
     expect(appStore.get('session.asrDesired')).toBe(true);
     expect(appStore.get('session.asrArmed')).toBe(true);
     expect(appStore.get('session.asrReady')).toBe(true);
+    expect(
+      addSpy.mock.calls.some((call) => String(call[0]) === 'tp:speech:transcript'),
+    ).toBe(true);
+
+    addSpy.mockRestore();
   });
 });

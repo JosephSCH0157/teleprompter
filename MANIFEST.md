@@ -60,6 +60,7 @@ In `scrollMode='asr'`:
 - Must not wire auto-intent listeners.
 - Must not start timed/hybrid/wpm motors.
 - Must not use preroll to trigger any scrolling.
+- `session.scrollAutoOnLive` must not gate ASR startup/attach decisions.
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.

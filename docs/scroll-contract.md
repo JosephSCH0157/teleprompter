@@ -23,6 +23,7 @@ When `scrollMode='asr'`:
 - Movement trigger is ASR commit only.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
+- `session.scrollAutoOnLive` does not gate ASR live attach/start logic.
 - ASR index seeding from `blocks:scroll-mode` must resolve block-first, then derive line within block.
 - If derived line is cue-only (`[pause]`, `[beat]`, `[reflective pause]`), advance to the first speakable line in that block.
 - ASR anchor/cursor/evidence scans operate on speakable lines only; cue/tag/note-only render lines stay visible in UI but are excluded from ASR match domain.

@@ -94,6 +94,17 @@ function maybeStartAutoWhenReady(trigger: string): void {
     try { console.debug('[scroll-session] start blocked: phase not live', { trigger, phase: session.phase }); } catch {}
     return;
   }
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const canonicalMode = normalizeScrollMode(rawMode);
+  if (canonicalMode === 'asr') {
+    try {
+      console.debug('[scroll-session] auto-start bypass (mode=asr)', {
+        trigger,
+        note: 'ASR live pipeline is gated by session.asrArmed, not scrollAutoOnLive',
+      });
+    } catch {}
+    return;
+  }
   if (!prerollDoneForSession) {
     try { console.debug('[scroll-session] start blocked: preroll not done', { trigger }); } catch {}
     return;
@@ -106,8 +117,6 @@ function maybeStartAutoWhenReady(trigger: string): void {
     try { console.debug('[scroll-session] start blocked: already started this session', { trigger }); } catch {}
     return;
   }
-  const rawMode = appStore.get('scrollMode') as string | undefined;
-  const canonicalMode = normalizeScrollMode(rawMode);
   if (!shouldAutoStartForMode(canonicalMode)) {
     try { console.debug('[scroll-session] start blocked: mode not auto-capable', { trigger, mode: canonicalMode }); } catch {}
     return;
@@ -123,7 +132,8 @@ function maybeStartOnLive(phase: SessionPhase): void {
   const rawMode = appStore.get('scrollMode') as string | undefined;
   const canonicalMode = normalizeScrollMode(rawMode);
   const canonicalModeStr = String(canonicalMode);
-  const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(canonicalMode);
+  const effectiveScrollAutoOnLive = canonicalMode === 'asr' ? true : session.scrollAutoOnLive;
+  const shouldRun = effectiveScrollAutoOnLive && shouldAutoStartForMode(canonicalMode);
   if (phase !== 'live') {
     if (phase === 'preroll') {
       resetSessionStartLatches('phase-preroll');
@@ -148,6 +158,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     console.debug('[ASR] live entered', {
       mode: canonicalMode,
       scrollAutoOnLive: session.scrollAutoOnLive,
+      effectiveScrollAutoOnLive,
       brain: appStore.get('scrollBrain'),
       asrDesired: session.asrDesired,
       asrArmed: session.asrArmed,
@@ -193,7 +204,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     } catch {}
   }
 
-  if (!session.scrollAutoOnLive) {
+  if (!effectiveScrollAutoOnLive) {
     try { console.debug('[scroll-session] auto-scroll not starting on live (scrollAutoOnLive=false)'); } catch {}
     return;
   }

@@ -15,7 +15,9 @@ import {
 function computeScrollAutoOnLive(rawMode?: string | undefined): boolean {
   try {
     const mode = normalizeScrollMode(rawMode ?? (appStore.get('scrollMode') as string | undefined));
-    return mode === 'timed' || mode === 'wpm' || mode === 'hybrid';
+    // ASR live flow is commit-driven (not motor-driven), but this session flag
+    // must not disable ASR startup/gating during live.
+    return mode === 'timed' || mode === 'wpm' || mode === 'hybrid' || mode === 'asr';
   } catch {
     return false;
   }

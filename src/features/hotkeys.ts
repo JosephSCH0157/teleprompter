@@ -2,6 +2,18 @@ import { kick } from './kick/kick';
 
 let initialized = false;
 
+function isDevMode(): boolean {
+  try {
+    const w = window as any;
+    if (w.__TP_DEV || w.__TP_DEV1) return true;
+    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
+    const qs = new URLSearchParams(String(location.search || ''));
+    return qs.has('dev') || qs.get('dev') === '1';
+  } catch {
+    return false;
+  }
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el) return false;
@@ -17,8 +29,37 @@ function isKickHotkey(event: KeyboardEvent): boolean {
 }
 
 function onKeydown(event: KeyboardEvent): void {
+  if (isDevMode()) {
+    const key = String(event.key || '').toLowerCase();
+    if (event.code === 'KeyK' || key === 'k') {
+      const target = event.target as HTMLElement | null;
+      const targetTag = String(target?.tagName || '').toLowerCase() || '(none)';
+      const targetId = target?.id || '';
+      try {
+        console.debug('[kick-hotkey] keydown', {
+          key: event.key,
+          code: event.code,
+          targetTag,
+          targetId,
+          kickHandlerReached: true,
+        });
+      } catch {}
+    }
+  }
   if (!isKickHotkey(event)) return;
-  if (isTypingTarget(event.target)) return;
+  if (isTypingTarget(event.target)) {
+    if (isDevMode()) {
+      try {
+        console.debug('[kick-hotkey] blocked', {
+          reason: 'typing-target',
+          key: event.key,
+          code: event.code,
+          kickHandlerReached: true,
+        });
+      } catch {}
+    }
+    return;
+  }
   event.preventDefault();
   kick({ reason: 'hotkey:k' });
 }

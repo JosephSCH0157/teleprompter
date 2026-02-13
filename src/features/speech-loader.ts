@@ -278,6 +278,19 @@ function armAsrForSessionStart(mode: string, source: string): void {
   try { store.set('session.asrDesired' as any, true as any); } catch {}
   try { store.set('session.asrArmed' as any, true as any); } catch {}
   try { store.set('session.asrReady' as any, true as any); } catch {}
+  // Arm must immediately trigger an attach attempt in the same tick so we do
+  // not depend on a later mode-change event to wire ASR transcript handling.
+  try { ensureAsrDriverLifecycleHooks(); } catch {}
+  try {
+    const reason = `arm:${source || 'unknown'}`;
+    attachAsrScrollDriver({ reason, mode: normalizedMode, allowCreate: false });
+    syncAsrDriverFromBlocks(reason, { mode: normalizedMode, allowCreate: false });
+    bootTrace('speech-loader:arm:attach-attempt', {
+      source,
+      mode: normalizedMode,
+      reason,
+    });
+  } catch {}
   try {
     console.info('[ASR] armed for session start', { source, mode: normalizedMode });
   } catch {}

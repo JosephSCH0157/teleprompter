@@ -26,6 +26,6 @@ describe('preroll ASR arming', () => {
 
     expect(appStore.get('session.asrArmed')).toBe(true);
     expect(appStore.get('session.asrReady')).toBe(true);
+    expect(appStore.get('session.scrollAutoOnLive')).toBe(true);
   });
 });
-
