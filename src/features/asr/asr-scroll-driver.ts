@@ -14,7 +14,11 @@ import {
 import { getAsrBlockElements } from '../../scroll/asr-block-store';
 import { seekToBlockAnimated } from '../../scroll/scroll-writer';
 import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
-import { getAsrDriverThresholds, setAsrDriverThresholds } from '../../asr/asr-threshold-store';
+import {
+  areAsrThresholdsDirty,
+  getAsrDriverThresholds,
+  setAsrDriverThresholds,
+} from '../../asr/asr-threshold-store';
 import { bootTrace } from '../../boot/boot-trace';
 import { shouldLogLevel, shouldLogTag } from '../../env/dev-log';
 
@@ -1170,7 +1174,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const summaryRunKey = String(options.runKey || '').trim();
   try { console.log('[ASR DRIVER CREATED]', driverInstanceId); } catch {}
   let threshold = resolveThreshold();
-  setAsrDriverThresholds({ candidateMinSim: threshold });
+  // Respect dev/manual threshold ownership (dev panel/profile overrides) and avoid
+  // resetting candidate gate on every speech start.
+  if (!isDevMode() && !areAsrThresholdsDirty()) {
+    setAsrDriverThresholds({ candidateMinSim: threshold });
+  }
   let lastLineIndex = -1;
   let postCatchupUntil = 0;
   let postCatchupSamplesLeft = 0;
@@ -2103,7 +2111,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const unsubscribe = speechStore.subscribe((state) => {
     if (disposed) return;
-    if (typeof state.threshold === 'number' && !isDevMode()) {
+    if (typeof state.threshold === 'number' && !isDevMode() && !areAsrThresholdsDirty()) {
       threshold = clamp(state.threshold, 0, 1);
       setAsrDriverThresholds({ candidateMinSim: threshold });
     }

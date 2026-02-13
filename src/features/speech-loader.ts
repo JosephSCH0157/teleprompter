@@ -1063,7 +1063,7 @@ const RAISE_GUARDS = [
 ];
 
 function clampCandidate(value: number): number {
-  return Math.max(0.55, Math.min(0.85, clamp01(value)));
+  return Math.max(0.25, Math.min(0.85, clamp01(value)));
 }
 
 let summaryListenerAttached = false;
