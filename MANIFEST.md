@@ -70,7 +70,10 @@ In `scrollMode='asr'`:
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
 - Score arbitration must bias forward continuation when transcript evidence is longer than the current line and a forward multi-line window (`span>=2`) scores at/near current-line score (within small slack) and above floor.
+- Match selection must be band-first/band-only: choose best candidate from the active band (with at most a tiny backward tolerance) instead of choosing global best then rejecting out-of-band.
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.
+- If out-of-band guard blocks a candidate, it must be non-destructive (no evidence-buffer clear and no backward reseed/poisoning side effects); continue listening for in-band forward evidence.
+- Add a stuck watchdog fail-safe: in live armed ASR sessions, if final speech events continue but commit count does not change for the watchdog window, attempt a bounded forward recovery commit from the forward scan at a low floor.
 - Non-finite (`NaN`/`Infinity`) values in ASR target/scroll math must be guarded at the writer and commit path choke points; reject the write/step and emit a dev-only diagnostic guard line.
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.

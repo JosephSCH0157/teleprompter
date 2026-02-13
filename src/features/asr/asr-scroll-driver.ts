@@ -176,6 +176,7 @@ const DEFAULT_LOOKAHEAD_BUMP_COOLDOWN_MS = 2000;
 const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
 const DEFAULT_LOOKAHEAD_STALL_MS = 2500;
+const DEFAULT_BAND_BACK_TOLERANCE_LINES = 1;
 const DEFAULT_SAME_LINE_THROTTLE_MS = 300;
 const DEFAULT_CREEP_PX = 8;
 const DEFAULT_CREEP_NEAR_PX = 12;
@@ -353,6 +354,11 @@ const POST_COMMIT_WRITER_SETTLE_MS = 230;
 const COMMIT_BAND_RESEED_BACK_LINES = 2;
 const COMMIT_BAND_RESEED_AHEAD_LINES = 60;
 const COMMIT_BAND_RESEED_TTL_MS = 2200;
+const DEFAULT_STUCK_WATCHDOG_FINAL_EVENTS = 5;
+const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 4500;
+const DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS = 2500;
+const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 10;
+const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.25;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -798,6 +804,16 @@ function getScrollMode(): string {
   }
 }
 
+function getSessionPhase(): string {
+  try {
+    const store = (window as any).__tpStore;
+    const raw = store?.get?.('session.phase');
+    return String(raw || '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 function isSessionAsrArmed(): boolean {
   try {
     const store = (window as any).__tpStore;
@@ -807,6 +823,10 @@ function isSessionAsrArmed(): boolean {
     // ignore
   }
   return false;
+}
+
+function isSessionLivePhase(): boolean {
+  return getSessionPhase() === 'live';
 }
 
 function isHybridMode(): boolean {
@@ -1194,6 +1214,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let summaryEmitted = false;
   let lastStallLogAt = 0;
   let lastForwardCommitAt = Date.now();
+  let finalsSinceCommit = 0;
+  let lastStuckWatchdogAt = 0;
   let stallRescueRequested = false;
   let stallHudEmitted = false;
   let disposed = false;
@@ -1830,6 +1852,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const forcedCooldownMs = DEFAULT_FORCED_COOLDOWN_MS;
   const forcedMinTokens = DEFAULT_FORCED_MIN_TOKENS;
   const forcedMinChars = DEFAULT_FORCED_MIN_CHARS;
+  const stuckWatchdogFinalEvents = DEFAULT_STUCK_WATCHDOG_FINAL_EVENTS;
+  const stuckWatchdogNoCommitMs = DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS;
+  const stuckWatchdogCooldownMs = DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS;
+  const stuckWatchdogMaxDeltaLines = DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES;
+  const stuckWatchdogForwardFloor = DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR;
   const slamDunkSim = DEFAULT_SLAM_DUNK_SIM;
   const slamDunkMaxDelta = DEFAULT_SLAM_DUNK_MAX_DELTA;
   const confirmationRelaxedSim = DEFAULT_CONFIRMATION_RELAXED_SIM;
@@ -2728,6 +2755,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     commitCount += 1;
+    finalsSinceCommit = 0;
     logDriverActive('commit');
     stallHudEmitted = false;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
@@ -4341,6 +4369,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    if (isFinal) {
+      finalsSinceCommit += 1;
+    }
     const incomingIdx = Number((detail as any)?.currentIdx);
     if (Number.isFinite(incomingIdx)) {
       const nextIdx = Math.max(0, Math.floor(incomingIdx));
@@ -4747,6 +4778,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         : cursorLine + matchWindowAhead);
     let bandStart = baseBandStart;
     let bandEnd = baseBandEnd;
+    const bandBackToleranceStart = Math.max(0, cursorLine - DEFAULT_BAND_BACK_TOLERANCE_LINES);
     const reseededBand = getCommitBandReseedWindow(now);
     if (reseededBand) {
       bandStart = Math.max(0, Math.min(bandStart, reseededBand.start));
@@ -4774,6 +4806,88 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
+    bandStart = Math.max(bandStart, bandBackToleranceStart);
+    bandEnd = Math.max(bandStart, bandEnd);
+
+    const inBandCandidateMap = new Map<number, number>();
+    topScoresSpeakable.forEach((entry) => {
+      const idx = Math.max(0, Math.floor(Number(entry.idx)));
+      const score = Number(entry.score);
+      if (!Number.isFinite(idx) || !Number.isFinite(score)) return;
+      if (idx < bandStart || idx > bandEnd) return;
+      const existing = inBandCandidateMap.get(idx);
+      if (existing == null || score > existing) {
+        inBandCandidateMap.set(idx, score);
+      }
+    });
+    if (
+      Number.isFinite(rawIdx) &&
+      rawIdx >= bandStart &&
+      rawIdx <= bandEnd &&
+      !isIgnorableCueLineText(getLineTextAt(rawIdx))
+    ) {
+      const idx = Math.max(0, Math.floor(rawIdx));
+      const existing = inBandCandidateMap.get(idx);
+      if (existing == null || conf > existing) {
+        inBandCandidateMap.set(idx, conf);
+      }
+    }
+    const inBandCandidates = Array.from(inBandCandidateMap.entries())
+      .map(([idx, score]) => ({ idx, score }))
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        const aDelta = a.idx - cursorLine;
+        const bDelta = b.idx - cursorLine;
+        const aForward = aDelta >= 0 ? 1 : 0;
+        const bForward = bDelta >= 0 ? 1 : 0;
+        if (bForward !== aForward) return bForward - aForward;
+        const aAbs = Math.abs(aDelta);
+        const bAbs = Math.abs(bDelta);
+        if (aAbs !== bAbs) return aAbs - bAbs;
+        return a.idx - b.idx;
+      });
+    const selectedInBand = inBandCandidates[0] || null;
+    const bandFloor = clamp(thresholds.candidateMinSim, 0, 1);
+    if (!selectedInBand || selectedInBand.score < bandFloor) {
+      if (maybeSkipCueLine(cursorLine, now, 'band_wait', snippet)) {
+        return;
+      }
+      warnGuard('band_wait', [
+        `current=${cursorLine}`,
+        `baseBandStart=${baseBandStart}`,
+        `baseBandEnd=${baseBandEnd}`,
+        `bandStart=${bandStart}`,
+        `bandEnd=${bandEnd}`,
+        `candidates=${inBandCandidates.length}`,
+        selectedInBand ? `bestBand=${selectedInBand.idx}` : 'bestBand=-1',
+        selectedInBand ? `bestSim=${formatLogScore(selectedInBand.score)}` : '',
+        `floor=${formatLogScore(bandFloor)}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+      emitHudStatus('band_wait', 'Waiting: no in-band forward evidence');
+      return;
+    }
+    if (selectedInBand.idx !== rawIdx || selectedInBand.score !== conf) {
+      if (isDevMode() && shouldLogTag('ASR_BAND_PICK', 2, 250)) {
+        try {
+          console.info('[ASR_BAND_PICK]', {
+            current: cursorLine,
+            globalBest: Number.isFinite(rawIdx) ? Math.floor(rawIdx) : null,
+            globalSim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : null,
+            picked: selectedInBand.idx,
+            pickedSim: Number(selectedInBand.score.toFixed(3)),
+            bandStart,
+            bandEnd,
+            candidates: inBandCandidates.length,
+          });
+        } catch {
+          // ignore
+        }
+      }
+      rawIdx = selectedInBand.idx;
+      conf = selectedInBand.score;
+      usedLineFallback = true;
+    }
     const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
     const manualAnchorEnabled = isManualAnchorAdoptEnabled();
     if (manualAnchorPending && manualAnchorEnabled && now - manualAnchorPending.ts >= MANUAL_ANCHOR_PENDING_TIMEOUT_MS) {
@@ -4791,7 +4905,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `inBand=${inBand ? 1 : 0}`,
       ]);
       emitHudStatus('match_out_of_band', 'Out-of-band match ignored');
-      resetLagRelock('out-of-band');
       return;
     }
     const rawBestSim = conf;
@@ -5470,6 +5583,45 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           snippet ? `clue="${snippet}"` : '',
         ]);
         logDev('forward bias', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
+      }
+    }
+    const watchdogStalled =
+      allowForced &&
+      isFinal &&
+      isSessionLivePhase() &&
+      isSessionAsrArmed() &&
+      finalsSinceCommit >= stuckWatchdogFinalEvents &&
+      now - lastCommitAt >= stuckWatchdogNoCommitMs &&
+      now - lastStuckWatchdogAt >= stuckWatchdogCooldownMs &&
+      (rawIdx <= cursorLine || conf < effectiveThreshold);
+    if (watchdogStalled) {
+      const watchdogFloor = clamp(Math.max(stuckWatchdogForwardFloor, thresholds.candidateMinSim), 0, 1);
+      const watchdogForward = forwardBandScores
+        .filter((entry) => entry.idx > cursorLine && (entry.idx - cursorLine) <= stuckWatchdogMaxDeltaLines)
+        .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
+      if (watchdogForward && watchdogForward.score >= watchdogFloor) {
+        const before = rawIdx;
+        rawIdx = watchdogForward.idx;
+        conf = watchdogForward.score;
+        effectiveThreshold = Math.min(effectiveThreshold, watchdogFloor);
+        outrunCommit = true;
+        forceReason = forceReason || 'watchdog';
+        lastStuckWatchdogAt = now;
+        warnGuard('watchdog_forward', [
+          `current=${cursorLine}`,
+          `best=${before}`,
+          `forward=${rawIdx}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(effectiveThreshold)}`,
+          `delta=${rawIdx - cursorLine}`,
+          `finalsSinceCommit=${finalsSinceCommit}`,
+          `stallMs=${now - lastCommitAt}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        emitHudStatus(
+          'watchdog_forward',
+          `Recovery: +${rawIdx - cursorLine} lines (sim=${formatLogScore(conf)})`,
+        );
       }
     }
     const markerIdx = consistencyRequireNearMarker ? computeMarkerLineIndex(scrollerForMatch) : -1;
