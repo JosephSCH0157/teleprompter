@@ -1519,6 +1519,9 @@ let lastAsrSyncFingerprintByType: Record<'block sync' | 'index sync', string> = 
 const ASR_LIVE_BLOCK_SYNC_THROTTLE_MS = 200;
 const ASR_BLOCK_SYNC_LOG_THROTTLE_MS = 1000;
 const ASR_SYNC_LOG_THROTTLE_MS = 750;
+const ASR_BLOCK_SYNC_UNCHANGED_LOG_THROTTLE_MS = 1000;
+let lastAsrBlockSyncCompleteFingerprint = '';
+let lastAsrBlockSyncUnchangedAt = 0;
 
 function logAsrBlockSyncSkip(mode: string, phase: string, reason: 'live-skip' | 'throttled', now: number): void {
   if (!isDevMode()) return;
@@ -1557,10 +1560,17 @@ function canAttachAsrBackend(): boolean {
   return false;
 }
 
-function getAsrBlockSnapshot(): { ready: boolean; count: number; schemaVersion?: number; source?: string } {
+function getAsrBlockSnapshot(): {
+  ready: boolean;
+  count: number;
+  schemaVersion?: number;
+  source?: string;
+  scriptSig?: string;
+} {
   let count = 0;
   let schemaVersion: number | undefined;
   let source: string | undefined;
+  let scriptSig: string | undefined;
   try {
     const els = getAsrBlockElements();
     count = Array.isArray(els) ? els.length : 0;
@@ -1573,6 +1583,35 @@ function getAsrBlockSnapshot(): { ready: boolean; count: number; schemaVersion?:
     if (typeof meta?.source === 'string') {
       source = meta.source;
     }
+    if (Array.isArray(meta?.units) && meta.units.length) {
+      const units = meta.units as Array<{
+        unitStart?: number;
+        unitEnd?: number;
+        sentenceCount?: number;
+        charCount?: number;
+      }>;
+      const first = units[0] || {};
+      const last = units[units.length - 1] || {};
+      const sums = units.reduce(
+        (acc, unit) => {
+          const chars = Number(unit?.charCount);
+          const sentences = Number(unit?.sentenceCount);
+          if (Number.isFinite(chars)) acc.chars += Math.max(0, Math.floor(chars));
+          if (Number.isFinite(sentences)) acc.sentences += Math.max(0, Math.floor(sentences));
+          return acc;
+        },
+        { chars: 0, sentences: 0 },
+      );
+      scriptSig = [
+        units.length,
+        Number(first?.unitStart ?? -1),
+        Number(first?.unitEnd ?? -1),
+        Number(last?.unitStart ?? -1),
+        Number(last?.unitEnd ?? -1),
+        sums.sentences,
+        sums.chars,
+      ].join(':');
+    }
   } catch {}
   try {
     const globalCount = Number((window as any).__tpAsrBlockCount);
@@ -1583,7 +1622,7 @@ function getAsrBlockSnapshot(): { ready: boolean; count: number; schemaVersion?:
   const ready = count > 0 || (() => {
     try { return Boolean((window as any).__tpAsrBlocksReady); } catch { return false; }
   })();
-  return { ready, count, schemaVersion, source };
+  return { ready, count, schemaVersion, source, scriptSig };
 }
 
 function shouldCreateAsrDriver(mode: string, reason: string): boolean {
@@ -1659,6 +1698,57 @@ function logAsrSync(kind: 'block sync' | 'index sync', payload: Record<string, u
   } catch {}
 }
 
+function buildAsrBlockSyncCompleteFingerprint(payload: {
+  mode: string;
+  markerIdx: number;
+  blockCount: number;
+  schemaVersion?: number;
+  source?: string;
+  scriptSig?: string;
+}): string {
+  return [
+    payload.mode || '',
+    Number.isFinite(payload.markerIdx) ? Math.floor(payload.markerIdx) : -1,
+    Number.isFinite(payload.blockCount) ? Math.floor(payload.blockCount) : -1,
+    Number.isFinite(Number(payload.schemaVersion)) ? Number(payload.schemaVersion) : -1,
+    payload.source || '',
+    payload.scriptSig || '',
+  ].join('|');
+}
+
+function logAsrBlockSyncComplete(payload: {
+  reason: string;
+  mode: string;
+  markerIdx: number;
+  blockCount: number;
+  schemaVersion?: number;
+  source?: string;
+  scriptSig?: string;
+}): void {
+  if (!isDevMode()) return;
+  const fingerprint = buildAsrBlockSyncCompleteFingerprint(payload);
+  if (fingerprint === lastAsrBlockSyncCompleteFingerprint) {
+    const now = Date.now();
+    if (now - lastAsrBlockSyncUnchangedAt >= ASR_BLOCK_SYNC_UNCHANGED_LOG_THROTTLE_MS) {
+      lastAsrBlockSyncUnchangedAt = now;
+      try {
+        console.debug('[ASR] block sync unchanged', {
+          reason: payload.reason,
+          mode: payload.mode,
+          markerIdx: payload.markerIdx,
+          blockCount: payload.blockCount,
+          schemaVersion: payload.schemaVersion,
+        });
+      } catch {}
+    }
+    return;
+  }
+  lastAsrBlockSyncCompleteFingerprint = fingerprint;
+  try {
+    console.info('[ASR] block sync complete', payload);
+  } catch {}
+}
+
 function ensureAsrScrollDriver(
   reason: string,
   opts?: { mode?: string; allowCreate?: boolean; runKey?: string },
@@ -1714,16 +1804,15 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
     lastAsrBlockSyncAt = now;
   }
   if (isDevMode()) {
-    try {
-      console.info('[ASR] block sync complete', {
-        reason,
-        mode,
-        markerIdx,
-        blockCount: blocks.count,
-        schemaVersion: blocks.schemaVersion,
-        source: blocks.source,
-      });
-    } catch {}
+    logAsrBlockSyncComplete({
+      reason,
+      mode,
+      markerIdx,
+      blockCount: blocks.count,
+      schemaVersion: blocks.schemaVersion,
+      source: blocks.source,
+      scriptSig: blocks.scriptSig,
+    });
   }
 }
 

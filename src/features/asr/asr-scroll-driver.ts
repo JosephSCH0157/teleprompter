@@ -2588,6 +2588,54 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     } catch {}
   };
 
+  let lastForwardScanProbeAt = 0;
+  let lastForwardScanProbeFingerprint = '';
+  const FORWARD_SCAN_PROBE_THROTTLE_MS = 500;
+  const logForwardScanProbe = (payload: {
+    reason: string;
+    cursorLine: number;
+    rangeStart: number;
+    rangeEnd: number;
+    candidatesChecked: number;
+    bestForwardIdx: number | null;
+    bestForwardSim: number;
+    floor: number;
+  }) => {
+    if (!isDevMode()) return;
+    const fingerprint = [
+      payload.reason,
+      payload.cursorLine,
+      payload.rangeStart,
+      payload.rangeEnd,
+      payload.candidatesChecked,
+      payload.bestForwardIdx ?? -1,
+      Number.isFinite(payload.bestForwardSim) ? payload.bestForwardSim.toFixed(3) : 'NaN',
+      Number.isFinite(payload.floor) ? payload.floor.toFixed(3) : 'NaN',
+    ].join('|');
+    const now = Date.now();
+    if (
+      fingerprint === lastForwardScanProbeFingerprint &&
+      now - lastForwardScanProbeAt < FORWARD_SCAN_PROBE_THROTTLE_MS
+    ) {
+      return;
+    }
+    lastForwardScanProbeFingerprint = fingerprint;
+    lastForwardScanProbeAt = now;
+    try {
+      console.debug('[ASR_FORWARD_SCAN]', {
+        reason: payload.reason,
+        cursorLine: payload.cursorLine,
+        forwardRange: `${payload.rangeStart}-${payload.rangeEnd}`,
+        forwardCandidatesChecked: payload.candidatesChecked,
+        bestForwardIdx: payload.bestForwardIdx,
+        bestForwardSim: Number.isFinite(payload.bestForwardSim)
+          ? Number(payload.bestForwardSim.toFixed(3))
+          : payload.bestForwardSim,
+        floor: Number.isFinite(payload.floor) ? Number(payload.floor.toFixed(3)) : payload.floor,
+      });
+    } catch {}
+  };
+
   const logForcedThrottle = (count: number) => {
     try {
       console.warn('ASR_FORCED_THROTTLE', `count=${count}`, `windowMs=${forcedRateWindowMs}`, `cooldownMs=${forcedCooldownMs}`);
@@ -4342,13 +4390,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       : requiredThreshold;
     const outrunRecent =
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
+    const forwardRangeStart = cursorLine + 1;
     const outrunMax = cursorLine + Math.max(1, outrunLookaheadLines);
     const forwardBandScores = topScoresSpeakable.length
       ? topScoresSpeakable
         .filter((entry) => entry.idx > cursorLine && entry.idx <= outrunMax)
       : [];
+    const forwardCandidatesChecked = forwardBandScores.length;
     const outrunCandidate = forwardBandScores
       .sort((a, b) => b.score - a.score || a.idx - b.idx)[0] || null;
+    const bestForwardIdx = outrunCandidate ? outrunCandidate.idx : null;
     const bestForwardSim = outrunCandidate ? outrunCandidate.score : 0;
     const outrunPick = outrunCandidate;
     const outrunFloor = shortFinalRecent ? shortFinalNeed : outrunRelaxedSim;
@@ -4433,10 +4484,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let relockReason: string | undefined;
     const allowForced = !isHybridMode();
     if (allowForced && outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
+      logForwardScanProbe({
+        reason: 'forced-check',
+        cursorLine,
+        rangeStart: forwardRangeStart,
+        rangeEnd: outrunMax,
+        candidatesChecked: forwardCandidatesChecked,
+        bestForwardIdx,
+        bestForwardSim,
+        floor: outrunFloor,
+      });
       if (!outrunPick) {
         logForcedDeny('evidence', [
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
+          `forwardCandidates=${forwardCandidatesChecked}`,
+          `forwardRange=${forwardRangeStart}-${outrunMax}`,
+          `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
@@ -4445,6 +4509,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logForcedDeny('evidence', [
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
+          `forwardCandidates=${forwardCandidatesChecked}`,
+          `forwardRange=${forwardRangeStart}-${outrunMax}`,
+          `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
@@ -4506,10 +4573,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const forwardCandidate = outrunCandidate;
       const forcedDelta = forwardCandidate ? forwardCandidate.idx - cursorLine : rawIdx - cursorLine;
       const cooldownRemaining = getForcedCooldownRemaining(now);
+      logForwardScanProbe({
+        reason: 'short-final-check',
+        cursorLine,
+        rangeStart: forwardRangeStart,
+        rangeEnd: outrunMax,
+        candidatesChecked: forwardCandidatesChecked,
+        bestForwardIdx,
+        bestForwardSim,
+        floor: outrunFloor,
+      });
       if (!forcedEvidenceOk) {
         logForcedDeny('evidence', [
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
+          `forwardCandidates=${forwardCandidatesChecked}`,
+          `forwardRange=${forwardRangeStart}-${outrunMax}`,
+          `bestForwardIdx=${bestForwardIdx ?? -1}`,
           `bestForwardSim=${formatLogScore(bestForwardSim)}`,
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
