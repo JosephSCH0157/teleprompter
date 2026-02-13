@@ -190,47 +190,59 @@ function kickAsrForward(scroller: HTMLElement, deltaPx: number, reason: string):
 }
 
 export function kick(options: KickOptions = {}): boolean {
-  const scroller = getResolvedScroller();
-  if (!scroller) return false;
+  try {
+    const scroller = getResolvedScroller();
+    if (!scroller) return false;
 
-  const deltaPx = normalizeDeltaPx(options.deltaPx);
-  const reason = options.reason || 'kick';
-  const mode = getScrollMode();
-  const from = readScrollTop(scroller);
+    const deltaPx = normalizeDeltaPx(options.deltaPx);
+    const reason = options.reason || 'kick';
+    const mode = getScrollMode();
+    const from = readScrollTop(scroller);
 
-  let moved: boolean;
-  if (mode === 'asr') {
-    moved = kickAsrForward(scroller, deltaPx, reason);
-  } else {
-    try {
-      getScrollWriter().scrollBy(deltaPx, { behavior: 'auto' });
-    } catch {
-      // ignore writer errors, fallback below
+    let moved: boolean;
+    if (mode === 'asr') {
+      moved = kickAsrForward(scroller, deltaPx, reason);
+    } else {
+      try {
+        getScrollWriter().scrollBy(deltaPx, { behavior: 'auto' });
+      } catch {
+        // ignore writer errors, fallback below
+      }
+      let to = readScrollTop(scroller);
+      if (Math.abs(to - from) < 0.5) {
+        writeScrollTop(scroller, from + deltaPx);
+        to = readScrollTop(scroller);
+      }
+      moved = Math.abs(to - from) >= 0.5;
     }
-    let to = readScrollTop(scroller);
-    if (Math.abs(to - from) < 0.5) {
-      writeScrollTop(scroller, from + deltaPx);
-      to = readScrollTop(scroller);
+    const to = readScrollTop(scroller);
+
+    try { scroller.dataset.tpLastWriter = reason; } catch {}
+
+    if (import.meta.env.DEV) {
+      try {
+        console.info('[kick]', {
+          reason,
+          mode,
+          deltaPx,
+          from: Math.round(from),
+          to: Math.round(to),
+          moved,
+          scroller: describeElement(scroller),
+        });
+      } catch {}
     }
-    moved = Math.abs(to - from) >= 0.5;
+
+    return moved;
+  } catch (error) {
+    if (import.meta.env.DEV) {
+      try {
+        console.warn('[kick] error', {
+          reason: options.reason || 'kick',
+          error: String(error),
+        });
+      } catch {}
+    }
+    return false;
   }
-  const to = readScrollTop(scroller);
-
-  try { scroller.dataset.tpLastWriter = reason; } catch {}
-
-  if (import.meta.env.DEV) {
-    try {
-      console.info('[kick]', {
-        reason,
-        mode,
-        deltaPx,
-        from: Math.round(from),
-        to: Math.round(to),
-        moved,
-        scroller: describeElement(scroller),
-      });
-    } catch {}
-  }
-
-  return moved;
 }

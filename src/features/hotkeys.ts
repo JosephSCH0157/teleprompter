@@ -64,7 +64,20 @@ function onKeydown(event: KeyboardEvent): void {
     return;
   }
   event.preventDefault();
-  kick({ reason: 'hotkey:k' });
+  event.stopPropagation();
+  try {
+    kick({ reason: 'hotkey:k' });
+  } catch (error) {
+    if (isDevMode()) {
+      try {
+        console.warn('[kick-hotkey] error', {
+          key: event.key,
+          code: event.code,
+          error: String(error),
+        });
+      } catch {}
+    }
+  }
 }
 
 export function initHotkeys(): void {
