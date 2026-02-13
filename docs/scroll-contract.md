@@ -29,6 +29,7 @@ When `scrollMode='asr'`:
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
 - Forward scan must score speakable joined windows (multi-line candidates) in addition to single-line candidates, so combined ASR phrases can advance to the correct forward line.
+- Arbitration must allow forward continuation when transcript length exceeds current-line length and a forward window (`span>=2`) meets floor and near-current score slack.
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.
 - `session.scrollAutoOnLive` does not gate ASR live attach/start logic.
 - ASR index seeding from `blocks:scroll-mode` must resolve block-first, then derive line within block.

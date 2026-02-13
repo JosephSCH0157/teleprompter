@@ -4985,6 +4985,64 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
+    const transcriptComparable = forwardMatcherInputs[0] || '';
+    const currentLineComparable = normalizeComparableText(getLineTextAt(cursorLine));
+    const transcriptLongerThanCurrent =
+      transcriptComparable.length > currentLineComparable.length;
+    const currentLineScoreFromTop = Number(rawScoreByIdx.get(cursorLine));
+    let currentLineScore = Number.isFinite(currentLineScoreFromTop)
+      ? currentLineScoreFromTop
+      : Number.NaN;
+    if (!Number.isFinite(currentLineScore) && currentLineComparable && forwardMatcherInputs.length) {
+      const currentLineTokens = normTokens(currentLineComparable);
+      if (currentLineTokens.length) {
+        let bestCurrentLineScore = 0;
+        for (const matcherInput of forwardMatcherInputs) {
+          const matcherTokens = normTokens(matcherInput);
+          if (!matcherTokens.length) continue;
+          const score = computeLineSimilarityFromTokens(matcherTokens, currentLineTokens);
+          if (score > bestCurrentLineScore) bestCurrentLineScore = score;
+        }
+        currentLineScore = bestCurrentLineScore;
+      }
+    }
+    const continuationForwardCandidate =
+      rawIdx <= cursorLine
+        ? (forwardBandScores
+            .filter((entry) => entry.idx > cursorLine && entry.span >= 2)
+            .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null)
+        : null;
+    const arbitrationCurrentScore = Number.isFinite(currentLineScore)
+      ? currentLineScore
+      : (rawIdx === cursorLine ? conf : requiredThreshold);
+    if (
+      continuationForwardCandidate &&
+      transcriptLongerThanCurrent &&
+      continuationForwardCandidate.score >= outrunFloor &&
+      continuationForwardCandidate.score >= arbitrationCurrentScore - 0.05
+    ) {
+      const before = rawIdx;
+      rawIdx = continuationForwardCandidate.idx;
+      conf = continuationForwardCandidate.score;
+      effectiveThreshold = Math.min(effectiveThreshold, outrunFloor);
+      if (isDevMode()) {
+        try {
+          console.info('[ASR_FORWARD_WINDOW_CONTINUE]', {
+            current: cursorLine,
+            best: before,
+            forward: rawIdx,
+            forwardSpan: continuationForwardCandidate.span,
+            forwardScore: Number(conf.toFixed(3)),
+            floor: Number(outrunFloor.toFixed(3)),
+            currentLineScore: Number(arbitrationCurrentScore.toFixed(3)),
+            transcriptLen: transcriptComparable.length,
+            currentLineLen: currentLineComparable.length,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
     if (shortFinalRecent && rawIdx >= cursorLine) {
       const forwardBand = rawIdx - cursorLine <= shortFinalLookaheadLines;
       if (forwardBand && shortFinalNeed < effectiveThreshold) {
