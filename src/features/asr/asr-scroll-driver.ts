@@ -256,6 +256,7 @@ const DEFAULT_FORWARD_WINDOW_MIN_TOKENS = 2;
 const DEFAULT_OUTRUN_RELAXED_SIM = 0.5;
 const DEFAULT_OUTRUN_WINDOW_MS = DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
 const DEFAULT_OUTRUN_LOOKAHEAD_LINES = 6;
+const DEFAULT_OUTRUN_BEHIND_SIM_SLACK = 0.05;
 const DEFAULT_FORCED_RATE_WINDOW_MS = 10000;
 const DEFAULT_FORCED_RATE_MAX = 2;
 const DEFAULT_FORCED_COOLDOWN_MS = 5000;
@@ -2174,7 +2175,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!Number.isFinite(idx)) return;
     const next = Math.max(0, Math.floor(idx));
     matchAnchorIdx = matchAnchorIdx >= 0 ? Math.max(matchAnchorIdx, next) : next;
-    setCurrentIndex(matchAnchorIdx, 'match-anchor');
+    // Keep pre-commit anchor progression internal. Writing global currentIndex here
+    // can poison cursor state when a later commit gate rejects the candidate.
   };
 
   const updateDebugState = (tag: string) => {
@@ -5564,21 +5566,36 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           } else if (outrunEligible) {
             const before = rawIdx;
             const outrunNeed = outrunFloor;
-            rawIdx = outrunPick.idx;
-            conf = outrunPick.score;
-            effectiveThreshold = Math.min(effectiveThreshold, outrunNeed);
-            outrunCommit = true;
-            forceReason = 'outrun';
-            warnGuard('forward_outrun', [
-              `current=${cursorLine}`,
-              `best=${before}`,
-              `forward=${rawIdx}`,
-              `sim=${formatLogScore(conf)}`,
-              `need=${formatLogScore(effectiveThreshold)}`,
-              `delta=${rawIdx - cursorLine}`,
-              snippet ? `clue="${snippet}"` : '',
-            ]);
-            logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
+            const outrunFromBehind = before < cursorLine;
+            const outrunCompetitiveNeed = outrunFromBehind
+              ? Math.max(outrunNeed, conf - DEFAULT_OUTRUN_BEHIND_SIM_SLACK)
+              : outrunNeed;
+            if (outrunPick.score < outrunCompetitiveNeed) {
+              logForcedDeny('behind_compete', [
+                `current=${cursorLine}`,
+                `best=${before}`,
+                `forward=${outrunPick.idx}`,
+                `forwardSim=${formatLogScore(outrunPick.score)}`,
+                `need=${formatLogScore(outrunCompetitiveNeed)}`,
+                snippet ? `clue="${snippet}"` : '',
+              ]);
+            } else {
+              rawIdx = outrunPick.idx;
+              conf = outrunPick.score;
+              effectiveThreshold = Math.min(effectiveThreshold, outrunNeed);
+              outrunCommit = true;
+              forceReason = 'outrun';
+              warnGuard('forward_outrun', [
+                `current=${cursorLine}`,
+                `best=${before}`,
+                `forward=${rawIdx}`,
+                `sim=${formatLogScore(conf)}`,
+                `need=${formatLogScore(effectiveThreshold)}`,
+                `delta=${rawIdx - cursorLine}`,
+                snippet ? `clue="${snippet}"` : '',
+              ]);
+              logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
+            }
           }
         }
       }
