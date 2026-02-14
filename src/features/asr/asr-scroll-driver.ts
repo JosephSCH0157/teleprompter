@@ -257,6 +257,9 @@ const DEFAULT_OUTRUN_RELAXED_SIM = 0.5;
 const DEFAULT_OUTRUN_WINDOW_MS = DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
 const DEFAULT_OUTRUN_LOOKAHEAD_LINES = 6;
 const DEFAULT_OUTRUN_BEHIND_SIM_SLACK = 0.05;
+const DEFAULT_OUTRUN_BEHIND_MAX_DELTA = 2;
+const DEFAULT_OUTRUN_BEHIND_WIN_MARGIN = 0.01;
+const DEFAULT_OUTRUN_BEHIND_MIN_SIM = 0.55;
 const DEFAULT_FORCED_RATE_WINDOW_MS = 10000;
 const DEFAULT_FORCED_RATE_MAX = 2;
 const DEFAULT_FORCED_COOLDOWN_MS = 5000;
@@ -5567,21 +5570,44 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const before = rawIdx;
             const outrunNeed = outrunFloor;
             const outrunFromBehind = before < cursorLine;
+            const nearForwardPick = outrunFromBehind
+              ? (forwardBandScores
+                  .filter((entry) =>
+                    entry.idx > cursorLine &&
+                    entry.idx - cursorLine <= DEFAULT_OUTRUN_BEHIND_MAX_DELTA)
+                  .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null)
+              : null;
+            const selectedOutrunPick = nearForwardPick || outrunPick;
+            const selectedDelta = selectedOutrunPick.idx - cursorLine;
             const outrunCompetitiveNeed = outrunFromBehind
-              ? Math.max(outrunNeed, conf - DEFAULT_OUTRUN_BEHIND_SIM_SLACK)
+              ? Math.max(
+                  outrunNeed,
+                  conf - DEFAULT_OUTRUN_BEHIND_SIM_SLACK,
+                  conf + DEFAULT_OUTRUN_BEHIND_WIN_MARGIN,
+                  DEFAULT_OUTRUN_BEHIND_MIN_SIM,
+                )
               : outrunNeed;
-            if (outrunPick.score < outrunCompetitiveNeed) {
+            if (outrunFromBehind && selectedDelta > DEFAULT_OUTRUN_BEHIND_MAX_DELTA) {
+              logForcedDeny('behind_delta_cap', [
+                `current=${cursorLine}`,
+                `best=${before}`,
+                `forward=${selectedOutrunPick.idx}`,
+                `delta=${selectedDelta}`,
+                `cap=${DEFAULT_OUTRUN_BEHIND_MAX_DELTA}`,
+                snippet ? `clue="${snippet}"` : '',
+              ]);
+            } else if (selectedOutrunPick.score < outrunCompetitiveNeed) {
               logForcedDeny('behind_compete', [
                 `current=${cursorLine}`,
                 `best=${before}`,
-                `forward=${outrunPick.idx}`,
-                `forwardSim=${formatLogScore(outrunPick.score)}`,
+                `forward=${selectedOutrunPick.idx}`,
+                `forwardSim=${formatLogScore(selectedOutrunPick.score)}`,
                 `need=${formatLogScore(outrunCompetitiveNeed)}`,
                 snippet ? `clue="${snippet}"` : '',
               ]);
             } else {
-              rawIdx = outrunPick.idx;
-              conf = outrunPick.score;
+              rawIdx = selectedOutrunPick.idx;
+              conf = selectedOutrunPick.score;
               effectiveThreshold = Math.min(effectiveThreshold, outrunNeed);
               outrunCommit = true;
               forceReason = 'outrun';
