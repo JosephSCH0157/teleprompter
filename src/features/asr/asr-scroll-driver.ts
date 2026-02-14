@@ -4272,6 +4272,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const scrollerForStamp: HTMLElement | null = scroller;
       const commitBeforeTop = currentTop;
       let commitAfterTop = currentTop;
+      let writerNoMove = false;
       if (modeNow === 'asr') {
         const role = resolveViewerRole();
         const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
@@ -4293,10 +4294,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         );
         writerCommitted = commitMove.writerCommitted;
         commitAfterTop = commitMove.afterTop;
+        writerNoMove =
+          writerCommitted &&
+          Number.isFinite(commitAfterTop) &&
+          Number.isFinite(commitBeforeTop) &&
+          Math.abs(commitAfterTop - commitBeforeTop) < 1;
         didGlide = false;
         const readabilitySeq = ++postCommitReadabilitySeq;
         const immediateReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
-          allowNudge: !writerCommitted,
+          allowNudge: !writerCommitted || writerNoMove,
         });
         logPostCommitReadabilityProbe(
           writerCommitted ? 'commit:writer-pending' : 'commit:immediate',
@@ -4304,10 +4310,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           writerCommitted,
           immediateReadability,
         );
-        if (!writerCommitted && immediateReadability.nudgeApplied) {
+        if ((!writerCommitted || writerNoMove) && immediateReadability.nudgeApplied) {
           commitAfterTop = immediateReadability.afterTop;
         }
-        if (writerCommitted) {
+        if (writerCommitted && !writerNoMove) {
           const settleTimer = window.setTimeout(() => {
             postCommitReadabilityTimers.delete(settleTimer);
             if (disposed) return;
