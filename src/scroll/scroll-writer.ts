@@ -24,6 +24,7 @@ export interface ScrollWriter {
 let cached: ScrollWriter | null = null;
 let warned = false;
 let activeSeekAnim: { cancel: () => void } | null = null;
+let activeSeekAnimRunId = 0;
 let lastWriteMismatchAt = 0;
 let lastWriteMismatchKey = '';
 let lastNonFiniteGuardAt = 0;
@@ -35,6 +36,9 @@ const ASR_SEEK_DEFAULT_LINES_PER_SEC = 1.25;
 const ASR_SEEK_MIN_DURATION_MS = 220;
 const ASR_SEEK_MAX_DURATION_MS = 650;
 const ASR_SEEK_EPSILON_PX = 0.5;
+const ASR_SEEK_MIN_PX_PER_SEC = 36;
+const ASR_SEEK_MAX_PX_PER_SEC = 280;
+const ASR_SEEK_MAX_VIEWPORTS_PER_SEC = 0.75;
 
 type SeekAnimationOptions = {
   targetTop?: number | null;
@@ -143,6 +147,7 @@ function prefersReducedMotion(): boolean {
 }
 
 function cancelSeekAnimation(): void {
+  activeSeekAnimRunId += 1;
   if (!activeSeekAnim) return;
   try { activeSeekAnim.cancel(); } catch {}
   activeSeekAnim = null;
@@ -409,6 +414,7 @@ export function seekToBlock(blockIdx: number, reason: string) {
 
 export function seekToBlockAnimated(blockIdx: number, reason: string, opts: SeekAnimationOptions = {}) {
   cancelSeekAnimation();
+  const runId = activeSeekAnimRunId;
   const mode = getScrollMode();
   if (mode !== 'asr' || prefersReducedMotion()) {
     seekToBlock(blockIdx, reason);
@@ -426,10 +432,18 @@ export function seekToBlockAnimated(blockIdx: number, reason: string, opts: Seek
     : blockTargetTop;
   const lineHeightPx = resolveSeekLineHeightPx(target);
   const configuredMaxPxPerSecond = Number(opts.maxPxPerSecond);
-  const maxPxPerSecond =
+  const baseMaxPxPerSecond =
     Number.isFinite(configuredMaxPxPerSecond) && configuredMaxPxPerSecond > 0
       ? configuredMaxPxPerSecond
-      : Math.max(36, lineHeightPx * ASR_SEEK_DEFAULT_LINES_PER_SEC);
+      : lineHeightPx * ASR_SEEK_DEFAULT_LINES_PER_SEC;
+  const viewportMaxPxPerSecond = Math.max(
+    ASR_SEEK_MIN_PX_PER_SEC,
+    (scroller.clientHeight || 0) * ASR_SEEK_MAX_VIEWPORTS_PER_SEC,
+  );
+  const maxPxPerSecond = Math.max(
+    ASR_SEEK_MIN_PX_PER_SEC,
+    Math.min(baseMaxPxPerSecond, ASR_SEEK_MAX_PX_PER_SEC, viewportMaxPxPerSecond),
+  );
   const minDurationMsRaw = Number(opts.minDurationMs);
   const maxDurationMsRaw = Number(opts.maxDurationMs);
   const minDurationMs =
@@ -474,7 +488,7 @@ export function seekToBlockAnimated(blockIdx: number, reason: string, opts: Seek
     },
   };
   const tick = (now: number) => {
-    if (cancelled) return;
+    if (cancelled || runId !== activeSeekAnimRunId) return;
     const elapsed = now - start;
     const t = Math.max(0, Math.min(1, elapsed / durationMs));
     const eased = 1 - Math.pow(1 - t, 3);
@@ -483,7 +497,9 @@ export function seekToBlockAnimated(blockIdx: number, reason: string, opts: Seek
     if (t < 1) {
       requestAnimationFrame(tick);
     } else {
-      activeSeekAnim = null;
+      if (runId === activeSeekAnimRunId) {
+        activeSeekAnim = null;
+      }
     }
   };
   requestAnimationFrame(tick);
