@@ -6347,6 +6347,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logDev('forward bias', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
       }
     }
+    const strongBehindFloor = Math.max(strongBackSim, requiredThreshold);
+    const strongBehindCompetitor = topScoresSpeakable
+      .filter((entry) => {
+        const idx = Number(entry.idx);
+        const score = Number(entry.score);
+        if (!Number.isFinite(idx) || !Number.isFinite(score)) return false;
+        if (idx >= cursorLine) return false;
+        return score >= strongBehindFloor;
+      })
+      .sort((a, b) => b.score - a.score || b.idx - a.idx)[0] || null;
+    const strongBehindCandidate = !!strongBehindCompetitor;
     const watchdogFloor = clamp(Math.max(stuckWatchdogForwardFloor, thresholds.candidateMinSim), 0, 1);
     const watchdogByFinals = finalsSinceCommit >= stuckWatchdogFinalEvents;
     const watchdogByInterims =
@@ -6366,34 +6377,51 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       !watchdogStrongCurrentHold &&
       (rawIdx <= cursorLine || conf < effectiveThreshold);
     if (watchdogStalled) {
-      const watchdogForward = forwardBandScores
-        .filter((entry) => entry.idx > cursorLine && (entry.idx - cursorLine) <= stuckWatchdogMaxDeltaLines)
-        .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
-      if (watchdogForward && watchdogForward.score >= watchdogFloor) {
-        const before = rawIdx;
-        rawIdx = watchdogForward.idx;
-        conf = watchdogForward.score;
-        effectiveThreshold = Math.min(effectiveThreshold, watchdogFloor);
-        outrunCommit = true;
-        forceReason = forceReason || 'watchdog';
+      if (strongBehindCompetitor) {
         lastStuckWatchdogAt = now;
-        warnGuard('watchdog_forward', [
+        warnGuard('watchdog_suppressed_behind', [
           `current=${cursorLine}`,
-          `best=${before}`,
-          `forward=${rawIdx}`,
-          `sim=${formatLogScore(conf)}`,
-          `need=${formatLogScore(effectiveThreshold)}`,
-          `delta=${rawIdx - cursorLine}`,
+          `best=${rawIdx}`,
+          `behind=${strongBehindCompetitor.idx}`,
+          `behindSim=${formatLogScore(strongBehindCompetitor.score)}`,
+          `need=${formatLogScore(strongBehindFloor)}`,
           `traffic=${watchdogByInterims ? 'interim' : 'final'}`,
           `eventsSinceCommit=${eventsSinceCommit}`,
           `finalsSinceCommit=${finalsSinceCommit}`,
           `stallMs=${now - lastCommitAt}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
-        emitHudStatus(
-          'watchdog_forward',
-          `Recovery: +${rawIdx - cursorLine} lines (sim=${formatLogScore(conf)})`,
-        );
+        emitHudStatus('watchdog_suppressed_behind', 'Recovery skipped: behind competitor');
+      } else {
+        const watchdogForward = forwardBandScores
+          .filter((entry) => entry.idx > cursorLine && (entry.idx - cursorLine) <= stuckWatchdogMaxDeltaLines)
+          .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
+        if (watchdogForward && watchdogForward.score >= watchdogFloor) {
+          const before = rawIdx;
+          rawIdx = watchdogForward.idx;
+          conf = watchdogForward.score;
+          effectiveThreshold = Math.min(effectiveThreshold, watchdogFloor);
+          outrunCommit = true;
+          forceReason = forceReason || 'watchdog';
+          lastStuckWatchdogAt = now;
+          warnGuard('watchdog_forward', [
+            `current=${cursorLine}`,
+            `best=${before}`,
+            `forward=${rawIdx}`,
+            `sim=${formatLogScore(conf)}`,
+            `need=${formatLogScore(effectiveThreshold)}`,
+            `delta=${rawIdx - cursorLine}`,
+            `traffic=${watchdogByInterims ? 'interim' : 'final'}`,
+            `eventsSinceCommit=${eventsSinceCommit}`,
+            `finalsSinceCommit=${finalsSinceCommit}`,
+            `stallMs=${now - lastCommitAt}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+          emitHudStatus(
+            'watchdog_forward',
+            `Recovery: +${rawIdx - cursorLine} lines (sim=${formatLogScore(conf)})`,
+          );
+        }
       }
     }
     inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
@@ -6480,13 +6508,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockReason = isFinal ? 'final' : repeatOk ? 'repeat' : spanOk ? 'span' : 'overlap';
       }
     }
-    const strongBehindCandidate = topScoresSpeakable.some((entry) => {
-      const idx = Number(entry.idx);
-      const score = Number(entry.score);
-      if (!Number.isFinite(idx) || !Number.isFinite(score)) return false;
-      if (idx >= cursorLine) return false;
-      return score >= Math.max(strongBackSim, requiredThreshold);
-    });
     const progressiveForwardFloorEligible =
       isSessionAsrArmed() &&
       commitCount > 0 &&
