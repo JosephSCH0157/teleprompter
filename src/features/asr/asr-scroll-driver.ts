@@ -3541,6 +3541,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lineIdx: commit.lineIdx,
       blockId: commit.blockId,
     }) ?? 0;
+    const max = Math.max(0, deps.scroller.scrollHeight - deps.scroller.clientHeight);
+    const targetTopRawCandidate = Number.isFinite(commit.targetTop)
+      ? commit.targetTop
+      : (Number.isFinite(commit.nextTargetTop) ? commit.nextTargetTop : beforeTop);
+    const targetTopRaw =
+      finiteNumberOrNull('commit.targetTop.raw', targetTopRawCandidate, {
+        lineIdx: commit.lineIdx,
+        blockId: commit.blockId,
+      }) ?? beforeTop;
+    const targetTop = clamp(targetTopRaw, 0, max);
     const reason = commit.forced ? 'asr-forced-commit' : 'asr-commit';
     if (isDevMode() && shouldLogLevel(2)) {
       try {
@@ -3571,7 +3581,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastCommitDeltaPx = 0;
       let writerSeekOk = false;
       try {
-        seekToBlockAnimated(commit.blockId, reason);
+        seekToBlockAnimated(commit.blockId, reason, {
+          targetTop,
+        });
         writerSeekOk = true;
       } catch {
         writerSeekOk = false;
@@ -3606,17 +3618,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     stopCommitPursuit('pixel-commit');
-    const max = Math.max(0, deps.scroller.scrollHeight - deps.scroller.clientHeight);
-    const targetTopRawCandidate = Number.isFinite(commit.targetTop)
-      ? commit.targetTop
-      : (Number.isFinite(commit.nextTargetTop) ? commit.nextTargetTop : beforeTop);
-    const targetTopRaw =
-      finiteNumberOrNull('commit.targetTop.raw', targetTopRawCandidate, {
-        reason,
-        lineIdx: commit.lineIdx,
-        blockId: commit.blockId,
-      }) ?? beforeTop;
-    const targetTop = clamp(targetTopRaw, 0, max);
     const appliedTop = applyCanonicalScrollTop(targetTop, {
       scroller: deps.scroller,
       reason,

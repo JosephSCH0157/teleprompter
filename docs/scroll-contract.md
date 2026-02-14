@@ -24,7 +24,7 @@ When `scrollMode='asr'`:
 - No preroll event may trigger movement.
 - Movement trigger is ASR commit only.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
-- ASR writer seek target is block-top aligned (scroll matched block into view), not marker-centered.
+- ASR commit movement is writer-first: resolve block mapping via `seekToBlockAnimated(...)`, then (in ASR mode) ease toward commit `targetTop` with bounded-speed animation; this remains commit-driven (no continuous ASR motor lane).
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays in an upper viewport band and forward readable lookahead remains visible.
 - Post-commit readability nudge must preserve minimum active-line visibility; it may not push the active line above the top viewport edge.
 - Live ASR capture may force interim hypotheses on transport even when UI interim toggle is off; commit/movement remains gated by ASR commit logic.

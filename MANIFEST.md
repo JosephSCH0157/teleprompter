@@ -65,7 +65,7 @@ In `scrollMode='asr'`:
 - `session.asrArmed` gates ASR movement permission only (commit may process bookkeeping while unarmed, but must not write scroll).
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
-- ASR writer seek target is block-top aligned (scroll block into view); marker-centered anchoring is for continuous modes, not ASR commits.
+- ASR commit movement is writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first, then in ASR mode eases toward commit `targetTop` using a bounded-speed seek animation (no free-running motor lane).
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line in the upper viewport band and preserve forward readable lines (minimum lookahead target) so commits never strand the reader at the bottom with no upcoming text visible.
 - Post-commit readability nudges must preserve a minimum active-line visibility band; readability may not push the active line off the top edge.
 - Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
