@@ -70,6 +70,10 @@ type PendingMatch = {
   };
   tieGap?: number;
   stickinessApplied?: boolean;
+  cursorLine?: number;
+  searchWindowFrom?: number;
+  searchWindowTo?: number;
+  lostMode?: boolean;
 };
 
 type AsrEventSnapshot = {
@@ -392,6 +396,9 @@ const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA = 2;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN = 2;
 const DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA = 1;
+const DEFAULT_WRITER_ADDRESSABLE_MIN_INDEXED_LINES = 8;
+const DEFAULT_WRITER_ADDRESSABLE_MIN_RATIO = 0.15;
+const DEFAULT_WRITER_ADDRESSABLE_MIN_FLOOR = 3;
 const DEFAULT_BEHIND_CANDIDATE_MIN_SIM = 0.9;
 const DEFAULT_BEHIND_CANDIDATE_MIN_TOKENS = 3;
 const DEFAULT_BEHIND_CANDIDATE_MIN_CHARS = 24;
@@ -402,6 +409,16 @@ const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$
 const NOTE_TAG_ONLY_RE = /^\s*\[\s*\/?\s*note(?:[^\]]*)\]\s*$/i;
 const NOTE_INLINE_BLOCK_RE = /^\s*\[\s*note(?:[^\]]*)\][\s\S]*\[\s*\/\s*note\s*\]\s*$/i;
 const MAX_CUE_SKIP_LOOKAHEAD_LINES = 12;
+const INDEXED_LINE_SELECTOR = [
+  '.line[data-i]',
+  '.line[data-index]',
+  '.line[data-line]',
+  '.line[data-line-idx]',
+  '.tp-line[data-i]',
+  '.tp-line[data-index]',
+  '.tp-line[data-line]',
+  '.tp-line[data-line-idx]',
+].join(', ');
 const MOTION_PRESET_NORMAL = {
   maxLinesPerCommit: MAX_LINES_PER_COMMIT,
   deltaSmoothingFactor: DELTA_SMOOTHING_FACTOR,
@@ -1139,6 +1156,89 @@ function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number):
   return null;
 }
 
+function getIndexedLineElementByIndex(scroller: HTMLElement | null, lineIndex: number): HTMLElement | null {
+  const idx = Math.max(0, Math.floor(lineIndex));
+  const selectors = [
+    `.line[data-i="${idx}"]`,
+    `.tp-line[data-i="${idx}"]`,
+    `.line[data-index="${idx}"]`,
+    `.tp-line[data-index="${idx}"]`,
+    `.line[data-line="${idx}"]`,
+    `.tp-line[data-line="${idx}"]`,
+    `.line[data-line-idx="${idx}"]`,
+    `.tp-line[data-line-idx="${idx}"]`,
+  ];
+  const roots: Array<ParentNode | null> = [
+    scroller,
+    getScriptRoot(),
+    getPrimaryScroller(),
+    document,
+  ];
+  for (const root of roots) {
+    if (!root) continue;
+    for (const selector of selectors) {
+      const candidate = (root as ParentNode).querySelector?.(selector) as HTMLElement | null;
+      if (candidate) return candidate;
+    }
+  }
+  try {
+    const idHit = document.getElementById(`tp-line-${idx}`) as HTMLElement | null;
+    if (idHit) return idHit;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+type WriterAddressabilityProbe = {
+  allowed: boolean;
+  indexedLineCount: number;
+  minIndexedLineCount: number;
+  hasTargetIndexedLine: boolean;
+  totalLinesHint: number;
+};
+
+function assessWriterLineAddressability(
+  scroller: HTMLElement | null,
+  targetLineIndex: number,
+  totalLinesHintInput: number,
+): WriterAddressabilityProbe {
+  const roots: Array<ParentNode | null> = [scroller, getScriptRoot(), getPrimaryScroller(), document];
+  const indexedLineSet = new Set<HTMLElement>();
+  for (const root of roots) {
+    if (!root) continue;
+    let nodes: NodeListOf<HTMLElement> | null = null;
+    try {
+      nodes = (root as ParentNode).querySelectorAll?.(INDEXED_LINE_SELECTOR) as NodeListOf<HTMLElement> | null;
+    } catch {
+      nodes = null;
+    }
+    if (!nodes) continue;
+    nodes.forEach((el) => {
+      if (el) indexedLineSet.add(el);
+    });
+  }
+  const indexedLineCount = indexedLineSet.size;
+  const totalLinesHint = Number.isFinite(totalLinesHintInput) && totalLinesHintInput > 0
+    ? Math.max(0, Math.floor(totalLinesHintInput))
+    : 0;
+  const ratioNeed = totalLinesHint > 0
+    ? Math.ceil(totalLinesHint * DEFAULT_WRITER_ADDRESSABLE_MIN_RATIO)
+    : DEFAULT_WRITER_ADDRESSABLE_MIN_INDEXED_LINES;
+  const minIndexedLineCount = Math.max(
+    DEFAULT_WRITER_ADDRESSABLE_MIN_FLOOR,
+    Math.min(DEFAULT_WRITER_ADDRESSABLE_MIN_INDEXED_LINES, ratioNeed),
+  );
+  const hasTargetIndexedLine = !!getIndexedLineElementByIndex(scroller, targetLineIndex);
+  return {
+    allowed: hasTargetIndexedLine && indexedLineCount >= minIndexedLineCount,
+    indexedLineCount,
+    minIndexedLineCount,
+    hasTargetIndexedLine,
+    totalLinesHint,
+  };
+}
+
 function computeLineTargetTop(scroller: HTMLElement | null, lineEl: HTMLElement | null): number | null {
   if (!scroller || !lineEl) return null;
   const offset = Math.max(0, (scroller.clientHeight - (lineEl.offsetHeight || lineEl.clientHeight || 0)) / 2);
@@ -1276,6 +1376,44 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
     return Math.max(0, Math.floor(bestIdx));
   } catch {
     return 0;
+  }
+}
+
+function scheduleCommitTruthProbe(
+  scroller: HTMLElement | null,
+  payload: {
+    beforeScrollTop: number;
+    afterScrollTop: number;
+    writerSeekLineIdx: number | null;
+    commitLineIdx: number;
+  },
+) {
+  if (!isDevMode()) return;
+  const before = Number.isFinite(payload.beforeScrollTop) ? Math.round(payload.beforeScrollTop) : 'na';
+  const after = Number.isFinite(payload.afterScrollTop) ? Math.round(payload.afterScrollTop) : 'na';
+  const writerSeekLineIdx = Number.isFinite(payload.writerSeekLineIdx as number)
+    ? Math.max(0, Math.floor(payload.writerSeekLineIdx as number))
+    : 'na';
+  const commitLineIdx = Number.isFinite(payload.commitLineIdx)
+    ? Math.max(0, Math.floor(payload.commitLineIdx))
+    : 'na';
+  const logFn = () => {
+    const postRafTopRaw = scroller?.scrollTop;
+    const postRafTop = Number.isFinite(postRafTopRaw as number)
+      ? Math.round(postRafTopRaw as number)
+      : 'na';
+    try {
+      console.info(
+        `ASR_COMMIT_TRUTH beforeScrollTop=${before} afterScrollTop=${after} writerSeekLineIdx=${writerSeekLineIdx} commitLineIdx=${commitLineIdx} actualViewerScrollTop=${postRafTop}`,
+      );
+    } catch {
+      // ignore
+    }
+  };
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(logFn);
+  } else {
+    setTimeout(logFn, 0);
   }
 }
 
@@ -3841,6 +3979,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         requiredThreshold: pendingRequiredThreshold,
         topScores = [],
         tieGap,
+        cursorLine: pendingCursorLine,
+        searchWindowFrom,
+        searchWindowTo,
+        lostMode: pendingLostMode,
       } = pending;
       const thresholds = getAsrDriverThresholds();
       syncMotionTuning(thresholds, now);
@@ -3853,6 +3995,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const matchThreshold = Number.isFinite(minThresholdValue)
         ? clamp(minThresholdValue, 0, 1)
         : baselineRequired;
+      const commitCursorLine = Number.isFinite(pendingCursorLine ?? NaN)
+        ? Math.max(0, Math.floor(Number(pendingCursorLine)))
+        : Math.max(0, Math.floor(lastLineIndex));
+      const debugSearchFrom = Number.isFinite(searchWindowFrom ?? NaN)
+        ? Math.max(0, Math.floor(Number(searchWindowFrom)))
+        : null;
+      const debugSearchTo = Number.isFinite(searchWindowTo ?? NaN)
+        ? Math.max(0, Math.floor(Number(searchWindowTo)))
+        : null;
+      const debugLostMode = pendingLostMode === true;
       const deltaLines = Math.max(0, Math.floor(line) - lastLineIndex);
       const deltaMinSim = computeDeltaMinSim(deltaLines);
       const overshootActive = now < overshootRiskUntil;
@@ -4460,11 +4612,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         return;
       }
       const hasWriter = hasActiveScrollWriter();
+      const totalLinesHint = getTotalLines();
+      const writerAddressability = assessWriterLineAddressability(scroller, targetLine, totalLinesHint);
+      const writerAllowed = hasWriter && writerAddressability.allowed;
       let targetBlockId = -1;
+      let writerSeekLineIdx: number | null = null;
       try {
-        targetBlockId = findBlockByLine(targetLine)?.blockId ?? -1;
+        const targetBlock = findBlockByLine(targetLine);
+        targetBlockId = targetBlock?.blockId ?? -1;
+        writerSeekLineIdx = targetBlock ? targetBlock.startLine : null;
       } catch {
         targetBlockId = -1;
+        writerSeekLineIdx = null;
       }
       if (isDevMode() && shouldLogLevel(2)) {
         console.log('[ASR] commit->seek', {
@@ -4472,6 +4631,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           blockId: targetBlockId,
           lineIdx: targetLine,
           hasWriter,
+          writerAllowed,
+          writerIndexedLines: writerAddressability.indexedLineCount,
+          writerIndexedMin: writerAddressability.minIndexedLineCount,
+          writerHasTargetLine: writerAddressability.hasTargetIndexedLine,
+          writerTotalLinesHint: writerAddressability.totalLinesHint,
+          writerSeekLineIdx,
           mode: modeNow,
           role: resolveViewerRole(),
         });
@@ -4497,7 +4662,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           },
           {
             scroller,
-            writerAvailable: hasWriter,
+            writerAvailable: writerAllowed,
             role,
             path,
           },
@@ -4676,8 +4841,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         commitTopAfterForLogs,
         targetLine,
         targetBlockId,
-        hasWriter,
+        writerAllowed,
       );
+      scheduleCommitTruthProbe(scrollerForStamp || scroller, {
+        beforeScrollTop: commitBeforeTop,
+        afterScrollTop: commitTopAfterForLogs,
+        writerSeekLineIdx,
+        commitLineIdx: targetLine,
+      });
+      if (isDevMode()) {
+        const writerSeekLineOut = Number.isFinite(writerSeekLineIdx as number)
+          ? Math.max(0, Math.floor(writerSeekLineIdx as number))
+          : 'na';
+        const searchFromOut = debugSearchFrom ?? 'na';
+        const searchToOut = debugSearchTo ?? 'na';
+        try {
+          console.info(
+            `ASR_COMMIT_DEBUG cursorLine=${commitCursorLine} bestMatchLine=${Math.max(0, Math.floor(line))} searchWindow={from:${searchFromOut},to:${searchToOut}} lostMode=${debugLostMode ? 1 : 0} writerSeekLine=${writerSeekLineOut}`,
+          );
+        } catch {
+          // ignore
+        }
+      }
       if (modeNow !== 'asr' && !writerCommitted && !didGlide) {
         ensurePursuitActive();
       }
@@ -7076,6 +7261,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       deltaFromCursor <= smallForwardEvidenceMaxDelta &&
       conf >= requiredThreshold &&
       !hasAmbiguousForwardCollision;
+    const lostMode =
+      resyncActive ||
+      lagRelockActive ||
+      stuckResyncActive ||
+      catchUpModeActive ||
+      lookaheadBase > matchLookaheadLines ||
+      forceReason === 'watchdog';
     let hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
       ? true
       : isFinal
@@ -7128,6 +7320,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       relockRepeat: relockRepeatCount || undefined,
       matchId,
       recoveryDetails,
+      cursorLine,
+      searchWindowFrom: bandStart,
+      searchWindowTo: bandEnd,
+      lostMode,
     });
     schedulePending();
   };

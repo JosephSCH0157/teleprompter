@@ -14,7 +14,7 @@ If a behavior is confusing, start here before editing code.
 2. **One owner per truth.** If two modules can "own" the same state, we will eventually get split-brain.
 3. **Globals are views.** `window.*` exports are allowed only as thin wrappers around SSOT.
 4. **Dialects must translate.** Any subsystem with its own mode vocabulary must map into canonical types.
-5. **ASR is an isolated lane.** In `scrollMode='asr'`, scrolling is commit-driven only. No motor/auto-intent/tick-driven scrolling is allowed. Movement must come from ASR commit -> writer seek, with pixel fallback only when writer/block mapping is unavailable.
+5. **ASR is an isolated lane.** In `scrollMode='asr'`, scrolling is commit-driven only. No motor/auto-intent/tick-driven scrolling is allowed. Movement must come from ASR commit -> writer seek when the DOM is line-addressable, with pixel fallback when writer/block mapping or line-addressability is unavailable.
 6. **Viewer is the canonical scroller.** Runtime scroll reads/writes must resolve through `getScrollerEl()` and target `main#viewer.viewer` (fallback `#viewer`) for main viewer role.
 
 ---
@@ -64,8 +64,8 @@ In `scrollMode='asr'`:
 - ASR driver attach/readiness is independent from movement arming: mode selection with script blocks present should attach/create driver + ingest path before live.
 - `session.asrArmed` gates ASR movement permission only (commit may process bookkeeping while unarmed, but must not write scroll).
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
-- Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
-- ASR commit movement is writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first, then in ASR mode eases toward commit `targetTop` using a bounded-speed seek animation (no free-running motor lane).
+- Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first) only when line-addressable commit anchors are present in meaningful quantity.
+- ASR commit movement is conditionally writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first when the DOM is line-addressable; otherwise ASR must use the non-writer targetTop path (no free-running motor lane).
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line near the marker band (not pinned at top) while preserving forward readable lines (minimum lookahead target) so commits remain readable without jumping ahead.
 - Post-commit readability nudges must preserve a marker-centered active-line band and may not push the active line above that band solely to satisfy lookahead.
 - Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
