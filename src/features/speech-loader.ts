@@ -1906,7 +1906,7 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
     (window as any).__tpAsrBlockCount = blocks.count;
   } catch {}
   const markerIdx = computeMarkerLineIndex();
-  if (asrLive && reason === 'scroll-mode') {
+  if (asrLive) {
     lastAsrBlockSyncAt = now;
     if (isDevMode()) {
       logAsrBlockSyncComplete({
@@ -1918,9 +1918,9 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
         source: blocks.source,
         scriptSig: blocks.scriptSig,
       });
-      if (shouldLogLevel(2) && shouldLogTag('ASR:live-scroll-mode-sync:suppressed', 2, ASR_BLOCK_SYNC_LOG_THROTTLE_MS)) {
+      if (shouldLogLevel(2) && shouldLogTag('ASR:live-block-sync:suppressed', 2, ASR_BLOCK_SYNC_LOG_THROTTLE_MS)) {
         try {
-          console.debug('[ASR] live scroll-mode sync suppressed', {
+          console.debug('[ASR] live block sync suppressed', {
             reason,
             mode,
             phase,
