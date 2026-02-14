@@ -3711,7 +3711,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           ? tieGap
           : undefined;
       const tieOk = tieMargin === undefined || tieMargin >= thresholds.tieDelta;
-      const strongMatch = conf >= effectiveMatchThreshold && tieOk;
+      const watchdogThreshold = clamp(Math.max(stuckWatchdogForwardFloor, thresholds.candidateMinSim), 0, 1);
+      const watchdogBypass =
+        forceReason === 'watchdog' &&
+        line > lastLineIndex &&
+        conf >= watchdogThreshold;
+      const strongMatch = watchdogBypass || (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
           ? [`tie=${formatLogScore(tieMargin)}`, `tieNeed=${formatLogScore(thresholds.tieDelta)}`]
@@ -3762,6 +3767,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           tieGap: typeof tieMargin === 'number' ? Number(tieMargin.toFixed(3)) : undefined,
         });
         return;
+      }
+      if (watchdogBypass && (conf < effectiveMatchThreshold || !tieOk)) {
+        logDev('watchdog bypass', {
+          line,
+          prev: lastLineIndex,
+          sim: conf,
+          watchdogNeed: watchdogThreshold,
+          normalNeed: effectiveMatchThreshold,
+          tieOk,
+          tieGap: tieMargin,
+        });
       }
 
       let targetLine = Math.max(0, Math.floor(line));
