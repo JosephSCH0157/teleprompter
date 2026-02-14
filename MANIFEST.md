@@ -68,6 +68,7 @@ In `scrollMode='asr'`:
 - ASR writer seek target is block-top aligned (scroll block into view); marker-centered anchoring is for continuous modes, not ASR commits.
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line in the upper viewport band and preserve forward readable lines (minimum lookahead target) so commits never strand the reader at the bottom with no upcoming text visible.
 - Post-commit readability nudges must preserve a minimum active-line visibility band; readability may not push the active line off the top edge.
+- Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
 - Score arbitration must bias forward continuation when transcript evidence is longer than the current line and a forward multi-line window (`span>=2`) scores at/near current-line score (within small slack) and above floor.
@@ -83,6 +84,7 @@ In `scrollMode='asr'`:
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.
 - For short-final utterances inside the recent-forward window, strong forward candidates above floor may satisfy forced-evidence without requiring the general token/char minima.
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.
+- WebSpeech `onend` while ASR session is active must auto-restart recognizer; explicit stop must not auto-restart.
 
 ---
 

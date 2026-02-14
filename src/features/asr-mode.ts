@@ -154,9 +154,19 @@ export class AsrMode {
 
     this.setState('ready');
     const endpointingMs = Math.max(1400, s.endpointingMs);
+    // Keep transport responsive in live ASR: capture interim hypotheses even when
+    // the UI setting is off. Commit gating still controls actual movement.
+    const effectiveInterim = true;
+    if (effectiveInterim !== s.interim) {
+      logAsrDebug('[ASR interim override]', {
+        configured: s.interim,
+        effective: effectiveInterim,
+        reason: 'live-responsiveness',
+      });
+    }
     await this.engine.start({
       lang: s.lang,
-      interim: s.interim,
+      interim: effectiveInterim,
       endpointingMs,
       profanityFilter: false,
     });

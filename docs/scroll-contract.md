@@ -27,6 +27,7 @@ When `scrollMode='asr'`:
 - ASR writer seek target is block-top aligned (scroll matched block into view), not marker-centered.
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays in an upper viewport band and forward readable lookahead remains visible.
 - Post-commit readability nudge must preserve minimum active-line visibility; it may not push the active line above the top viewport edge.
+- Live ASR capture may force interim hypotheses on transport even when UI interim toggle is off; commit/movement remains gated by ASR commit logic.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
 - Forward scan must score speakable joined windows (multi-line candidates) in addition to single-line candidates, so combined ASR phrases can advance to the correct forward line.
@@ -43,6 +44,7 @@ When `scrollMode='asr'`:
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.
 - In short-final recent-forward cases, strong forward candidates above floor may satisfy forced-evidence even if general token/char minima are not met.
 - `session.scrollAutoOnLive` does not gate ASR live attach/start logic.
+- WebSpeech `onend` during an active ASR session must auto-restart recognition; manual/session stop must terminate without restart loops.
 - ASR index seeding from `blocks:scroll-mode` must resolve block-first, then derive line within block.
 - If derived line is cue-only (`[pause]`, `[beat]`, `[reflective pause]`), advance to the first speakable line in that block.
 - ASR anchor/cursor/evidence scans operate on speakable lines only; cue/tag/note-only render lines stay visible in UI but are excluded from ASR match domain.
