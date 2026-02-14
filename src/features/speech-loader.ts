@@ -1906,6 +1906,34 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
     (window as any).__tpAsrBlockCount = blocks.count;
   } catch {}
   const markerIdx = computeMarkerLineIndex();
+  if (asrLive && reason === 'scroll-mode') {
+    lastAsrBlockSyncAt = now;
+    if (isDevMode()) {
+      logAsrBlockSyncComplete({
+        reason,
+        mode,
+        markerIdx,
+        blockCount: blocks.count,
+        schemaVersion: blocks.schemaVersion,
+        source: blocks.source,
+        scriptSig: blocks.scriptSig,
+      });
+      if (shouldLogLevel(2) && shouldLogTag('ASR:live-scroll-mode-sync:suppressed', 2, ASR_BLOCK_SYNC_LOG_THROTTLE_MS)) {
+        try {
+          console.debug('[ASR] live scroll-mode sync suppressed', {
+            reason,
+            mode,
+            phase,
+            markerIdx,
+            blockCount: blocks.count,
+            schemaVersion: blocks.schemaVersion,
+          });
+        } catch {}
+      }
+    }
+    emitHudSnapshot(`block-sync:${reason}`);
+    return;
+  }
   syncAsrIndices(markerIdx, `blocks:${reason}`);
   if (asrLive) {
     lastAsrBlockSyncAt = now;
