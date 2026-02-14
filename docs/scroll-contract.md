@@ -45,7 +45,7 @@ When `scrollMode='asr'`:
 - Out-of-band guard must be non-destructive (no evidence buffer clear or backward reseed); ignore and continue listening for in-band forward evidence.
 - Stuck watchdog fail-safe: if phase is live, ASR is armed, transcript traffic continues (finals or sustained interim bursts), and commit count has not advanced for watchdog window, attempt a bounded forward recovery commit from forward scan at low floor.
 - If watchdog selects a forward recovery candidate while interim buffer is still growing, treat that as forward-progress evidence: do not reject it as `interim_unstable`, and preserve watchdog floor through low-sim gating for that recovery attempt.
-- Commit-time clamp: before ASR commit finalization (writer/pixel), cap forward rescue delta to a small fixed value (default `+2` lines) for `watchdog` and other forced reasons; emit `ASR_CLAMP` dev log when the clamp is applied.
+- Commit-time clamp: before ASR commit finalization (writer/pixel), cap forward delta for all commits to a small window (default `+2` lines) unless confidence is strong (default `sim>=0.70`); emit `ASR_CLAMP` dev log when the clamp is applied.
 - Guard profile defaults are relaxed for forward continuity: reduce same-line throttle, lower forced-evidence floors, and trigger watchdog recovery sooner while keeping forward recovery bounded.
 - Any non-finite (`NaN`/`Infinity`) value in ASR commit/seek numeric paths must be hard-guarded and dropped; emit a dev diagnostic (`ASR NAN GUARD` / writer non-finite guard) instead of propagating unstable math.
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.

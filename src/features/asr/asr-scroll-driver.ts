@@ -372,8 +372,8 @@ const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 14;
 const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.12;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
-const DEFAULT_WATCHDOG_COMMIT_MAX_DELTA_LINES = 2;
-const DEFAULT_FORCED_COMMIT_MAX_DELTA_LINES = 2;
+const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 2;
+const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.7;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
@@ -3818,20 +3818,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetLine = cappedLine;
       }
       const forceTag = String(forceReason || '').toLowerCase();
-      const clampDeltaLimit =
-        forceTag === 'watchdog'
-          ? DEFAULT_WATCHDOG_COMMIT_MAX_DELTA_LINES
-          : forced
-            ? DEFAULT_FORCED_COMMIT_MAX_DELTA_LINES
-            : null;
-      if (clampDeltaLimit != null && targetLine > lastLineIndex + clampDeltaLimit) {
+      const strongForwardCommit = conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
+      const clampDeltaLimit = DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
+      if (
+        targetLine > lastLineIndex + clampDeltaLimit &&
+        !strongForwardCommit
+      ) {
         const requestedLine = targetLine;
         targetLine = lastLineIndex + clampDeltaLimit;
         if (isDevMode()) {
           try {
-            const clampClass = forceTag === 'watchdog' ? 'watchdog' : 'forced';
+            const clampClass = forceTag === 'watchdog' ? 'watchdog' : forced ? 'forced' : 'normal';
+            const clampReason = forceTag === 'watchdog' ? 'watchdog' : forced ? 'forced' : 'weak_forward';
             console.info(
-              `ASR_CLAMP ${clampClass} prev=${lastLineIndex} req=${requestedLine} clamped=${targetLine} reason=${forceReason || 'forced'}`,
+              `ASR_CLAMP ${clampClass} prev=${lastLineIndex} req=${requestedLine} clamped=${targetLine} sim=${formatLogScore(conf)} reason=${clampReason}`,
             );
           } catch {}
         }
