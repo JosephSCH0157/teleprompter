@@ -281,6 +281,7 @@ const DEFAULT_NO_MATCH_RELOCK_HITS = 6;
 const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
+const DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM = 0.2;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
 const DEFAULT_LOW_SIM_FLOOR = 0.25;
@@ -3793,7 +3794,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         forceReason === 'watchdog' &&
         line > lastLineIndex &&
         conf >= watchdogThreshold;
-      const strongMatch = watchdogBypass || (conf >= effectiveMatchThreshold && tieOk);
+      const progressiveFloorBypass =
+        forceReason === 'progressive-floor' &&
+        line >= lastLineIndex &&
+        conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+        isSessionAsrArmed() &&
+        isSessionLivePhase();
+      const strongMatch = watchdogBypass || progressiveFloorBypass || (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
           ? [`tie=${formatLogScore(tieMargin)}`, `tieNeed=${formatLogScore(thresholds.tieDelta)}`]
@@ -6266,6 +6273,42 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockReason = isFinal ? 'final' : repeatOk ? 'repeat' : spanOk ? 'span' : 'overlap';
       }
     }
+    const strongBehindCandidate = topScoresSpeakable.some((entry) => {
+      const idx = Number(entry.idx);
+      const score = Number(entry.score);
+      if (!Number.isFinite(idx) || !Number.isFinite(score)) return false;
+      if (idx >= cursorLine) return false;
+      return score >= Math.max(strongBackSim, requiredThreshold);
+    });
+    const progressiveForwardFloorEligible =
+      isSessionAsrArmed() &&
+      commitCount > 0 &&
+      bufferGrowing &&
+      rawIdx >= cursorLine &&
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+      !strongBehindCandidate;
+    if (progressiveForwardFloorEligible) {
+      const beforeNeed = effectiveThreshold;
+      effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM);
+      if (rawIdx > cursorLine) {
+        forceReason = forceReason || 'progressive-floor';
+      }
+      if (isDevMode() && shouldLogTag('ASR_PROGRESSIVE_FLOOR', 2, 250)) {
+        try {
+          console.debug('[ASR_PROGRESSIVE_FLOOR]', {
+            current: cursorLine,
+            best: rawIdx,
+            sim: Number(conf.toFixed(3)),
+            beforeNeed: Number(beforeNeed.toFixed(3)),
+            need: Number(effectiveThreshold.toFixed(3)),
+            bufferGrowing: !!bufferGrowing,
+            commitCount,
+          });
+        } catch {
+          // ignore
+        }
+      }
+    }
     const watchdogForwardSelected = forceReason === 'watchdog' && rawIdx > cursorLine;
     const watchdogForwardInterimProgress =
       !isFinal &&
@@ -6494,6 +6537,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       (committedFloor == null || rawIdx > committedFloor) &&
       conf >= forwardThreshold &&
       bufferGrowing;
+    const progressiveForwardInterimProgress =
+      !isFinal &&
+      forceReason === 'progressive-floor' &&
+      rawIdx >= cursorLine &&
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+      bufferGrowing;
     if (!isFinal) {
       if (!allowInterimCommit) {
         interimEligible = false;
@@ -6501,7 +6550,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         conf < interimHighThreshold &&
         !(consistencyState.ok || catchupState.ok) &&
         !strongForwardInterimProgress &&
-        !watchdogForwardInterimProgress
+        !watchdogForwardInterimProgress &&
+        !progressiveForwardInterimProgress
       ) {
         lastInterimBestIdx = -1;
         interimRepeatCount = 0;
@@ -6530,7 +6580,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         interimEligible =
           interimRepeatCount >= effectiveInterimRepeats || consistencyState.ok || catchupState.ok;
         if (!interimEligible) {
-          if (strongForwardInterimProgress || watchdogForwardInterimProgress) {
+          if (strongForwardInterimProgress || watchdogForwardInterimProgress || progressiveForwardInterimProgress) {
             interimEligible = true;
           } else {
             warnGuard('interim_unstable', [
