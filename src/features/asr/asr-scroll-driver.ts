@@ -2520,6 +2520,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return null;
   };
 
+  const findNextSpokenLineIndexWithin = (
+    startIndex: number,
+    endIndexInclusive: number,
+  ): number | null => {
+    const total = getTotalLines();
+    if (!Number.isFinite(startIndex) || !Number.isFinite(endIndexInclusive) || total <= 0) return null;
+    const begin = Math.max(0, Math.floor(startIndex));
+    const end = Math.min(total - 1, Math.max(begin, Math.floor(endIndexInclusive)));
+    if (begin > end) return null;
+    for (let idx = begin; idx <= end; idx += 1) {
+      const lineText = getLineTextAt(idx);
+      if (!isIgnorableCueLineText(lineText)) {
+        return idx;
+      }
+    }
+    return null;
+  };
+
   const prevSpeakableLineFrom = (
     startIndex: number,
     maxLookback = MAX_CUE_SKIP_LOOKAHEAD_LINES,
@@ -5692,6 +5710,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let forceReason: string | undefined;
     let relockOverride = false;
     let relockReason: string | undefined;
+    const shortFinalTightEvidenceBypass =
+      isFinal &&
+      rawIdx >= cursorLine &&
+      rawIdx <= cursorLine + 1 &&
+      conf >= requiredThreshold;
+    const forcedEvidenceOkTight = forcedEvidenceOk || shortFinalTightEvidenceBypass;
     const allowForced = !isHybridMode();
     if (allowForced && outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
       logForwardScanProbe({
@@ -5723,7 +5747,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `floor=${formatLogScore(outrunFloor)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
-      } else if (!forcedEvidenceOk) {
+      } else if (!forcedEvidenceOkTight) {
         logForcedDeny('evidence', [
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
@@ -5883,7 +5907,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         bestForwardSource: bestForwardSource,
         floor: outrunFloor,
       });
-      if (!forcedEvidenceOk) {
+      if (!forcedEvidenceOkTight) {
         logForcedDeny('evidence', [
           `tokens=${tokenCount}`,
           `chars=${evidenceChars}`,
@@ -6176,6 +6200,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         stuckResyncActive,
       });
       return;
+    }
+    const finalMatchNudgeEligible =
+      isFinal &&
+      rawIdx === cursorLine &&
+      conf >= effectiveThreshold;
+    if (finalMatchNudgeEligible) {
+      const nudgeDeltaCap = Math.max(1, Math.min(2, DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES));
+      const nudgeTarget = findNextSpokenLineIndexWithin(cursorLine + 1, cursorLine + nudgeDeltaCap);
+      if (Number.isFinite(nudgeTarget as number) && (nudgeTarget as number) > cursorLine) {
+        const before = rawIdx;
+        rawIdx = Math.max(cursorLine + 1, Math.floor(nudgeTarget as number));
+        if (isDevMode()) {
+          try {
+            console.info(
+              `ASR_NUDGE final_match best=${before} cursor=${cursorLine} -> next=${rawIdx}`,
+            );
+          } catch {}
+        }
+      }
     }
     recordConsistencyEntry({
       ts: now,
