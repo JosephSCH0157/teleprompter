@@ -32,9 +32,9 @@ let lastNonFiniteGuardAt = 0;
 const WRITE_MISMATCH_LOG_THROTTLE_MS = 2000;
 const WRITE_MISMATCH_EPSILON_PX = 1;
 const NON_FINITE_GUARD_THROTTLE_MS = 1000;
-const ASR_SEEK_DEFAULT_LINES_PER_SEC = 1.25;
-const ASR_SEEK_MIN_DURATION_MS = 220;
-const ASR_SEEK_MAX_DURATION_MS = 650;
+const ASR_SEEK_DEFAULT_LINES_PER_SEC = 1;
+const ASR_SEEK_MIN_DURATION_MS = 280;
+const ASR_SEEK_MAX_DURATION_MS = 900;
 const ASR_SEEK_EPSILON_PX = 0.5;
 const ASR_SEEK_MIN_PX_PER_SEC = 36;
 const ASR_SEEK_MAX_PX_PER_SEC = 280;
@@ -45,6 +45,7 @@ type SeekAnimationOptions = {
   maxPxPerSecond?: number | null;
   minDurationMs?: number;
   maxDurationMs?: number;
+  forceAnimated?: boolean;
 };
 
 function shouldWarnWrites(): boolean {
@@ -151,6 +152,10 @@ function cancelSeekAnimation(): void {
   if (!activeSeekAnim) return;
   try { activeSeekAnim.cancel(); } catch {}
   activeSeekAnim = null;
+}
+
+export function isSeekAnimationActive(): boolean {
+  return activeSeekAnim != null;
 }
 
 function readScrollTop(scroller: HTMLElement): number {
@@ -416,7 +421,8 @@ export function seekToBlockAnimated(blockIdx: number, reason: string, opts: Seek
   cancelSeekAnimation();
   const runId = activeSeekAnimRunId;
   const mode = getScrollMode();
-  if (mode !== 'asr' || prefersReducedMotion()) {
+  const forceAnimated = opts.forceAnimated === true;
+  if ((!forceAnimated && mode !== 'asr') || (!forceAnimated && prefersReducedMotion())) {
     seekToBlock(blockIdx, reason);
     return;
   }

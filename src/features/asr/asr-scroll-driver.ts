@@ -12,7 +12,7 @@ import {
   resolveActiveScroller,
 } from '../../scroll/scroller';
 import { getAsrBlockElements } from '../../scroll/asr-block-store';
-import { seekToBlockAnimated } from '../../scroll/scroll-writer';
+import { isSeekAnimationActive, seekToBlockAnimated } from '../../scroll/scroll-writer';
 import { shouldLogScrollWrite } from '../../scroll/scroll-helpers';
 import {
   areAsrThresholdsDirty,
@@ -357,23 +357,26 @@ const WITHIN_BLOCK_CONTINUITY_SIM_SLACK = 0.04;
 const POST_COMMIT_ACTIVE_MAX_RATIO = 0.58;
 const POST_COMMIT_ACTIVE_TARGET_RATIO = 0.42;
 const POST_COMMIT_ACTIVE_MIN_RATIO = 0.14;
-const POST_COMMIT_MIN_READABLE_LINES_BELOW = 8;
+const POST_COMMIT_ACTIVE_BAND_RADIUS = 0.08;
+const POST_COMMIT_MIN_READABLE_LINES_BELOW = 4;
 const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
 const POST_COMMIT_MIN_NUDGE_PX = 1;
 const POST_COMMIT_WRITER_SETTLE_MS = 230;
+const POST_COMMIT_WRITER_SETTLE_RETRY_MS = 90;
+const POST_COMMIT_WRITER_SETTLE_MAX_RETRIES = 12;
 const COMMIT_BAND_RESEED_BACK_LINES = 2;
 const COMMIT_BAND_RESEED_AHEAD_LINES = 60;
 const COMMIT_BAND_RESEED_TTL_MS = 2200;
 const DEFAULT_STUCK_WATCHDOG_FINAL_EVENTS = 3;
-const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 2800;
+const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 3600;
 const DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS = 2500;
 const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 14;
-const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.12;
+const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.2;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
-const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 2;
-const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.7;
+const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 1;
+const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
@@ -2677,40 +2680,71 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const beforeTop = Number(scroller.scrollTop || 0);
     const beforeMetrics = measurePostCommitReadability(scroller, activeLineIndex);
     let targetTop = beforeTop;
+    const markerRatioRaw =
+      typeof (window as any).__TP_MARKER_PCT === 'number'
+        ? Number((window as any).__TP_MARKER_PCT)
+        : POST_COMMIT_ACTIVE_TARGET_RATIO;
+    const markerTargetRatio = clamp(markerRatioRaw, POST_COMMIT_ACTIVE_MIN_RATIO, POST_COMMIT_ACTIVE_MAX_RATIO);
+    const markerBandMinRatio = clamp(
+      markerTargetRatio - POST_COMMIT_ACTIVE_BAND_RADIUS,
+      POST_COMMIT_ACTIVE_MIN_RATIO,
+      markerTargetRatio,
+    );
+    const markerBandMaxRatio = clamp(
+      markerTargetRatio + POST_COMMIT_ACTIVE_BAND_RADIUS,
+      markerTargetRatio,
+      POST_COMMIT_ACTIVE_MAX_RATIO,
+    );
     const ratio = beforeMetrics.activeLineViewportRatio;
     if (
       ratio != null &&
       beforeMetrics.activeCenterY != null &&
-      ratio > POST_COMMIT_ACTIVE_MAX_RATIO
+      ratio > markerBandMaxRatio
     ) {
       const desiredCenter =
-        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * POST_COMMIT_ACTIVE_TARGET_RATIO;
+        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerTargetRatio;
       const ratioNudgePx = Math.max(0, beforeMetrics.activeCenterY - desiredCenter);
       if (ratioNudgePx > 0) {
         targetTop = Math.max(targetTop, beforeTop + ratioNudgePx);
       }
     }
-    if (beforeMetrics.requiredLookaheadOverflowPx > 0) {
+    if (
+      beforeMetrics.requiredLookaheadOverflowPx > 0 &&
+      ratio != null &&
+      ratio > markerBandMaxRatio
+    ) {
       targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredLookaheadOverflowPx);
     }
     if (beforeMetrics.activeCenterY != null) {
+      const desiredCenter =
+        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerTargetRatio;
+      if (ratio != null && ratio < markerBandMinRatio) {
+        const raisePx = Math.max(0, desiredCenter - beforeMetrics.activeCenterY);
+        if (raisePx > 0) {
+          targetTop = Math.min(targetTop, beforeTop - raisePx);
+        }
+      }
       const minCenter =
-        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * POST_COMMIT_ACTIVE_MIN_RATIO;
-      const maxExtraDownPx = Math.max(0, beforeMetrics.activeCenterY - minCenter);
-      targetTop = Math.min(targetTop, beforeTop + maxExtraDownPx);
+        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerBandMinRatio;
+      const maxCenter =
+        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerBandMaxRatio;
+      const minDeltaPx = beforeMetrics.activeCenterY - maxCenter;
+      const maxDeltaPx = beforeMetrics.activeCenterY - minCenter;
+      const clampedDeltaPx = clamp(targetTop - beforeTop, minDeltaPx, maxDeltaPx);
+      targetTop = beforeTop + clampedDeltaPx;
     }
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     targetTop = clamp(targetTop, 0, maxTop);
     let nudgeApplied = false;
     let afterTop = beforeTop;
-    if ((opts?.allowNudge ?? true) && targetTop > beforeTop + POST_COMMIT_MIN_NUDGE_PX) {
+    if ((opts?.allowNudge ?? true) && Math.abs(targetTop - beforeTop) > POST_COMMIT_MIN_NUDGE_PX) {
       const applied = applyCanonicalScrollTop(targetTop, {
         scroller,
         reason: 'asr-post-commit-readability',
         source: 'asr-commit',
       });
       afterTop = Number.isFinite(applied) ? Number(applied) : Number(scroller.scrollTop || targetTop);
-      if (afterTop > beforeTop + POST_COMMIT_MIN_NUDGE_PX) {
+      if (Math.abs(afterTop - beforeTop) > POST_COMMIT_MIN_NUDGE_PX) {
         nudgeApplied = true;
         pursuitTargetTop = afterTop;
         lastKnownScrollTop = afterTop;
@@ -2768,6 +2802,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         fromTop: Math.round(metrics.beforeTop),
         toTop: Math.round(metrics.afterTop),
         targetTop: Math.round(metrics.targetTop),
+        markerPct:
+          typeof (window as any).__TP_MARKER_PCT === 'number'
+            ? Number((window as any).__TP_MARKER_PCT.toFixed(3))
+            : null,
       });
     } catch {
       // ignore
@@ -3583,6 +3621,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       try {
         seekToBlockAnimated(commit.blockId, reason, {
           targetTop,
+          forceAnimated: true,
         });
         writerSeekOk = true;
       } catch {
@@ -4315,22 +4354,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           commitAfterTop = immediateReadability.afterTop;
         }
         if (writerCommitted && !writerNoMove) {
-          const settleTimer = window.setTimeout(() => {
-            postCommitReadabilityTimers.delete(settleTimer);
-            if (disposed) return;
-            if (readabilitySeq !== postCommitReadabilitySeq) return;
-            if (getScrollMode() !== 'asr') return;
-            const settledReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
-              allowNudge: true,
-            });
-            logPostCommitReadabilityProbe(
-              'commit:writer-settle',
-              targetLine,
-              writerCommitted,
-              settledReadability,
-            );
-          }, POST_COMMIT_WRITER_SETTLE_MS);
-          postCommitReadabilityTimers.add(settleTimer);
+          const scheduleSettleReadability = (attempt: number, delayMs: number) => {
+            const settleTimer = window.setTimeout(() => {
+              postCommitReadabilityTimers.delete(settleTimer);
+              if (disposed) return;
+              if (readabilitySeq !== postCommitReadabilitySeq) return;
+              if (getScrollMode() !== 'asr') return;
+              if (isSeekAnimationActive() && attempt < POST_COMMIT_WRITER_SETTLE_MAX_RETRIES) {
+                scheduleSettleReadability(attempt + 1, POST_COMMIT_WRITER_SETTLE_RETRY_MS);
+                return;
+              }
+              const settledReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
+                allowNudge: true,
+              });
+              logPostCommitReadabilityProbe(
+                'commit:writer-settle',
+                targetLine,
+                writerCommitted,
+                settledReadability,
+              );
+            }, delayMs);
+            postCommitReadabilityTimers.add(settleTimer);
+          };
+          scheduleSettleReadability(0, POST_COMMIT_WRITER_SETTLE_MS);
         }
       } else if (!writerCommitted) {
         if (nextTargetTop > base) {
@@ -5915,6 +5961,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       eventsSinceCommit >= stuckWatchdogInterimEvents &&
       now - lastIngestAt <= stuckWatchdogInterimRecentMs;
     const watchdogTrafficOk = watchdogByFinals || watchdogByInterims;
+    const watchdogStrongCurrentHold =
+      rawIdx === cursorLine &&
+      conf >= Math.max(effectiveThreshold, 0.62);
     const watchdogStalled =
       allowForced &&
       isSessionLivePhase() &&
@@ -5922,6 +5971,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       watchdogTrafficOk &&
       now - lastCommitAt >= stuckWatchdogNoCommitMs &&
       now - lastStuckWatchdogAt >= stuckWatchdogCooldownMs &&
+      !watchdogStrongCurrentHold &&
       (rawIdx <= cursorLine || conf < effectiveThreshold);
     if (watchdogStalled) {
       const watchdogForward = forwardBandScores

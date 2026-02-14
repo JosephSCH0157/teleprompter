@@ -66,8 +66,8 @@ In `scrollMode='asr'`:
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
 - ASR commit movement is writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first, then in ASR mode eases toward commit `targetTop` using a bounded-speed seek animation (no free-running motor lane).
-- After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line in the upper viewport band and preserve forward readable lines (minimum lookahead target) so commits never strand the reader at the bottom with no upcoming text visible.
-- Post-commit readability nudges must preserve a minimum active-line visibility band; readability may not push the active line off the top edge.
+- After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line near the marker band (not pinned at top) while preserving forward readable lines (minimum lookahead target) so commits remain readable without jumping ahead.
+- Post-commit readability nudges must preserve a marker-centered active-line band and may not push the active line above that band solely to satisfy lookahead.
 - Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
@@ -85,7 +85,7 @@ In `scrollMode='asr'`:
 - If out-of-band guard blocks a candidate, it must be non-destructive (no evidence-buffer clear and no backward reseed/poisoning side effects); continue listening for in-band forward evidence.
 - Add a stuck watchdog fail-safe: in live armed ASR sessions, if commit count does not change for the watchdog window while transcript traffic continues (finals, or sustained interim bursts in long-endpoint sessions), attempt a bounded forward recovery commit from the forward scan at a low floor.
 - When watchdog selects a forward recovery candidate in a growing interim stream, treat that candidate as forward-progress evidence: do not let `interim_unstable` re-block it, and carry watchdog floor into low-sim arbitration for that recovery attempt.
-- Commit-time safety clamp: before ASR writer/pixel commit finalization, bound forward index delta for all commits. If forward delta exceeds the clamp window (default `+2` lines), allow the full jump only when confidence is strong (default `sim>=0.70`); otherwise clamp and emit a dev `ASR_CLAMP` line.
+- Commit-time safety clamp: before ASR writer/pixel commit finalization, bound forward index delta for all commits. If forward delta exceeds the clamp window (default `+1` line), allow the full jump only when confidence is strong (default `sim>=0.82`); otherwise clamp and emit a dev `ASR_CLAMP` line.
 - ASR guard profile defaults are relaxed for forward continuity: shorter same-line throttle, lower forced-evidence floors, and earlier watchdog recovery with a still-bounded forward window.
 - Non-finite (`NaN`/`Infinity`) values in ASR target/scroll math must be guarded at the writer and commit path choke points; reject the write/step and emit a dev-only diagnostic guard line.
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.
