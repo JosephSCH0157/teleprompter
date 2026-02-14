@@ -370,6 +370,8 @@ const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 4500;
 const DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS = 2500;
 const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 10;
 const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.25;
+const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 16;
+const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
@@ -1242,6 +1244,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastStallLogAt = 0;
   let lastForwardCommitAt = Date.now();
   let finalsSinceCommit = 0;
+  let eventsSinceCommit = 0;
   let lastStuckWatchdogAt = 0;
   let stallRescueRequested = false;
   let stallHudEmitted = false;
@@ -1884,6 +1887,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const stuckWatchdogCooldownMs = DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS;
   const stuckWatchdogMaxDeltaLines = DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES;
   const stuckWatchdogForwardFloor = DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR;
+  const stuckWatchdogInterimEvents = DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS;
+  const stuckWatchdogInterimRecentMs = DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS;
   const slamDunkSim = DEFAULT_SLAM_DUNK_SIM;
   const slamDunkMaxDelta = DEFAULT_SLAM_DUNK_MAX_DELTA;
   const confirmationRelaxedSim = DEFAULT_CONFIRMATION_RELAXED_SIM;
@@ -2790,6 +2795,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     commitCount += 1;
     finalsSinceCommit = 0;
+    eventsSinceCommit = 0;
     logDriverActive('commit');
     stallHudEmitted = false;
     if (firstCommitIndex == null && Number.isFinite(prevIndex)) {
@@ -4420,6 +4426,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    eventsSinceCommit += 1;
     if (isFinal) {
       finalsSinceCommit += 1;
     }
@@ -5765,12 +5772,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logDev('forward bias', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
       }
     }
+    const watchdogByFinals = finalsSinceCommit >= stuckWatchdogFinalEvents;
+    const watchdogByInterims =
+      eventsSinceCommit >= stuckWatchdogInterimEvents &&
+      now - lastIngestAt <= stuckWatchdogInterimRecentMs;
+    const watchdogTrafficOk = watchdogByFinals || watchdogByInterims;
     const watchdogStalled =
       allowForced &&
-      isFinal &&
       isSessionLivePhase() &&
       isSessionAsrArmed() &&
-      finalsSinceCommit >= stuckWatchdogFinalEvents &&
+      watchdogTrafficOk &&
       now - lastCommitAt >= stuckWatchdogNoCommitMs &&
       now - lastStuckWatchdogAt >= stuckWatchdogCooldownMs &&
       (rawIdx <= cursorLine || conf < effectiveThreshold);
@@ -5794,6 +5805,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `sim=${formatLogScore(conf)}`,
           `need=${formatLogScore(effectiveThreshold)}`,
           `delta=${rawIdx - cursorLine}`,
+          `traffic=${watchdogByInterims ? 'interim' : 'final'}`,
+          `eventsSinceCommit=${eventsSinceCommit}`,
           `finalsSinceCommit=${finalsSinceCommit}`,
           `stallMs=${now - lastCommitAt}`,
           snippet ? `clue="${snippet}"` : '',
@@ -6517,6 +6530,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lagRelockHits = 0;
     lagRelockWindowStart = 0;
     lastForwardCommitAt = Date.now();
+    finalsSinceCommit = 0;
+    eventsSinceCommit = 0;
     resetLookahead('sync-index');
     if (pendingRaf) {
       try { cancelAnimationFrame(pendingRaf); } catch {}

@@ -40,7 +40,7 @@ When `scrollMode='asr'`:
 - During live ASR, `blocks:*` sync may refresh block metadata but must not rewrite cursor/index truth (`currentIndex` / driver line index).
 - After forward/forced commit seek, reseed the match band around the committed index (small back tolerance, forward window) before next ingest so stale pre-commit windows cannot force immediate `match_out_of_band`.
 - Out-of-band guard must be non-destructive (no evidence buffer clear or backward reseed); ignore and continue listening for in-band forward evidence.
-- Stuck watchdog fail-safe: if phase is live, ASR is armed, final speech events continue, and commit count has not advanced for watchdog window, attempt a bounded forward recovery commit from forward scan at low floor.
+- Stuck watchdog fail-safe: if phase is live, ASR is armed, transcript traffic continues (finals or sustained interim bursts), and commit count has not advanced for watchdog window, attempt a bounded forward recovery commit from forward scan at low floor.
 - Any non-finite (`NaN`/`Infinity`) value in ASR commit/seek numeric paths must be hard-guarded and dropped; emit a dev diagnostic (`ASR NAN GUARD` / writer non-finite guard) instead of propagating unstable math.
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.
 - In short-final recent-forward cases, strong forward candidates above floor may satisfy forced-evidence even if general token/char minima are not met.
