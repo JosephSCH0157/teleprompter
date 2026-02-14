@@ -6131,10 +6131,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     let interimEligible = true;
+    const forwardThreshold = Math.max(requiredThreshold, effectiveThresholdForPending);
+    const strongForwardInterimProgress =
+      !isFinal &&
+      rawIdx > cursorLine &&
+      (committedFloor == null || rawIdx > committedFloor) &&
+      conf >= forwardThreshold &&
+      bufferGrowing;
     if (!isFinal) {
       if (!allowInterimCommit) {
         interimEligible = false;
-      } else if (conf < interimHighThreshold && !(consistencyState.ok || catchupState.ok)) {
+      } else if (
+        conf < interimHighThreshold &&
+        !(consistencyState.ok || catchupState.ok) &&
+        !strongForwardInterimProgress
+      ) {
         lastInterimBestIdx = -1;
         interimRepeatCount = 0;
         interimEligible = false;
@@ -6162,15 +6173,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         interimEligible =
           interimRepeatCount >= effectiveInterimRepeats || consistencyState.ok || catchupState.ok;
         if (!interimEligible) {
-          warnGuard('interim_unstable', [
-            `current=${cursorLine}`,
-            `best=${rawIdx}`,
-            `delta=${rawIdx - cursorLine}`,
-            `sim=${formatLogScore(conf)}`,
-            `repeats=${interimRepeatCount}`,
-            `need=${effectiveInterimRepeats}`,
-            snippet ? `clue="${snippet}"` : '',
-          ]);
+          if (strongForwardInterimProgress) {
+            interimEligible = true;
+          } else {
+            warnGuard('interim_unstable', [
+              `current=${cursorLine}`,
+              `best=${rawIdx}`,
+              `delta=${rawIdx - cursorLine}`,
+              `sim=${formatLogScore(conf)}`,
+              `repeats=${interimRepeatCount}`,
+              `need=${effectiveInterimRepeats}`,
+              snippet ? `clue="${snippet}"` : '',
+            ]);
+          }
         }
       }
     } else {
