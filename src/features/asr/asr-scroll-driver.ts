@@ -282,9 +282,11 @@ const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 const DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM = 0.2;
-const DEFAULT_STABLE_INTERIM_NUDGE_MS = 650;
+const DEFAULT_STABLE_INTERIM_NUDGE_MS = 450;
 const DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS = 900;
-const DEFAULT_STABLE_INTERIM_NUDGE_TOKEN_DELTA = 1;
+const DEFAULT_STABLE_INTERIM_PREFIX_MIN_TOKENS = 3;
+const DEFAULT_STABLE_INTERIM_PREFIX_MIN_RATIO = 0.7;
+const DEFAULT_STABLE_INTERIM_PREFIX_MAX_TAIL_DRIFT_TOKENS = 3;
 const DEFAULT_NOISE_INTERIM_MIN_TOKENS = 3;
 const DEFAULT_NOISE_INTERIM_MIN_CHARS = 12;
 const BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS = 1500;
@@ -503,12 +505,33 @@ function hasMeaningfulTranscriptChange(previousNormalized: string, nextNormalize
   if (!prev && !next) return false;
   if (!prev || !next) return true;
   if (prev === next) return false;
-  const sharesPrefix = prev.startsWith(next) || next.startsWith(prev);
-  if (sharesPrefix) {
-    const prevTokens = prev.split(' ').filter(Boolean).length;
-    const nextTokens = next.split(' ').filter(Boolean).length;
-    return Math.abs(nextTokens - prevTokens) > DEFAULT_STABLE_INTERIM_NUDGE_TOKEN_DELTA;
+  const prevTokens = prev.split(' ').filter(Boolean);
+  const nextTokens = next.split(' ').filter(Boolean);
+  if (!prevTokens.length || !nextTokens.length) return true;
+
+  let sharedPrefix = 0;
+  const sharedLimit = Math.min(prevTokens.length, nextTokens.length);
+  while (sharedPrefix < sharedLimit && prevTokens[sharedPrefix] === nextTokens[sharedPrefix]) {
+    sharedPrefix += 1;
   }
+  if (sharedPrefix === 0) return true;
+
+  // Growing interim text with a stable leading phrase should not reset stability.
+  const appendOnly =
+    sharedPrefix === prevTokens.length &&
+    nextTokens.length >= prevTokens.length;
+  if (appendOnly) return false;
+
+  // Minor tail corrections are treated as stable if most of the leading phrase is unchanged.
+  const minTokenLen = Math.min(prevTokens.length, nextTokens.length);
+  const prefixRatio = minTokenLen > 0 ? sharedPrefix / minTokenLen : 0;
+  const tailDrift = Math.abs(nextTokens.length - prevTokens.length);
+  const prefixStable =
+    sharedPrefix >= DEFAULT_STABLE_INTERIM_PREFIX_MIN_TOKENS &&
+    prefixRatio >= DEFAULT_STABLE_INTERIM_PREFIX_MIN_RATIO &&
+    tailDrift <= DEFAULT_STABLE_INTERIM_PREFIX_MAX_TAIL_DRIFT_TOKENS;
+  if (prefixStable) return false;
+
   return true;
 }
 
