@@ -346,6 +346,7 @@ const MIN_PX_PER_SEC = 18;
 const WITHIN_BLOCK_CONTINUITY_SIM_SLACK = 0.04;
 const POST_COMMIT_ACTIVE_MAX_RATIO = 0.58;
 const POST_COMMIT_ACTIVE_TARGET_RATIO = 0.42;
+const POST_COMMIT_ACTIVE_MIN_RATIO = 0.14;
 const POST_COMMIT_MIN_READABLE_LINES_BELOW = 8;
 const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
@@ -364,6 +365,7 @@ const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA = 2;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN = 2;
+const DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA = 1;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -2612,6 +2614,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (beforeMetrics.requiredLookaheadOverflowPx > 0) {
       targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredLookaheadOverflowPx);
     }
+    if (beforeMetrics.activeCenterY != null) {
+      const minCenter =
+        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * POST_COMMIT_ACTIVE_MIN_RATIO;
+      const maxExtraDownPx = Math.max(0, beforeMetrics.activeCenterY - minCenter);
+      targetTop = Math.min(targetTop, beforeTop + maxExtraDownPx);
+    }
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
     targetTop = clamp(targetTop, 0, maxTop);
     let nudgeApplied = false;
@@ -3695,6 +3703,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           });
         }
         targetLine = continuityLine;
+      }
+      if (
+        commitCount === 0 &&
+        lastLineIndex <= 3 &&
+        !forced &&
+        targetLine - lastLineIndex > DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA
+      ) {
+        const cappedLine = lastLineIndex + DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA;
+        if (isDevMode()) {
+          logDev('first-commit continuity cap', {
+            current: lastLineIndex,
+            from: targetLine,
+            to: cappedLine,
+            maxDelta: DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA,
+          });
+        }
+        targetLine = cappedLine;
       }
       const confirmDelta = targetLine - lastLineIndex;
       if (confirmDelta < DELTA_LARGE_MIN_LINES && largeDeltaConfirm) {
@@ -5422,10 +5447,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         0,
         1,
       );
+      const weakForwardMaxDelta =
+        commitCount === 0 && cursorLine <= 3
+          ? Math.min(DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA, DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA)
+          : DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA;
       const weakForwardCandidate = forwardBandScores
         .filter((entry) =>
           entry.idx > cursorLine &&
-          entry.idx - cursorLine <= DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA &&
+          entry.idx - cursorLine <= weakForwardMaxDelta &&
           entry.span <= DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN)
         .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
       if (
@@ -5443,6 +5472,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `forward=${rawIdx}`,
           `delta=${rawIdx - cursorLine}`,
           `span=${weakForwardCandidate.span}`,
+          `maxDelta=${weakForwardMaxDelta}`,
           `sim=${formatLogScore(conf)}`,
           `need=${formatLogScore(effectiveThreshold)}`,
           `overlapTokens=${overlapTokensCurrent.length}`,

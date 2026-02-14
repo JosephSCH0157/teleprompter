@@ -26,12 +26,14 @@ When `scrollMode='asr'`:
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - ASR writer seek target is block-top aligned (scroll matched block into view), not marker-centered.
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays in an upper viewport band and forward readable lookahead remains visible.
+- Post-commit readability nudge must preserve minimum active-line visibility; it may not push the active line above the top viewport edge.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
 - Forward scan must score speakable joined windows (multi-line candidates) in addition to single-line candidates, so combined ASR phrases can advance to the correct forward line.
 - Arbitration must allow forward continuation when transcript length exceeds current-line length and a forward window (`span>=2`) meets floor and near-current score slack.
 - If current-line evidence is lexically weak (very low overlap tokens) and a forward candidate is near-score and above floor, prefer forward candidate instead of same-line recenter.
 - Weak-current forward rescue must be continuity-bounded (`delta<=2`, `span<=2`) so low-overlap anchors cannot leap multiple lines/paragraphs.
+- First near-start commit is continuity-capped (`delta<=1`, non-forced) to prevent startup overshoot from buffered multi-line transcript chunks.
 - Match selection is band-preferred: pick best candidate from active band (+tiny backward tolerance) first, but permit forward-window continuation/fallback before hard reject.
 - During live ASR, `blocks:*` sync may refresh block metadata but must not rewrite cursor/index truth (`currentIndex` / driver line index).
 - After forward/forced commit seek, reseed the match band around the committed index (small back tolerance, forward window) before next ingest so stale pre-commit windows cannot force immediate `match_out_of_band`.

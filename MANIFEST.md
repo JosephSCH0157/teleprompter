@@ -67,11 +67,13 @@ In `scrollMode='asr'`:
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first).
 - ASR writer seek target is block-top aligned (scroll block into view); marker-centered anchoring is for continuous modes, not ASR commits.
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line in the upper viewport band and preserve forward readable lines (minimum lookahead target) so commits never strand the reader at the bottom with no upcoming text visible.
+- Post-commit readability nudges must preserve a minimum active-line visibility band; readability may not push the active line off the top edge.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
 - Score arbitration must bias forward continuation when transcript evidence is longer than the current line and a forward multi-line window (`span>=2`) scores at/near current-line score (within small slack) and above floor.
 - If current-line match has weak lexical overlap (token-poor anchor) while a forward candidate clears floor and near-score slack, prefer forward candidate over same-line recenter.
 - Weak-current forward rescue is bounded to near-forward continuity (`delta<=2`, `span<=2`) so token-poor anchors cannot trigger paragraph jumps.
+- First near-start commit continuity is capped (`delta<=1`, non-forced) to avoid startup overshoot from buffered multi-line transcript bursts.
 - Match selection must be band-preferred: choose best candidate from the active band first (with at most a tiny backward tolerance), but allow forward-window continuation/fallback before hard rejecting.
 - Live block sync (`blocks:*`) must not overwrite ASR cursor truth (`currentIndex`/driver line index); index seeding is pre-live/bootstrap behavior only.
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.
