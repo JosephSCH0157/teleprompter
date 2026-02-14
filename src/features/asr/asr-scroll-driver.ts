@@ -383,6 +383,9 @@ const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA = 2;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN = 2;
 const DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA = 1;
+const DEFAULT_BEHIND_CANDIDATE_MIN_SIM = 0.9;
+const DEFAULT_BEHIND_CANDIDATE_MIN_TOKENS = 3;
+const DEFAULT_BEHIND_CANDIDATE_MIN_CHARS = 24;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -514,6 +517,18 @@ function isIgnorableCueLineText(value: string): boolean {
   if (CUE_LINE_BRACKET_RE.test(raw)) return true;
   const tokenCount = normalized.split(' ').filter(Boolean).length;
   return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized);
+}
+
+function isBehindCandidateEligible(
+  score: number,
+  tokenCount: number,
+  evidenceChars: number,
+): boolean {
+  return (
+    Number.isFinite(score) &&
+    score >= DEFAULT_BEHIND_CANDIDATE_MIN_SIM &&
+    (tokenCount >= DEFAULT_BEHIND_CANDIDATE_MIN_TOKENS || evidenceChars >= DEFAULT_BEHIND_CANDIDATE_MIN_CHARS)
+  );
 }
 
 function buildAsrBlockCorpusFromElements(blockEls: HTMLElement[]): AsrBlockCorpusEntry[] {
@@ -4932,6 +4947,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const currentIdxRaw = stateCurrentIdx != null ? stateCurrentIdx : Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? Math.max(0, Math.floor(currentIdxRaw)) : -1;
     const cursorLine = currentIdx >= 0 ? currentIdx : (lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor);
+    if (
+      rawIdx < cursorLine &&
+      !isBehindCandidateEligible(conf, tokenCount, evidenceChars)
+    ) {
+      const replacement = topScoresSpeakable
+        .filter((entry) => entry.idx >= cursorLine)
+        .sort((a, b) => b.score - a.score || Math.abs(a.idx - cursorLine) - Math.abs(b.idx - cursorLine) || a.idx - b.idx)[0];
+      if (replacement) {
+        rawIdx = replacement.idx;
+        conf = replacement.score;
+        usedLineFallback = true;
+      }
+    }
     if (isDevMode() && shouldLogTag('ASR_INGEST_CURSOR', 2, 500)) {
       const markerRaw = computeMarkerLineIndex(getScroller());
       const markerIdx = Number.isFinite(markerRaw) ? Math.max(0, Math.floor(markerRaw)) : -1;
@@ -5081,6 +5109,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const idx = Math.max(0, Math.floor(Number(entry.idx)));
       const score = Number(entry.score);
       if (!Number.isFinite(idx) || !Number.isFinite(score)) return;
+      if (idx < cursorLine && !isBehindCandidateEligible(score, tokenCount, evidenceChars)) return;
       if (idx < bandStart || idx > bandEnd) return;
       const existing = inBandCandidateMap.get(idx);
       if (existing == null || score > existing) {
@@ -5091,6 +5120,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       Number.isFinite(rawIdx) &&
       rawIdx >= bandStart &&
       rawIdx <= bandEnd &&
+      !(rawIdx < cursorLine && !isBehindCandidateEligible(conf, tokenCount, evidenceChars)) &&
       !isIgnorableCueLineText(getLineTextAt(rawIdx))
     ) {
       const idx = Math.max(0, Math.floor(rawIdx));
@@ -5170,6 +5200,40 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         rawScoreByIdx.set(idx, score);
       }
     });
+    let overrideReason: string | undefined;
+    const transcriptComparableForOverride = normalizeComparableText(bufferedText || compacted || text);
+    const currentLineComparableForOverride = normalizeComparableText(getLineTextAt(cursorLine));
+    let currentLineSim = Number(rawScoreByIdx.get(cursorLine));
+    if (
+      (!Number.isFinite(currentLineSim) || currentLineSim < 0) &&
+      transcriptComparableForOverride &&
+      currentLineComparableForOverride
+    ) {
+      const transcriptTokens = normTokens(transcriptComparableForOverride);
+      const currentLineTokens = normTokens(currentLineComparableForOverride);
+      if (transcriptTokens.length && currentLineTokens.length) {
+        currentLineSim = computeLineSimilarityFromTokens(transcriptTokens, currentLineTokens);
+      }
+    }
+    if (
+      rawIdx < cursorLine &&
+      Number.isFinite(currentLineSim) &&
+      currentLineSim >= requiredThreshold
+    ) {
+      const before = rawIdx;
+      const beforeSim = conf;
+      rawIdx = cursorLine;
+      conf = currentLineSim;
+      usedLineFallback = true;
+      overrideReason = 'override_current_over_behind';
+      if (isDevMode()) {
+        try {
+          console.info(
+            `[ASR_OVERRIDE] reason=override_current_over_behind current=${cursorLine} best=${before} sim=${formatLogScore(beforeSim)} curSim=${formatLogScore(currentLineSim)} need=${formatLogScore(requiredThreshold)}`,
+          );
+        } catch {}
+      }
+    }
     const bestSpan = Number((match as any)?.bestSpan);
     const bestOverlap = Number((match as any)?.bestOverlap);
     const bestOverlapRatio = Number((match as any)?.bestOverlapRatio);
@@ -5358,6 +5422,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       bestIndex: rawIdx,
       delta: rawIdx - cursorLine,
       sim: Number.isFinite(conf) ? Number(conf.toFixed(3)) : conf,
+      reason: overrideReason,
       scrollTop: Math.round(scrollTopForMatch),
       winBack: matchWindowBack,
       winAhead: matchWindowAhead,
