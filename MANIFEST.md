@@ -70,6 +70,7 @@ In `scrollMode='asr'`:
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
 - Score arbitration must bias forward continuation when transcript evidence is longer than the current line and a forward multi-line window (`span>=2`) scores at/near current-line score (within small slack) and above floor.
+- If current-line match has weak lexical overlap (token-poor anchor) while a forward candidate clears floor and near-score slack, prefer forward candidate over same-line recenter.
 - Match selection must be band-preferred: choose best candidate from the active band first (with at most a tiny backward tolerance), but allow forward-window continuation/fallback before hard rejecting.
 - Live block sync (`blocks:*`) must not overwrite ASR cursor truth (`currentIndex`/driver line index); index seeding is pre-live/bootstrap behavior only.
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.

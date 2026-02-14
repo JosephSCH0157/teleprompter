@@ -359,6 +359,9 @@ const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 4500;
 const DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS = 2500;
 const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 10;
 const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.25;
+const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
+const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 4;
+const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -5398,6 +5401,40 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } catch {
           // ignore
         }
+      }
+    }
+    const overlapTokensCurrent = getOverlapTokens(currentLineComparable, transcriptComparable);
+    const weakCurrentAnchor =
+      rawIdx === cursorLine &&
+      tokenCount >= DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS &&
+      overlapTokensCurrent.length <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS;
+    if (weakCurrentAnchor) {
+      const weakForwardFloor = clamp(
+        Math.max(thresholds.candidateMinSim, DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR),
+        0,
+        1,
+      );
+      const weakForwardCandidate = forwardBandScores
+        .filter((entry) => entry.idx > cursorLine)
+        .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
+      if (
+        weakForwardCandidate &&
+        weakForwardCandidate.score >= weakForwardFloor &&
+        weakForwardCandidate.score >= conf - DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK
+      ) {
+        const before = rawIdx;
+        rawIdx = weakForwardCandidate.idx;
+        conf = weakForwardCandidate.score;
+        effectiveThreshold = Math.min(effectiveThreshold, weakForwardFloor);
+        warnGuard('weak_current_forward', [
+          `current=${cursorLine}`,
+          `best=${before}`,
+          `forward=${rawIdx}`,
+          `sim=${formatLogScore(conf)}`,
+          `need=${formatLogScore(effectiveThreshold)}`,
+          `overlapTokens=${overlapTokensCurrent.length}`,
+          snippet ? `clue="${snippet}"` : '',
+        ]);
       }
     }
     if (shortFinalRecent && rawIdx >= cursorLine) {
