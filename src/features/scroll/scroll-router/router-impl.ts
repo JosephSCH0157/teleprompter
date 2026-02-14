@@ -5132,7 +5132,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     }
     lastMotorIgnoredLogKey = dedupeKey;
     lastMotorIgnoredLogAt = now;
-    try { console.info(line); } catch {}
+    try { console.debug(line); } catch {}
   }
   function scheduleApplyGate() {
     if (applyGateRaf != null) return;

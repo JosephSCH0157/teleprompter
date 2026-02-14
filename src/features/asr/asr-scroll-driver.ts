@@ -582,6 +582,15 @@ const logLastAt = new Map<string, number>();
 const guardStatusLastAt = new Map<string, number>();
 let activeGuardCounts: Map<string, number> | null = null;
 const guardEvents: Array<{ ts: number; reason: string }> = [];
+const GUARD_DEBUG_REASONS = new Set<string>([
+  'same_line_noop',
+  'same_line_throttle',
+  'match_out_of_band_defer',
+  'match_out_of_band',
+  'low_sim_wait',
+  'low_sim',
+  'interim_unstable',
+]);
 const LOG_THROTTLE_MS = 500;
 const HUD_STATUS_THROTTLE_MS = 500;
 const HUD_PURSUE_THROTTLE_MS = 200;
@@ -648,11 +657,13 @@ function warnGuard(reason: string, parts: Array<string | number | null | undefin
   const last = guardLastAt.get(reason) ?? 0;
   if (now - last < GUARD_THROTTLE_MS) return;
   guardLastAt.set(reason, now);
+  const level: 'warn' | 'debug' = GUARD_DEBUG_REASONS.has(reason) ? 'debug' : 'warn';
   try {
     const line = ['🧱 ASR_GUARD', `reason=${reason}`, ...parts.filter(Boolean)];
-    console.warn(line.join(' '));
+    if (level === 'debug') console.debug(line.join(' '));
+    else console.warn(line.join(' '));
   } catch {}
-  logThrottled(`ASR_GUARD:${reason}`, 'warn', 'ASR_GUARD', { reason, parts: parts.filter(Boolean) });
+  logThrottled(`ASR_GUARD:${reason}`, level, 'ASR_GUARD', { reason, parts: parts.filter(Boolean) });
 }
 
 function warnAsrNanGuard(
