@@ -4949,6 +4949,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const currentIdxRaw = stateCurrentIdx != null ? stateCurrentIdx : Number((window as any)?.currentIndex ?? -1);
     const currentIdx = Number.isFinite(currentIdxRaw) ? Math.max(0, Math.floor(currentIdxRaw)) : -1;
     const cursorLine = currentIdx >= 0 ? currentIdx : (lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor);
+    const transcriptComparableForCurrent = normalizeComparableText(bufferedText || compacted || text);
+    const currentLineComparableForCurrent = normalizeComparableText(getLineTextAt(cursorLine));
+    let currentLineDirectSim = Number.NaN;
+    if (transcriptComparableForCurrent && currentLineComparableForCurrent) {
+      const transcriptTokens = normTokens(transcriptComparableForCurrent);
+      const currentLineTokens = normTokens(currentLineComparableForCurrent);
+      if (transcriptTokens.length && currentLineTokens.length) {
+        currentLineDirectSim = computeLineSimilarityFromTokens(transcriptTokens, currentLineTokens);
+      }
+    }
     if (
       rawIdx < cursorLine &&
       !isBehindCandidateEligible(conf, tokenCount, evidenceChars)
@@ -4960,11 +4970,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         .sort((a, b) => b.score - a.score || Math.abs(a.idx - cursorLine) - Math.abs(b.idx - cursorLine) || a.idx - b.idx)[0];
       if (replacement) {
         rawIdx = replacement.idx;
-        conf = replacement.score;
+        conf =
+          rawIdx === cursorLine && Number.isFinite(currentLineDirectSim)
+            ? Math.max(replacement.score, currentLineDirectSim)
+            : replacement.score;
         usedLineFallback = true;
       } else {
         rawIdx = cursorLine;
-        conf = Math.min(Number.isFinite(conf) ? conf : 0, DEFAULT_CURRENT_OVERRIDE_MIN_SIM - 0.01);
+        conf = Number.isFinite(currentLineDirectSim)
+          ? currentLineDirectSim
+          : Math.min(Number.isFinite(conf) ? conf : 0, DEFAULT_CURRENT_OVERRIDE_MIN_SIM - 0.01);
         usedLineFallback = true;
       }
       if (isDevMode()) {
@@ -5131,9 +5146,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     });
     let overrideReason: string | undefined;
-    const transcriptComparableForOverride = normalizeComparableText(bufferedText || compacted || text);
-    const currentLineComparableForOverride = normalizeComparableText(getLineTextAt(cursorLine));
+    const transcriptComparableForOverride = transcriptComparableForCurrent;
+    const currentLineComparableForOverride = currentLineComparableForCurrent;
     let currentLineSim = Number(rawScoreByIdx.get(cursorLine));
+    if (Number.isFinite(currentLineDirectSim)) {
+      currentLineSim = Number.isFinite(currentLineSim)
+        ? Math.max(currentLineSim, currentLineDirectSim)
+        : currentLineDirectSim;
+    }
     if (
       (!Number.isFinite(currentLineSim) || currentLineSim < 0) &&
       transcriptComparableForOverride &&
@@ -5720,6 +5740,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let currentLineScore = Number.isFinite(currentLineScoreFromTop)
       ? currentLineScoreFromTop
       : Number.NaN;
+    if (Number.isFinite(currentLineDirectSim)) {
+      currentLineScore = Number.isFinite(currentLineScore)
+        ? Math.max(currentLineScore, currentLineDirectSim)
+        : currentLineDirectSim;
+    }
     if (!Number.isFinite(currentLineScore) && currentLineComparable && forwardMatcherInputs.length) {
       const currentLineTokens = normTokens(currentLineComparable);
       if (currentLineTokens.length) {
