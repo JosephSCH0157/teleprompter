@@ -260,6 +260,10 @@ const DEFAULT_OUTRUN_BEHIND_SIM_SLACK = 0.05;
 const DEFAULT_OUTRUN_BEHIND_MAX_DELTA = 2;
 const DEFAULT_OUTRUN_BEHIND_WIN_MARGIN = 0.01;
 const DEFAULT_OUTRUN_BEHIND_MIN_SIM = 0.55;
+const DEFAULT_OUTRUN_BEHIND_CONTINUATION_SIM_SLACK = 0.12;
+const DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_SIM = 0.34;
+const DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_TOKENS = 4;
+const DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_OVERLAP_TOKENS = 2;
 const DEFAULT_FORCED_RATE_WINDOW_MS = 10000;
 const DEFAULT_FORCED_RATE_MAX = 2;
 const DEFAULT_FORCED_COOLDOWN_MS = 5000;
@@ -5570,22 +5574,45 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const before = rawIdx;
             const outrunNeed = outrunFloor;
             const outrunFromBehind = before < cursorLine;
+            const behindContinuationSignal =
+              outrunFromBehind &&
+              isFinal &&
+              commitCount > 0 &&
+              transcriptLongerThanCurrent &&
+              tokenCount >= DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_TOKENS &&
+              overlapTokensCurrent.length >= DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_OVERLAP_TOKENS &&
+              now - lastForwardCommitAt <= DEFAULT_FORWARD_PROGRESS_WINDOW_MS;
             const nearForwardPick = outrunFromBehind
-              ? (forwardBandScores
-                  .filter((entry) =>
-                    entry.idx > cursorLine &&
-                    entry.idx - cursorLine <= DEFAULT_OUTRUN_BEHIND_MAX_DELTA)
-                  .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null)
+              ? (() => {
+                  const plusOne = forwardBandScores
+                    .filter((entry) => entry.idx === cursorLine + 1)
+                    .sort((a, b) => b.score - a.score || a.span - b.span)[0] || null;
+                  if (plusOne) return plusOne;
+                  return forwardBandScores
+                    .filter((entry) =>
+                      entry.idx > cursorLine &&
+                      entry.idx - cursorLine <= DEFAULT_OUTRUN_BEHIND_MAX_DELTA)
+                    .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
+                })()
               : null;
             const selectedOutrunPick = nearForwardPick || outrunPick;
             const selectedDelta = selectedOutrunPick.idx - cursorLine;
             const outrunCompetitiveNeed = outrunFromBehind
-              ? Math.max(
-                  outrunNeed,
-                  conf - DEFAULT_OUTRUN_BEHIND_SIM_SLACK,
-                  conf + DEFAULT_OUTRUN_BEHIND_WIN_MARGIN,
-                  DEFAULT_OUTRUN_BEHIND_MIN_SIM,
-                )
+              ? (behindContinuationSignal
+                  ? clamp(
+                      Math.max(
+                        DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_SIM,
+                        conf - DEFAULT_OUTRUN_BEHIND_CONTINUATION_SIM_SLACK,
+                      ),
+                      0,
+                      1,
+                    )
+                  : Math.max(
+                      outrunNeed,
+                      conf - DEFAULT_OUTRUN_BEHIND_SIM_SLACK,
+                      conf + DEFAULT_OUTRUN_BEHIND_WIN_MARGIN,
+                      DEFAULT_OUTRUN_BEHIND_MIN_SIM,
+                    ))
               : outrunNeed;
             if (outrunFromBehind && selectedDelta > DEFAULT_OUTRUN_BEHIND_MAX_DELTA) {
               logForcedDeny('behind_delta_cap', [
@@ -5608,7 +5635,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             } else {
               rawIdx = selectedOutrunPick.idx;
               conf = selectedOutrunPick.score;
-              effectiveThreshold = Math.min(effectiveThreshold, outrunNeed);
+              const outrunCommitNeed = outrunFromBehind && behindContinuationSignal
+                ? Math.min(outrunNeed, outrunCompetitiveNeed)
+                : outrunNeed;
+              effectiveThreshold = Math.min(effectiveThreshold, outrunCommitNeed);
               outrunCommit = true;
               forceReason = 'outrun';
               warnGuard('forward_outrun', [
@@ -5618,6 +5648,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 `sim=${formatLogScore(conf)}`,
                 `need=${formatLogScore(effectiveThreshold)}`,
                 `delta=${rawIdx - cursorLine}`,
+                behindContinuationSignal ? 'behindContinuation=1' : '',
                 snippet ? `clue="${snippet}"` : '',
               ]);
               logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
