@@ -2004,6 +2004,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastScriptHash = readScriptHash();
   }
 
+  const publishSharedCursor = (index: number, reason: string) => {
+    try {
+      window.dispatchEvent(new CustomEvent('tp:asr:cursor', {
+        detail: {
+          index,
+          reason,
+          source: 'asr-driver',
+        },
+      }));
+    } catch {
+      // ignore
+    }
+  };
+
   const setCurrentIndex = (nextIndex: number, reason: string) => {
     if (!Number.isFinite(nextIndex)) return;
     const next = Math.max(0, Math.floor(nextIndex));
@@ -2032,6 +2046,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lineMissingRetryCount = 0;
     }
     try { (window as any).currentIndex = next; } catch {}
+    publishSharedCursor(next, reason);
     rememberCommittedBlockFromLine(next);
     if (scriptHashChanged) lastScriptHash = scriptHash;
   };
@@ -4447,10 +4462,22 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ? Math.max(0, Math.floor(incomingIdxRaw))
       : null;
     const preferredIdx = stateCurrentIdx ?? incomingIdx;
+    const liveAsrSession = getScrollMode() === 'asr' && isSessionLivePhase();
+    const committedFloor = lastCommitIndex != null ? Math.max(0, Math.floor(lastCommitIndex)) : null;
     if (preferredIdx != null && preferredIdx !== lastLineIndex) {
-      lastLineIndex = preferredIdx;
-      matchAnchorIdx = preferredIdx;
-      rememberCommittedBlockFromLine(preferredIdx);
+      if (liveAsrSession && commitCount > 0 && committedFloor != null && preferredIdx < committedFloor) {
+        warnGuard('cursor_regression_ignored', [
+          `current=${lastLineIndex}`,
+          `incoming=${preferredIdx}`,
+          `floor=${committedFloor}`,
+          `state=${stateCurrentIdx ?? 'na'}`,
+          `detail=${incomingIdx ?? 'na'}`,
+        ]);
+      } else {
+        lastLineIndex = preferredIdx;
+        matchAnchorIdx = preferredIdx;
+        rememberCommittedBlockFromLine(preferredIdx);
+      }
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     let rawMatchId = (detail as any)?.matchId;

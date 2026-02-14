@@ -1496,6 +1496,40 @@ function resolveBlockIdxForLine(lineIdx: number, scroller: HTMLElement | null): 
   return hit ? hit.blockIdx : null;
 }
 
+function getAsrSyncCursorFloor(): number | null {
+  const mode = String(getScrollMode() || '').toLowerCase();
+  const phase = String(getSession().phase || '').toLowerCase();
+  if (mode !== 'asr' || phase !== 'live' || !running) return null;
+  const driverIdxRaw = Number(asrScrollDriver?.getLastLineIndex?.() ?? NaN);
+  if (!Number.isFinite(driverIdxRaw)) return null;
+  return Math.max(0, Math.floor(driverIdxRaw));
+}
+
+function shouldApplyAsrIndexSync(
+  idx: number,
+  reason: string,
+  interpretedAs: 'line' | 'block',
+): boolean {
+  const next = Math.max(0, Math.floor(Number(idx) || 0));
+  const floor = getAsrSyncCursorFloor();
+  if (floor == null || next >= floor) return true;
+  if (
+    isDevMode()
+    && shouldLogLevel(2)
+    && shouldLogTag(`ASR:index-sync-regression:${interpretedAs}:${reason}`, 2, ASR_SYNC_LOG_THROTTLE_MS)
+  ) {
+    try {
+      console.warn('[ASR] index sync ignored (regression)', {
+        idx: next,
+        floor,
+        interpretedAs,
+        reason,
+      });
+    } catch {}
+  }
+  return false;
+}
+
 function syncAsrBlockCursor(
   startIdx: number,
   reason: string,
@@ -1507,6 +1541,9 @@ function syncAsrBlockCursor(
   const cursor = resolveAsrBlockCursor(startIdx, scroller, topEpsilon);
   if (!cursor) return false;
   const idx = cursor.lineIdx;
+  if (!shouldApplyAsrIndexSync(idx, reason, 'block')) {
+    return true;
+  }
   const blockTopPx = Number.isFinite(cursor.blockTopPx) ? Math.round(cursor.blockTopPx) : cursor.blockTopPx;
   const schemaVersion = Number(getAsrBlockIndex()?.schemaVersion || 1);
   try { (window as any).currentIndex = idx; } catch {}
@@ -1572,6 +1609,7 @@ function syncAsrIndices(startIdx: number, reason: string): void {
   }
   const blockIdx = resolveBlockIdxForLine(idx, scroller);
   const schemaVersion = Number(getAsrBlockIndex()?.schemaVersion || 1);
+  if (!shouldApplyAsrIndexSync(idx, reason, 'line')) return;
   try { (window as any).currentIndex = idx; } catch {}
   try { asrScrollDriver?.setLastLineIndex?.(idx); } catch {}
   logAsrSync('index sync', {
