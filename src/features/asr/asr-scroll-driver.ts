@@ -282,6 +282,9 @@ const GUARD_THROTTLE_MS = 750;
 const DEFAULT_SHORT_TOKEN_MAX = 4;
 const DEFAULT_SHORT_TOKEN_BOOST = 0.12;
 const DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM = 0.2;
+const DEFAULT_STABLE_INTERIM_NUDGE_MS = 650;
+const DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS = 900;
+const DEFAULT_STABLE_INTERIM_NUDGE_TOKEN_DELTA = 1;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
 const DEFAULT_LOW_SIM_FLOOR = 0.25;
@@ -489,6 +492,21 @@ function getOverlapTokens(leftNormalized: string, rightNormalized: string): stri
     overlap.push(token);
   }
   return overlap;
+}
+
+function hasMeaningfulTranscriptChange(previousNormalized: string, nextNormalized: string): boolean {
+  const prev = String(previousNormalized || '').trim();
+  const next = String(nextNormalized || '').trim();
+  if (!prev && !next) return false;
+  if (!prev || !next) return true;
+  if (prev === next) return false;
+  const sharesPrefix = prev.startsWith(next) || next.startsWith(prev);
+  if (sharesPrefix) {
+    const prevTokens = prev.split(' ').filter(Boolean).length;
+    const nextTokens = next.split(' ').filter(Boolean).length;
+    return Math.abs(nextTokens - prevTokens) > DEFAULT_STABLE_INTERIM_NUDGE_TOKEN_DELTA;
+  }
+  return true;
 }
 
 function parseLineIndexFromElement(el: HTMLElement | null): number | null {
@@ -1839,6 +1857,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let overshootRiskUntil = 0;
   let largeDeltaConfirm: { idx: number; ts: number; hits: number } | null = null;
   const behindRecoveryHits: Array<{ ts: number; idx: number; sim: number; isFinal: boolean }> = [];
+  let stableInterimTranscriptNorm = '';
+  let stableInterimLastMeaningfulChangeAt = 0;
+  let lastStableInterimNudgeAt = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -5740,6 +5761,22 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     const transcriptComparable = forwardMatcherInputs[0] || '';
+    const stableComparable = transcriptComparable || normalizeComparableText(bufferedText || compacted || text);
+    if (!isSessionAsrArmed() || commitCount <= 0) {
+      stableInterimTranscriptNorm = stableComparable;
+      stableInterimLastMeaningfulChangeAt = now;
+    } else if (!stableInterimTranscriptNorm) {
+      stableInterimTranscriptNorm = stableComparable;
+      stableInterimLastMeaningfulChangeAt = now;
+    } else if (hasMeaningfulTranscriptChange(stableInterimTranscriptNorm, stableComparable)) {
+      stableInterimTranscriptNorm = stableComparable;
+      stableInterimLastMeaningfulChangeAt = now;
+    } else if (stableComparable.length > stableInterimTranscriptNorm.length) {
+      stableInterimTranscriptNorm = stableComparable;
+    }
+    const stableInterimMs = stableInterimLastMeaningfulChangeAt > 0
+      ? now - stableInterimLastMeaningfulChangeAt
+      : 0;
     const currentLineComparable = normalizeComparableText(getLineTextAt(cursorLine));
     const transcriptLongerThanCurrent =
       transcriptComparable.length > currentLineComparable.length;
@@ -6402,13 +6439,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal &&
       rawIdx === cursorLine &&
       conf >= effectiveThreshold;
-    if (finalMatchNudgeEligible) {
+    const stableInterimNudgeEligible =
+      !isFinal &&
+      isSessionAsrArmed() &&
+      commitCount > 0 &&
+      bufferGrowing &&
+      rawIdx === cursorLine &&
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+      stableInterimMs >= DEFAULT_STABLE_INTERIM_NUDGE_MS &&
+      now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS;
+    if (finalMatchNudgeEligible || stableInterimNudgeEligible) {
       const nudgeDeltaCap = Math.max(1, Math.min(2, DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES));
       const nudgeTarget = findNextSpokenLineIndexWithin(cursorLine + 1, cursorLine + nudgeDeltaCap);
       if (Number.isFinite(nudgeTarget as number) && (nudgeTarget as number) > cursorLine) {
         const before = rawIdx;
         rawIdx = Math.max(cursorLine + 1, Math.floor(nudgeTarget as number));
-        if (isDevMode()) {
+        if (stableInterimNudgeEligible) {
+          lastStableInterimNudgeAt = now;
+        }
+        if (isDevMode() && stableInterimNudgeEligible) {
+          try {
+            console.info(
+              `ASR_STABLE_INTERIM_NUDGE best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} stableMs=${stableInterimMs} -> next=${rawIdx}`,
+            );
+          } catch {}
+        } else if (isDevMode()) {
           try {
             console.info(
               `ASR_NUDGE final_match best=${before} cursor=${cursorLine} -> next=${rawIdx}`,
