@@ -1011,6 +1011,58 @@ function getLastWriterSource() {
   return null;
 }
 
+function classifyProgrammaticWriterKind(source: string | null | undefined, modeHint: string | null = null): ProgrammaticWriterKind {
+  const raw = String(source || '').toLowerCase();
+  const mode = String(modeHint || '').toLowerCase();
+  if (raw.includes('asr') || mode === 'asr') return 'asr';
+  if (
+    raw.includes('writer') ||
+    raw.includes('programmatic') ||
+    raw.includes('scrollwrite')
+  ) {
+    return 'writer';
+  }
+  return 'other';
+}
+
+function noteProgrammaticWriterStamp(source: string, kind: ProgrammaticWriterKind, at: number = nowMs()) {
+  if (kind === 'other') return;
+  lastProgrammaticWriterStamp = {
+    at,
+    source: String(source || 'programmatic'),
+    kind,
+  };
+}
+
+function getRecentProgrammaticWriterStamp(
+  scroller: HTMLElement | null,
+  now: number = nowMs(),
+): ProgrammaticWriterStamp | null {
+  try {
+    const w = window as any;
+    const source = String(scroller?.dataset?.tpLastWriter || '');
+    const globalWriter = w?.__tpLastWriter;
+    const globalFrom = typeof globalWriter?.from === 'string' ? globalWriter.from : '';
+    const globalAt = Number(globalWriter?.at);
+    if (Number.isFinite(globalAt) && now - globalAt <= PROGRAMMATIC_WRITER_GRACE_MS) {
+      const kind = classifyProgrammaticWriterKind(globalFrom || source, getScrollMode());
+      noteProgrammaticWriterStamp(globalFrom || source || 'writer', kind, globalAt);
+    } else if (w?.__tpScrollWriteActive === true) {
+      const activeSource = source || globalFrom || 'writer-active';
+      const kind = classifyProgrammaticWriterKind(activeSource, getScrollMode());
+      noteProgrammaticWriterStamp(activeSource, kind, now);
+    } else if (state2.mode === 'asr' && source) {
+      const kind = classifyProgrammaticWriterKind(source, 'asr');
+      noteProgrammaticWriterStamp(source, kind, now);
+    }
+  } catch {
+    // ignore
+  }
+  if (!lastProgrammaticWriterStamp) return null;
+  if (now - lastProgrammaticWriterStamp.at > PROGRAMMATIC_WRITER_GRACE_MS) return null;
+  return lastProgrammaticWriterStamp;
+}
+
 function getLinePx() {
   try {
     const metrics = getViewportMetrics(() => scrollerEl);
@@ -1154,10 +1206,14 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
     } catch {}
   }
   const after = target?.scrollTop ?? null;
-  tpLastWriter = { from: meta.from, at: nowMs(), y };
+  const writeAt = nowMs();
+  tpLastWriter = { from: meta.from, at: writeAt, y };
   try {
     ((window as any).__tpLastWriter = tpLastWriter);
   } catch {}
+  const stampSource = meta.reason || meta.from || 'writer';
+  const stampKind = classifyProgrammaticWriterKind(stampSource, getScrollMode());
+  noteProgrammaticWriterStamp(stampSource, stampKind, writeAt);
   try {
     console.info('[SCROLL_WRITE]', {
       ok,
@@ -2125,6 +2181,8 @@ const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
 const MANUAL_SCROLL_LOG_THROTTLE_MS = 1500;
+const PROGRAMMATIC_WRITER_GRACE_MS = 250;
+const PROGRAMMATIC_WRITER_LOG_THROTTLE_MS = 1000;
 const HYBRID_CTRL_LOG_THROTTLE_MS = 500;
 const HYBRID_CTRL_CONF_MIN = 0.25;
 const HYBRID_CTRL_ANCHOR_RECENCY_MS = 2500;
@@ -2325,6 +2383,10 @@ let hybridLastGoodTargetTop: number | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
+type ProgrammaticWriterKind = 'asr' | 'writer' | 'other';
+type ProgrammaticWriterStamp = { at: number; source: string; kind: ProgrammaticWriterKind };
+let lastProgrammaticWriterStamp: ProgrammaticWriterStamp | null = null;
+let lastProgrammaticWriterLogAt = 0;
 let lastHybridCtrlLogAt = 0;
 const hybridCtrl = {
   mult: 1,
@@ -2957,7 +3019,7 @@ function installScrollRouter(opts) {
       document.querySelector<HTMLElement>('#script') ||
       (viewerRole === 'display' ? (document.getElementById('wrap') as HTMLElement | null) : null);
   }
-    if (!hybridScrollGraceListenerInstalled) {
+  if (!hybridScrollGraceListenerInstalled) {
     try {
       const scrollHandler = (event: Event) => {
         if (!event.isTrusted) return;
@@ -2968,6 +3030,23 @@ function installScrollRouter(opts) {
         const scroller = scrollerEl;
         if (!scroller || !target) return;
         if (scroller === target || scroller.contains(target)) {
+          const now = nowMs();
+          const writerStamp = getRecentProgrammaticWriterStamp(scroller, now);
+          if (writerStamp && (writerStamp.kind === 'asr' || writerStamp.kind === 'writer')) {
+            if (isDevMode() && now - lastProgrammaticWriterLogAt >= PROGRAMMATIC_WRITER_LOG_THROTTLE_MS) {
+              lastProgrammaticWriterLogAt = now;
+              try {
+                console.info('[HYBRID_BRAKE] skip', {
+                  reason: 'programmatic-writer',
+                  source: writerStamp.source,
+                  kind: writerStamp.kind,
+                  ageMs: Math.max(0, Math.round(now - writerStamp.at)),
+                  mode: state2.mode,
+                });
+              } catch {}
+            }
+            return;
+          }
           setHybridBrake(1, 0, 'manual-scroll');
         }
       };

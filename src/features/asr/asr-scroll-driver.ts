@@ -285,6 +285,9 @@ const DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM = 0.2;
 const DEFAULT_STABLE_INTERIM_NUDGE_MS = 650;
 const DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS = 900;
 const DEFAULT_STABLE_INTERIM_NUDGE_TOKEN_DELTA = 1;
+const DEFAULT_NOISE_INTERIM_MIN_TOKENS = 3;
+const DEFAULT_NOISE_INTERIM_MIN_CHARS = 12;
+const BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS = 1500;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
 const DEFAULT_LOW_SIM_FLOOR = 0.25;
@@ -1860,6 +1863,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let stableInterimTranscriptNorm = '';
   let stableInterimLastMeaningfulChangeAt = 0;
   let lastStableInterimNudgeAt = 0;
+  let lastBadCursorOnCueLogAt = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -2575,6 +2579,36 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     return null;
+  };
+
+  const resolveCueSafeCommitLine = (
+    requestedLine: number,
+    cursorLine: number,
+    clampDeltaLimit: number,
+  ): { nextLine: number | null; skippedFrom: number | null; skippedText: string } => {
+    if (!Number.isFinite(requestedLine)) {
+      return { nextLine: null, skippedFrom: null, skippedText: '' };
+    }
+    const baseLine = Math.max(0, Math.floor(requestedLine));
+    const lineText = getLineTextAt(baseLine);
+    if (!isIgnorableCueLineText(lineText)) {
+      return { nextLine: baseLine, skippedFrom: null, skippedText: '' };
+    }
+    const safeClamp = Math.max(0, Math.floor(clampDeltaLimit));
+    const maxForwardLine = Math.max(baseLine, cursorLine + safeClamp);
+    const nextSpoken = findNextSpokenLineIndexWithin(baseLine + 1, maxForwardLine);
+    if (Number.isFinite(nextSpoken as number) && (nextSpoken as number) > baseLine) {
+      return {
+        nextLine: Math.max(0, Math.floor(nextSpoken as number)),
+        skippedFrom: baseLine,
+        skippedText: lineText,
+      };
+    }
+    return {
+      nextLine: null,
+      skippedFrom: baseLine,
+      skippedText: lineText,
+    };
   };
 
   const prevSpeakableLineFrom = (
@@ -3939,6 +3973,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           } catch {}
         }
       }
+      const cueSafeInitialTarget = resolveCueSafeCommitLine(
+        targetLine,
+        lastLineIndex,
+        clampDeltaLimit,
+      );
+      if (cueSafeInitialTarget.nextLine == null) {
+        warnGuard('cue_commit_blocked', [
+          `current=${lastLineIndex}`,
+          `best=${targetLine}`,
+          `windowEnd=${lastLineIndex + clampDeltaLimit}`,
+          cueSafeInitialTarget.skippedFrom != null ? `cueLine=${cueSafeInitialTarget.skippedFrom}` : '',
+          cueSafeInitialTarget.skippedText
+            ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
+            : '',
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        emitHudStatus('cue_commit_blocked', 'Blocked: cue-only commit target');
+        return;
+      }
+      if (cueSafeInitialTarget.nextLine !== targetLine) {
+        warnGuard('cue_commit_skip', [
+          `current=${lastLineIndex}`,
+          `from=${targetLine}`,
+          `to=${cueSafeInitialTarget.nextLine}`,
+          cueSafeInitialTarget.skippedText
+            ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
+            : '',
+          snippet ? `clue="${snippet}"` : '',
+        ]);
+        targetLine = cueSafeInitialTarget.nextLine;
+      }
       const confirmDelta = targetLine - lastLineIndex;
       if (confirmDelta < DELTA_LARGE_MIN_LINES && largeDeltaConfirm) {
         largeDeltaConfirm = null;
@@ -4074,7 +4139,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
           if (isFinal && hasEvidence && strongMatch && deltaPx > 0 && deltaPx <= creepNearPx) {
-            const nextLine = targetLine + 1;
+            const cueSafeNext = resolveCueSafeCommitLine(
+              targetLine + 1,
+              lastLineIndex,
+              clampDeltaLimit,
+            );
+            if (cueSafeNext.nextLine == null) {
+              warnGuard('cue_commit_blocked', [
+                `current=${lastLineIndex}`,
+                `best=${targetLine + 1}`,
+                `windowEnd=${lastLineIndex + clampDeltaLimit}`,
+                cueSafeNext.skippedFrom != null ? `cueLine=${cueSafeNext.skippedFrom}` : '',
+                cueSafeNext.skippedText
+                  ? `cue="${formatLogSnippet(cueSafeNext.skippedText, 48)}"`
+                  : '',
+                snippet ? `clue="${snippet}"` : '',
+              ]);
+              emitHudStatus('cue_commit_blocked', 'Blocked: cue-only commit target');
+              return;
+            }
+            const nextLine = cueSafeNext.nextLine;
             const nextTop = resolveTargetTop(scroller, nextLine);
             if (nextTop != null) {
               const nextDeltaPx = nextTop - currentTop;
@@ -4640,6 +4724,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    const compactedComparable = normalizeComparableText(compacted);
+    const compactedTokenCount = normTokens(compactedComparable).length;
+    if (
+      !isFinal &&
+      compactedTokenCount < DEFAULT_NOISE_INTERIM_MIN_TOKENS &&
+      compactedComparable.length < DEFAULT_NOISE_INTERIM_MIN_CHARS
+    ) {
+      if (isDevMode() && shouldLogTag('ASR_NOISE_INTERIM_DROP', 2, 250)) {
+        try {
+          console.debug('[ASR_NOISE_INTERIM_DROP]', {
+            tokens: compactedTokenCount,
+            chars: compactedComparable.length,
+            text: formatLogSnippet(compacted, 48),
+          });
+        } catch {
+          // ignore
+        }
+      }
+      return;
+    }
     eventsSinceCommit += 1;
     if (isFinal) {
       finalsSinceCommit += 1;
@@ -4985,6 +5089,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const currentLineTokens = normTokens(currentLineComparableForCurrent);
       if (transcriptTokens.length && currentLineTokens.length) {
         currentLineDirectSim = computeLineSimilarityFromTokens(transcriptTokens, currentLineTokens);
+      }
+    }
+    if (
+      isDevMode() &&
+      asrMode &&
+      isSessionLivePhase() &&
+      Number.isFinite(cursorLine) &&
+      cursorLine >= 0
+    ) {
+      const cursorLineText = getLineTextAt(cursorLine);
+      if (isIgnorableCueLineText(cursorLineText)) {
+        if (now - lastBadCursorOnCueLogAt >= BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS) {
+          lastBadCursorOnCueLogAt = now;
+          try {
+            console.warn(
+              `ASR_BAD_CURSOR_ON_CUE line=${cursorLine} text="${formatLogSnippet(cursorLineText || '', 64)}"`,
+            );
+          } catch {
+            // ignore
+          }
+        }
       }
     }
     if (
