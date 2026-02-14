@@ -84,6 +84,7 @@ In `scrollMode='asr'`:
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.
 - If out-of-band guard blocks a candidate, it must be non-destructive (no evidence-buffer clear and no backward reseed/poisoning side effects); continue listening for in-band forward evidence.
 - Add a stuck watchdog fail-safe: in live armed ASR sessions, if commit count does not change for the watchdog window while transcript traffic continues (finals, or sustained interim bursts in long-endpoint sessions), attempt a bounded forward recovery commit from the forward scan at a low floor.
+- When watchdog selects a forward recovery candidate in a growing interim stream, treat that candidate as forward-progress evidence: do not let `interim_unstable` re-block it, and carry watchdog floor into low-sim arbitration for that recovery attempt.
 - ASR guard profile defaults are relaxed for forward continuity: shorter same-line throttle, lower forced-evidence floors, and earlier watchdog recovery with a still-bounded forward window.
 - Non-finite (`NaN`/`Infinity`) values in ASR target/scroll math must be guarded at the writer and commit path choke points; reject the write/step and emit a dev-only diagnostic guard line.
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.

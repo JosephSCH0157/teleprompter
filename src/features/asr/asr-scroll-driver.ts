@@ -5851,6 +5851,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logDev('forward bias', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
       }
     }
+    const watchdogFloor = clamp(Math.max(stuckWatchdogForwardFloor, thresholds.candidateMinSim), 0, 1);
     const watchdogByFinals = finalsSinceCommit >= stuckWatchdogFinalEvents;
     const watchdogByInterims =
       eventsSinceCommit >= stuckWatchdogInterimEvents &&
@@ -5865,7 +5866,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       now - lastStuckWatchdogAt >= stuckWatchdogCooldownMs &&
       (rawIdx <= cursorLine || conf < effectiveThreshold);
     if (watchdogStalled) {
-      const watchdogFloor = clamp(Math.max(stuckWatchdogForwardFloor, thresholds.candidateMinSim), 0, 1);
       const watchdogForward = forwardBandScores
         .filter((entry) => entry.idx > cursorLine && (entry.idx - cursorLine) <= stuckWatchdogMaxDeltaLines)
         .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
@@ -5979,6 +5979,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         relockOverride = true;
         relockReason = isFinal ? 'final' : repeatOk ? 'repeat' : spanOk ? 'span' : 'overlap';
       }
+    }
+    const watchdogForwardSelected = forceReason === 'watchdog' && rawIdx > cursorLine;
+    const watchdogForwardInterimProgress =
+      !isFinal &&
+      watchdogForwardSelected &&
+      bufferGrowing &&
+      conf >= watchdogFloor;
+    if (watchdogForwardSelected && conf >= watchdogFloor) {
+      // Recovery picks should carry their floor through low-sim arbitration.
+      effectiveThreshold = Math.min(effectiveThreshold, watchdogFloor);
     }
     if (alignedPostCatchup && effectiveThreshold > 0 && conf < effectiveThreshold) {
       logDev('postCatchup relax', {
@@ -6185,7 +6195,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       } else if (
         conf < interimHighThreshold &&
         !(consistencyState.ok || catchupState.ok) &&
-        !strongForwardInterimProgress
+        !strongForwardInterimProgress &&
+        !watchdogForwardInterimProgress
       ) {
         lastInterimBestIdx = -1;
         interimRepeatCount = 0;
@@ -6214,7 +6225,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         interimEligible =
           interimRepeatCount >= effectiveInterimRepeats || consistencyState.ok || catchupState.ok;
         if (!interimEligible) {
-          if (strongForwardInterimProgress) {
+          if (strongForwardInterimProgress || watchdogForwardInterimProgress) {
             interimEligible = true;
           } else {
             warnGuard('interim_unstable', [
