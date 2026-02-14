@@ -3471,11 +3471,50 @@ function installScrollRouter(opts) {
     try { console.info('[scroll-router] tp:scroll:intent listener installed'); } catch {}
   }
   type AutoIntentDecision = 'motor-start-request' | 'motor-stop-request';
+  type RequestedMotorKind = 'auto' | 'hybrid' | 'asr';
+  interface AutoIntentMotorRequest {
+    kind: RequestedMotorKind;
+    source: string;
+  }
   interface AutoIntentPayload {
     enabled: boolean;
     decision: AutoIntentDecision;
     pxs: number;
     reason?: string;
+    motorKind: RequestedMotorKind;
+    motorSource: string;
+    asrDirect: boolean;
+  }
+  let lastAutoIntentMotorRequest: AutoIntentMotorRequest = { kind: 'auto', source: 'unknown' };
+  function normalizeRequestedMotorKind(raw: unknown): RequestedMotorKind | null {
+    const value = String(raw || '').toLowerCase();
+    if (value === 'auto' || value === 'hybrid' || value === 'asr') return value;
+    return null;
+  }
+  function resolveAutoIntentMotorRequest(
+    detail: any,
+    mode: string,
+    reasonRaw?: string,
+  ): AutoIntentMotorRequest {
+    const explicit =
+      normalizeRequestedMotorKind(detail?.motorKind) ||
+      normalizeRequestedMotorKind(detail?.kind) ||
+      normalizeRequestedMotorKind(detail?.intent?.kind);
+    const source = typeof detail?.source === 'string'
+      ? detail.source
+      : (reasonRaw || 'unknown');
+    if (explicit) return { kind: explicit, source };
+    const hint = String(source || '').toLowerCase();
+    if (
+      hint.includes('asr') ||
+      hint.includes('asr-driver') ||
+      hint.includes('asr_commit') ||
+      hint.includes('same-line-recenter')
+    ) {
+      return { kind: 'asr', source };
+    }
+    if (mode === 'hybrid') return { kind: 'hybrid', source };
+    return { kind: 'auto', source };
   }
   function resolveAutoIntentEnabled(detail: any): boolean | undefined {
     if (typeof detail.enabled === 'boolean') return detail.enabled;
@@ -3518,9 +3557,12 @@ function installScrollRouter(opts) {
         } catch {}
         return null;
       }
-      setAutoIntentState(enabled, reasonRaw);
       const mode = getScrollMode();
+      const motorRequest = resolveAutoIntentMotorRequest(detail, mode, reasonRaw);
+      lastAutoIntentMotorRequest = motorRequest;
+      setAutoIntentState(enabled, reasonRaw);
       const allowAutoMotor = mode !== 'asr';
+      const asrDirect = mode === 'asr' && motorRequest.kind === 'asr';
       const brain = String(appStore.get('scrollBrain') || 'auto');
       const baseDecision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
       const decision: AutoIntentDecision = allowAutoMotor ? baseDecision : 'motor-stop-request';
@@ -3528,12 +3570,14 @@ function installScrollRouter(opts) {
       const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       try {
         console.info(
-          `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
+          `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled} motorKind=${motorRequest.kind} source=${motorRequest.source}`,
         );
         console.warn(
           '[AUTO_INTENT]',
           'mode=', state2.mode,
           'enabled=', enabled,
+          'motorKind=', motorRequest.kind,
+          'source=', motorRequest.source,
           'pxPerSec=', pxPerSec,
           'sessionPhase=', currentPhase,
           'userEnabled=', userEnabled,
@@ -3546,15 +3590,23 @@ function installScrollRouter(opts) {
       }
       try { emitMotorState('auto', enabledNow); } catch {}
       try { emitAutoState(); } catch {}
-      return { enabled, decision, pxs, reason: reasonRaw };
+      return {
+        enabled,
+        decision,
+        pxs,
+        reason: reasonRaw,
+        motorKind: motorRequest.kind,
+        motorSource: motorRequest.source,
+        asrDirect,
+      };
     } catch {}
     return null;
   }
-
+	
   function processAutoIntent(detail: any) {
     const payload = handleAutoIntent(detail);
     if (!payload) return;
-    const { enabled, decision, pxs, reason } = payload;
+    const { enabled, decision, pxs, reason, motorKind, motorSource, asrDirect } = payload;
     const mode = getScrollMode();
       const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       if (enabled && currentPhase !== 'live') {
@@ -3573,6 +3625,9 @@ function installScrollRouter(opts) {
         console.warn('[AUTO_INTENT] processor RUN', {
           enabled,
           mode,
+          motorKind,
+          source: motorSource,
+          asrDirect,
           pxps,
           chosenMotor,
           viewerRole,
@@ -3580,8 +3635,24 @@ function installScrollRouter(opts) {
         });
       } catch {}
       if (mode === 'asr') {
+        if (asrDirect) {
+          try {
+            console.info('[MOTOR_ALLOWED_ASR] source=processAutoIntent mode=asr decision=direct-asr', {
+              motorKind,
+              source: motorSource,
+              phase: currentPhase,
+              sessionIntent: sessionIntentOn,
+            });
+          } catch {}
+          return;
+        }
         try {
-          console.info('[MOTOR_BLOCKED_ASR] source=processAutoIntent mode=asr decision=forced-stop');
+          console.info('[MOTOR_BLOCKED_ASR] source=processAutoIntent mode=asr decision=forced-stop', {
+            motorKind,
+            source: motorSource,
+            phase: currentPhase,
+            sessionIntent: sessionIntentOn,
+          });
         } catch {}
         stopAutoMotor('auto-intent:asr');
         return;
@@ -5180,11 +5251,17 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         } catch {}
       }
       const viewerReady = hasScrollableTarget();
+      const requestedMotorKind = lastAutoIntentMotorRequest.kind;
+      const requestedMotorSource = lastAutoIntentMotorRequest.source;
       const livePhase = sessionPhase === 'live';
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
-      if (mode === "step" || mode === "rehearsal" || mode === "asr") {
+      if (mode === "step" || mode === "rehearsal") {
         autoBlocked = `blocked:mode-${mode}`;
+      } else if (mode === "asr" && requestedMotorKind !== 'asr') {
+        autoBlocked = "blocked:mode-asr";
+      } else if (mode === "asr") {
+        autoBlocked = "blocked:asr-direct";
       } else if (!livePhase) {
         autoBlocked = "blocked:livePhase";
       } else if (sessionBlocked) {
@@ -5211,7 +5288,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       logAutoGateAction(
         action,
         mode,
-        `[scroll-router] ${action} mode=${mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+        `[scroll-router] ${action} mode=${mode} reqKind=${requestedMotorKind} reqSource=${requestedMotorSource} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
         autoBlocked,
       );
       let emittedAutoStop = false;

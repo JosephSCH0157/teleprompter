@@ -1537,7 +1537,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
       return currentTop;
     }
-    if (mode === 'hybrid' || mode === 'asr') {
+    if (mode === 'hybrid') {
       logAsrScrollAttempt('denied', {
         targetTop,
         currentTop,
