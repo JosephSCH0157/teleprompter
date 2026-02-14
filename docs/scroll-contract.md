@@ -30,7 +30,7 @@ When `scrollMode='asr'`:
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
 - Forward scan must score speakable joined windows (multi-line candidates) in addition to single-line candidates, so combined ASR phrases can advance to the correct forward line.
 - Arbitration must allow forward continuation when transcript length exceeds current-line length and a forward window (`span>=2`) meets floor and near-current score slack.
-- Match selection is band-first/band-only: pick best candidate from active band (+tiny backward tolerance), not global-best then reject.
+- Match selection is band-preferred: pick best candidate from active band (+tiny backward tolerance) first, but permit forward-window continuation/fallback before hard reject.
 - After forward/forced commit seek, reseed the match band around the committed index (small back tolerance, forward window) before next ingest so stale pre-commit windows cannot force immediate `match_out_of_band`.
 - Out-of-band guard must be non-destructive (no evidence buffer clear or backward reseed); ignore and continue listening for in-band forward evidence.
 - Stuck watchdog fail-safe: if phase is live, ASR is armed, final speech events continue, and commit count has not advanced for watchdog window, attempt a bounded forward recovery commit from forward scan at low floor.

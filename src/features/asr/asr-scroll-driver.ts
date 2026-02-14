@@ -814,6 +814,16 @@ function getSessionPhase(): string {
   }
 }
 
+function getStateCurrentIndex(): number | null {
+  try {
+    const raw = Number((window as any)?.currentIndex ?? NaN);
+    if (!Number.isFinite(raw)) return null;
+    return Math.max(0, Math.floor(raw));
+  } catch {
+    return null;
+  }
+}
+
 function isSessionAsrArmed(): boolean {
   try {
     const store = (window as any).__tpStore;
@@ -4372,14 +4382,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (isFinal) {
       finalsSinceCommit += 1;
     }
-    const incomingIdx = Number((detail as any)?.currentIdx);
-    if (Number.isFinite(incomingIdx)) {
-      const nextIdx = Math.max(0, Math.floor(incomingIdx));
-      if (nextIdx !== lastLineIndex) {
-        lastLineIndex = nextIdx;
-        matchAnchorIdx = nextIdx;
-        rememberCommittedBlockFromLine(nextIdx);
-      }
+    const stateCurrentIdx = getStateCurrentIndex();
+    const incomingIdxRaw = Number((detail as any)?.currentIdx ?? NaN);
+    const incomingIdx = Number.isFinite(incomingIdxRaw)
+      ? Math.max(0, Math.floor(incomingIdxRaw))
+      : null;
+    const preferredIdx = stateCurrentIdx ?? incomingIdx;
+    if (preferredIdx != null && preferredIdx !== lastLineIndex) {
+      lastLineIndex = preferredIdx;
+      matchAnchorIdx = preferredIdx;
+      rememberCommittedBlockFromLine(preferredIdx);
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     let rawMatchId = (detail as any)?.matchId;
@@ -4534,12 +4546,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     const mode = getScrollMode();
     const asrMode = mode === 'asr';
-    const legacyWindowIdx = asrMode
-      ? -1 // ASR must not anchor from window.currentIndex.
-      : Number((window as any)?.currentIndex ?? 0);
-    const anchorIdx = matchAnchorIdx >= 0
-      ? matchAnchorIdx
-      : (lastLineIndex >= 0 ? lastLineIndex : legacyWindowIdx);
+    const legacyWindowIdx = stateCurrentIdx ?? (asrMode ? -1 : 0);
+    const anchorIdx = stateCurrentIdx != null
+      ? stateCurrentIdx
+      : (matchAnchorIdx >= 0
+        ? matchAnchorIdx
+        : (lastLineIndex >= 0 ? lastLineIndex : legacyWindowIdx));
     const resyncActive = now < resyncUntil && Number.isFinite(resyncAnchorIdx ?? NaN);
     const lagRelockActive = resyncActive && resyncReason === 'lag';
     const effectiveAnchor = resyncActive
@@ -4682,9 +4694,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
-    const currentIdxRaw = Number((window as any)?.currentIndex ?? -1);
-    const currentIdx = Number.isFinite(currentIdxRaw) ? currentIdxRaw : -1;
-    const cursorLine = lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor;
+    const currentIdxRaw = stateCurrentIdx != null ? stateCurrentIdx : Number((window as any)?.currentIndex ?? -1);
+    const currentIdx = Number.isFinite(currentIdxRaw) ? Math.max(0, Math.floor(currentIdxRaw)) : -1;
+    const cursorLine = currentIdx >= 0 ? currentIdx : (lastLineIndex >= 0 ? lastLineIndex : effectiveAnchor);
+    if (isDevMode() && shouldLogTag('ASR_INGEST_CURSOR', 2, 500)) {
+      const markerRaw = computeMarkerLineIndex(getScroller());
+      const markerIdx = Number.isFinite(markerRaw) ? Math.max(0, Math.floor(markerRaw)) : -1;
+      const cursorSource =
+        currentIdx >= 0
+          ? 'state.currentIndex'
+          : (lastLineIndex >= 0 ? 'lastLineIndex' : 'effectiveAnchor');
+      try {
+        console.debug('[ASR_INGEST_CURSOR]', {
+          cursorLine,
+          cursorSource,
+          stateCurrentIndex: currentIdx,
+          incomingCurrentIdx: incomingIdx,
+          markerIdx,
+          lastCommittedIndex: lastCommitIndex ?? -1,
+        });
+      } catch {
+        // ignore
+      }
+    }
     const baseCommitThreshold = isFinal
       ? thresholds.commitFinalMinSim
       : clamp(thresholds.commitInterimMinSim * interimScale, 0, 1);
@@ -4693,7 +4725,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const interimHighThreshold = clamp(requiredThreshold + interimHysteresisBonus, 0, 1);
     const consistencyMinSim = clamp(requiredThreshold - consistencySimSlack, 0, 1);
     const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
-    const prevIndex = Number.isFinite(currentIdxRaw) ? Math.floor(currentIdxRaw) : 0;
+    const prevIndex = cursorLine >= 0 ? cursorLine : 0;
     const candidateAnchorLine = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : null;
     if (candidateAnchorLine !== null && conf >= thresholds.anchorMinSim) {
       if (anchorStreakLine === candidateAnchorLine) {
@@ -4848,26 +4880,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       });
     const selectedInBand = inBandCandidates[0] || null;
     const bandFloor = clamp(thresholds.candidateMinSim, 0, 1);
-    if (!selectedInBand || selectedInBand.score < bandFloor) {
-      if (maybeSkipCueLine(cursorLine, now, 'band_wait', snippet)) {
-        return;
-      }
-      warnGuard('band_wait', [
-        `current=${cursorLine}`,
-        `baseBandStart=${baseBandStart}`,
-        `baseBandEnd=${baseBandEnd}`,
-        `bandStart=${bandStart}`,
-        `bandEnd=${bandEnd}`,
-        `candidates=${inBandCandidates.length}`,
-        selectedInBand ? `bestBand=${selectedInBand.idx}` : 'bestBand=-1',
-        selectedInBand ? `bestSim=${formatLogScore(selectedInBand.score)}` : '',
-        `floor=${formatLogScore(bandFloor)}`,
-        snippet ? `clue="${snippet}"` : '',
-      ]);
-      emitHudStatus('band_wait', 'Waiting: no in-band forward evidence');
-      return;
-    }
-    if (selectedInBand.idx !== rawIdx || selectedInBand.score !== conf) {
+    if (selectedInBand && selectedInBand.score >= bandFloor && (selectedInBand.idx !== rawIdx || selectedInBand.score !== conf)) {
       if (isDevMode() && shouldLogTag('ASR_BAND_PICK', 2, 250)) {
         try {
           console.info('[ASR_BAND_PICK]', {
@@ -4888,13 +4901,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       conf = selectedInBand.score;
       usedLineFallback = true;
     }
-    const inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
+    let inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
     const manualAnchorEnabled = isManualAnchorAdoptEnabled();
     if (manualAnchorPending && manualAnchorEnabled && now - manualAnchorPending.ts >= MANUAL_ANCHOR_PENDING_TIMEOUT_MS) {
       rejectManualAnchorPending('no local evidence');
     }
     if (!inBand) {
-      warnGuard('match_out_of_band', [
+      warnGuard('match_out_of_band_defer', [
         `current=${cursorLine}`,
         `best=${rawIdx}`,
         `delta=${rawIdx - cursorLine}`,
@@ -4903,9 +4916,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `bandStart=${bandStart}`,
         `bandEnd=${bandEnd}`,
         `inBand=${inBand ? 1 : 0}`,
+        selectedInBand ? `bestBand=${selectedInBand.idx}` : 'bestBand=-1',
+        selectedInBand ? `bestBandSim=${formatLogScore(selectedInBand.score)}` : '',
+        `bandFloor=${formatLogScore(bandFloor)}`,
       ]);
-      emitHudStatus('match_out_of_band', 'Out-of-band match ignored');
-      return;
+      emitHudStatus('match_out_of_band', 'Out-of-band candidate deferred');
     }
     const rawBestSim = conf;
     const candidateIdx = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : -1;
@@ -5623,6 +5638,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `Recovery: +${rawIdx - cursorLine} lines (sim=${formatLogScore(conf)})`,
         );
       }
+    }
+    inBand = rawIdx >= bandStart && rawIdx <= bandEnd;
+    if (!inBand) {
+      warnGuard('match_out_of_band', [
+        `current=${cursorLine}`,
+        `best=${rawIdx}`,
+        `delta=${rawIdx - cursorLine}`,
+        `baseBandStart=${baseBandStart}`,
+        `baseBandEnd=${baseBandEnd}`,
+        `bandStart=${bandStart}`,
+        `bandEnd=${bandEnd}`,
+        `inBand=${inBand ? 1 : 0}`,
+      ]);
+      emitHudStatus('match_out_of_band', 'Out-of-band match ignored');
+      return;
     }
     const markerIdx = consistencyRequireNearMarker ? computeMarkerLineIndex(scrollerForMatch) : -1;
     const nearMarker = consistencyRequireNearMarker
