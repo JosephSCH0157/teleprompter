@@ -264,6 +264,8 @@ const DEFAULT_OUTRUN_BEHIND_CONTINUATION_SIM_SLACK = 0.12;
 const DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_SIM = 0.34;
 const DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_TOKENS = 4;
 const DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_OVERLAP_TOKENS = 2;
+const DEFAULT_OUTRUN_BEHIND_APPEND_MIN_EXTRA_CHARS = 3;
+const DEFAULT_OUTRUN_BEHIND_APPEND_MIN_SIM = 0.2;
 const DEFAULT_FORCED_RATE_WINDOW_MS = 10000;
 const DEFAULT_FORCED_RATE_MAX = 2;
 const DEFAULT_FORCED_COOLDOWN_MS = 5000;
@@ -5597,8 +5599,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               : null;
             const selectedOutrunPick = nearForwardPick || outrunPick;
             const selectedDelta = selectedOutrunPick.idx - cursorLine;
+            const appendedContinuation =
+              behindContinuationSignal &&
+              selectedDelta === 1 &&
+              currentLineComparable.length > 0 &&
+              transcriptComparable.startsWith(currentLineComparable) &&
+              transcriptComparable.length - currentLineComparable.length >= DEFAULT_OUTRUN_BEHIND_APPEND_MIN_EXTRA_CHARS;
             const outrunCompetitiveNeed = outrunFromBehind
-              ? (behindContinuationSignal
+              ? (appendedContinuation
+                  ? DEFAULT_OUTRUN_BEHIND_APPEND_MIN_SIM
+                  : behindContinuationSignal
                   ? clamp(
                       Math.max(
                         DEFAULT_OUTRUN_BEHIND_CONTINUATION_MIN_SIM,
@@ -5649,6 +5659,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 `need=${formatLogScore(effectiveThreshold)}`,
                 `delta=${rawIdx - cursorLine}`,
                 behindContinuationSignal ? 'behindContinuation=1' : '',
+                appendedContinuation ? 'appendContinuation=1' : '',
                 snippet ? `clue="${snippet}"` : '',
               ]);
               logDev('forward outrun', { cursorLine, best: before, forward: rawIdx, sim: conf, need: effectiveThreshold });
