@@ -40,6 +40,7 @@ When `scrollMode='asr'`:
 - During live ASR, `blocks:*` sync may refresh block metadata but must not rewrite cursor/index truth (`currentIndex` / driver line index).
 - During live ASR after first commit, external cursor/index sync inputs must be monotonic: they may advance cursor truth but must not regress below committed cursor floor.
 - On successful ASR commit, publish canonical cursor truth immediately (`currentIndex` plus commit index signal) so subsequent sync uses the new anchor.
+- During interim transcript growth (`bufferGrowing`), block arbitration may temporarily expand forward window to `+2` blocks and evaluate merged forward block text (`N + N+1`) so boundary-split phrases can surface a forward candidate before guards apply.
 - After forward/forced commit seek, reseed the match band around the committed index (small back tolerance, forward window) before next ingest so stale pre-commit windows cannot force immediate `match_out_of_band`.
 - Out-of-band guard must be non-destructive (no evidence buffer clear or backward reseed); ignore and continue listening for in-band forward evidence.
 - Stuck watchdog fail-safe: if phase is live, ASR is armed, transcript traffic continues (finals or sustained interim bursts), and commit count has not advanced for watchdog window, attempt a bounded forward recovery commit from forward scan at low floor.

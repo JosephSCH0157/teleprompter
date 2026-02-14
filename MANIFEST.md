@@ -80,6 +80,7 @@ In `scrollMode='asr'`:
 - Live block sync (`blocks:*`) must not overwrite ASR cursor truth (`currentIndex`/driver line index); index seeding is pre-live/bootstrap behavior only.
 - In live ASR after the first commit, external cursor/index sync inputs must be monotonic: they may advance cursor truth but must not regress below the committed cursor floor.
 - Successful ASR commits must publish canonical cursor truth (`currentIndex`, commit index signal) immediately so downstream sync paths read the committed line.
+- During continuous interim growth (`bufferGrowing`), block arbitration may use a temporary forward lookahead up to `+2` blocks and score merged forward block text (`N + N+1`) before guard arbitration, without changing global similarity thresholds.
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.
 - If out-of-band guard blocks a candidate, it must be non-destructive (no evidence-buffer clear and no backward reseed/poisoning side effects); continue listening for in-band forward evidence.
 - Add a stuck watchdog fail-safe: in live armed ASR sessions, if commit count does not change for the watchdog window while transcript traffic continues (finals, or sustained interim bursts in long-endpoint sessions), attempt a bounded forward recovery commit from the forward scan at a low floor.

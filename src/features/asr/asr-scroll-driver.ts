@@ -1371,16 +1371,51 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     asrNormalized: string,
     anchorBlockId: number,
     corpus: AsrBlockCorpusEntry[],
+    opts?: {
+      bufferGrowing?: boolean;
+      cursorLine?: number;
+      forwardLookaheadBlocks?: number;
+    },
   ): AsrBlockMatch | null => {
     if (!corpus.length) return null;
     const asrTokens = normTokens(asrNormalized);
     if (!asrTokens.length) return null;
     const anchorPos = corpus.findIndex((entry) => entry.blockId === anchorBlockId);
+    const cursorLine = Number(opts?.cursorLine);
+    const cursorBlock = Number.isFinite(cursorLine) && cursorLine >= 0
+      ? findBlockByLine(Math.floor(cursorLine), corpus)
+      : null;
+    const cursorBlockPos = cursorBlock
+      ? corpus.findIndex((entry) => entry.blockId === cursorBlock.blockId)
+      : -1;
+    const forwardBasePos = cursorBlockPos >= 0 ? cursorBlockPos : anchorPos;
+    const forwardLookaheadBlocks = Number.isFinite(opts?.forwardLookaheadBlocks)
+      ? Math.max(1, Math.floor(Number(opts?.forwardLookaheadBlocks)))
+      : 2;
+    const allowForwardMergedBlocks = opts?.bufferGrowing === true && forwardBasePos >= 0;
     let best: AsrBlockMatch | null = null;
     for (let i = 0; i < corpus.length; i += 1) {
       const entry = corpus[i];
       if (!entry.tokens.length) continue;
       let score = computeLineSimilarityFromTokens(asrTokens, entry.tokens);
+      let endLine = entry.endLine;
+      let sampleText = entry.textNorm;
+      if (
+        allowForwardMergedBlocks &&
+        i > forwardBasePos &&
+        i <= forwardBasePos + forwardLookaheadBlocks &&
+        i + 1 < corpus.length
+      ) {
+        const next = corpus[i + 1];
+        if (next?.tokens?.length) {
+          const mergedScore = computeLineSimilarityFromTokens(asrTokens, entry.tokens.concat(next.tokens));
+          if (mergedScore > score) {
+            score = mergedScore;
+            endLine = next.endLine;
+            sampleText = `${entry.textNorm} ${next.textNorm}`.trim();
+          }
+        }
+      }
       if (anchorPos >= 0) {
         const distance = Math.abs(i - anchorPos);
         score = Math.max(0, score - Math.min(0.05, distance * 0.005));
@@ -1390,8 +1425,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           blockId: entry.blockId,
           conf: score,
           startLine: entry.startLine,
-          endLine: entry.endLine,
-          textNormSample: entry.textNorm.slice(0, 60),
+          endLine,
+          textNormSample: sampleText.slice(0, 60),
         };
       }
     }
@@ -4677,9 +4712,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const blockCorpus = asrMode ? getAsrBlockCorpus() : [];
     const anchorBlockId = asrMode ? resolveAsrAnchorBlockId(blockCorpus) : -1;
     const blockAsrText = asrMode ? normalizeComparableText(bufferedText || compacted) : '';
-    const blockMatch = asrMode ? matchAgainstBlocks(blockAsrText, anchorBlockId, blockCorpus) : null;
+    const blockMatch = asrMode
+      ? matchAgainstBlocks(blockAsrText, anchorBlockId, blockCorpus, {
+        bufferGrowing,
+        cursorLine: effectiveAnchor,
+        forwardLookaheadBlocks: 2,
+      })
+      : null;
     const blockWindowRange = asrMode && blockMatch
-      ? resolveBlockWindowRange(blockCorpus, blockMatch.blockId, 1)
+      ? resolveBlockWindowRange(blockCorpus, blockMatch.blockId, bufferGrowing ? 2 : 1)
       : null;
     const blockAnchorFloor = Math.max(0, thresholds.candidateMinSim - 0.05);
     let usedBlockMatch = asrMode && !!blockMatch;
