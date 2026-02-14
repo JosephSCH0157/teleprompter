@@ -5822,6 +5822,22 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       slamDunkFinalEarly ||
       shortFinalForwardEvidenceOk ||
       ((tokenCount >= forcedMinTokens || evidenceChars >= forcedMinChars) && forwardCandidateOk);
+    const sameLineFinalConfirmHold =
+      isFinal &&
+      rawIdx === cursorLine &&
+      conf >= Math.max(shortFinalNeed, DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM);
+    if (sameLineFinalConfirmHold && isDevMode() && shouldLogTag('ASR_FINAL_HOLD', 2, 250)) {
+      try {
+        console.debug('[ASR_FINAL_HOLD]', {
+          current: cursorLine,
+          best: rawIdx,
+          sim: Number(conf.toFixed(3)),
+          holdNeed: Number(Math.max(shortFinalNeed, DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM).toFixed(3)),
+        });
+      } catch {
+        // ignore
+      }
+    }
     const outrunEligible = !!outrunPick && outrunRecent && forcedEvidenceOk;
     const behindByForBias = cursorLine - rawIdx;
     const forwardBiasEligible =
@@ -6040,7 +6056,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       conf >= requiredThreshold;
     const forcedEvidenceOkTight = forcedEvidenceOk || shortFinalTightEvidenceBypass;
     const allowForced = !isHybridMode();
-    if (allowForced && outrunRecent && (rawIdx <= cursorLine || conf < effectiveThreshold)) {
+    if (
+      allowForced &&
+      outrunRecent &&
+      (rawIdx <= cursorLine || conf < effectiveThreshold) &&
+      !sameLineFinalConfirmHold
+    ) {
       logForwardScanProbe({
         reason: 'forced-check',
         cursorLine,
@@ -6210,7 +6231,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx > cursorLine &&
       shortFinalNeed < requiredThreshold &&
       conf >= shortFinalNeed &&
-      conf < requiredThreshold;
+      conf < requiredThreshold &&
+      !sameLineFinalConfirmHold;
     let shortFinalForced = false;
     if (allowForced && shortFinalForcedCandidate && !outrunCommit) {
       const forwardCandidate = outrunCandidate;
