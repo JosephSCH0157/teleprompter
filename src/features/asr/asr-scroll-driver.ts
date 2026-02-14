@@ -848,6 +848,27 @@ function isDevMode(): boolean {
   return false;
 }
 
+function shouldForcePixelAsrCommitPath(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__tpAsrForceWriterCommit === true) return false;
+    if (w.__tpAsrForcePixelCommit === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    const writerParam = String(params.get('asr_writer') || '').toLowerCase();
+    if (writerParam === '1' || writerParam === 'true') return false;
+    const pixelParam = String(params.get('asr_pixel') || '').toLowerCase();
+    if (pixelParam === '1' || pixelParam === 'true') return true;
+    const ls = w.localStorage;
+    if (ls?.getItem('tp_asr_force_writer_commit') === '1') return false;
+    if (ls?.getItem('tp_asr_force_pixel_commit') === '1') return true;
+  } catch {
+    // ignore
+  }
+  // Stabilization default: in dev mode use pixel commit path unless explicitly overridden.
+  return isDevMode();
+}
+
 function normalizeSpeechMatchResult(input: unknown): MatchResult | null {
   if (!input || typeof input !== 'object') return null;
   const raw = input as Record<string, unknown>;
@@ -4614,7 +4635,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const hasWriter = hasActiveScrollWriter();
       const totalLinesHint = getTotalLines();
       const writerAddressability = assessWriterLineAddressability(scroller, targetLine, totalLinesHint);
-      const writerAllowed = hasWriter && writerAddressability.allowed;
+      const forcePixelCommit = modeNow === 'asr' && shouldForcePixelAsrCommitPath();
+      const writerAllowed = hasWriter && writerAddressability.allowed && !forcePixelCommit;
       let targetBlockId = -1;
       let writerSeekLineIdx: number | null = null;
       try {
@@ -4636,6 +4658,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           writerIndexedMin: writerAddressability.minIndexedLineCount,
           writerHasTargetLine: writerAddressability.hasTargetIndexedLine,
           writerTotalLinesHint: writerAddressability.totalLinesHint,
+          forcePixelCommit,
           writerSeekLineIdx,
           mode: modeNow,
           role: resolveViewerRole(),
@@ -4855,9 +4878,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           : 'na';
         const searchFromOut = debugSearchFrom ?? 'na';
         const searchToOut = debugSearchTo ?? 'na';
+        const commitPathOut = writerAllowed ? 'writer' : 'pixel';
         try {
           console.info(
-            `ASR_COMMIT_DEBUG cursorLine=${commitCursorLine} bestMatchLine=${Math.max(0, Math.floor(line))} searchWindow={from:${searchFromOut},to:${searchToOut}} lostMode=${debugLostMode ? 1 : 0} writerSeekLine=${writerSeekLineOut}`,
+            `ASR_COMMIT_DEBUG cursorLine=${commitCursorLine} bestMatchLine=${Math.max(0, Math.floor(line))} searchWindow={from:${searchFromOut},to:${searchToOut}} lostMode=${debugLostMode ? 1 : 0} writerSeekLine=${writerSeekLineOut} commitPath=${commitPathOut}`,
           );
         } catch {
           // ignore
