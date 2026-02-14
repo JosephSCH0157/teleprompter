@@ -5552,6 +5552,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx = continuationForwardCandidate.idx;
       conf = continuationForwardCandidate.score;
       effectiveThreshold = Math.min(effectiveThreshold, outrunFloor);
+      if (
+        rawIdx > cursorLine + DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES &&
+        conf < DEFAULT_STRONG_FORWARD_COMMIT_SIM
+      ) {
+        const requestedIdx = rawIdx;
+        rawIdx = cursorLine + DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
+        if (isDevMode()) {
+          try {
+            console.info(
+              `ASR_CLAMP normal prev=${cursorLine} req=${requestedIdx} clamped=${rawIdx} sim=${formatLogScore(conf)} reason=weak_forward_window`,
+            );
+          } catch {}
+        }
+      }
       if (isDevMode()) {
         try {
           console.info('[ASR_FORWARD_WINDOW_CONTINUE]', {
