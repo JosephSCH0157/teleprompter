@@ -71,6 +71,7 @@ In `scrollMode='asr'`:
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
 - Score arbitration must bias forward continuation when transcript evidence is longer than the current line and a forward multi-line window (`span>=2`) scores at/near current-line score (within small slack) and above floor.
 - If current-line match has weak lexical overlap (token-poor anchor) while a forward candidate clears floor and near-score slack, prefer forward candidate over same-line recenter.
+- Weak-current forward rescue is bounded to near-forward continuity (`delta<=2`, `span<=2`) so token-poor anchors cannot trigger paragraph jumps.
 - Match selection must be band-preferred: choose best candidate from the active band first (with at most a tiny backward tolerance), but allow forward-window continuation/fallback before hard rejecting.
 - Live block sync (`blocks:*`) must not overwrite ASR cursor truth (`currentIndex`/driver line index); index seeding is pre-live/bootstrap behavior only.
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.
@@ -78,6 +79,7 @@ In `scrollMode='asr'`:
 - Add a stuck watchdog fail-safe: in live armed ASR sessions, if final speech events continue but commit count does not change for the watchdog window, attempt a bounded forward recovery commit from the forward scan at a low floor.
 - Non-finite (`NaN`/`Infinity`) values in ASR target/scroll math must be guarded at the writer and commit path choke points; reject the write/step and emit a dev-only diagnostic guard line.
 - Forward-evidence gating may still block backward moves, large forward skips, and ambiguous multi-line collisions.
+- For short-final utterances inside the recent-forward window, strong forward candidates above floor may satisfy forced-evidence without requiring the general token/char minima.
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.
 
 ---

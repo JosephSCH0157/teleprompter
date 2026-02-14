@@ -362,6 +362,8 @@ const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.25;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 4;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
+const DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA = 2;
+const DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN = 2;
 const CUE_LINE_BRACKET_RE = /^\s*[\[(][^\])]{0,120}[\])]\s*$/;
 const CUE_LINE_WORD_RE = /\b(pause|beat|silence|breath|breathe|hold|wait|reflective)\b/i;
 const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$/i;
@@ -5279,8 +5281,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const outrunFloor = shortFinalRecent ? shortFinalNeed : outrunRelaxedSim;
     const forwardCandidateOk = !!outrunCandidate && bestForwardSim >= outrunFloor;
     const slamDunkFinalEarly = isSlamDunkFinal(rawIdx, conf);
+    const shortFinalForwardEvidenceOk =
+      shortFinalRecent &&
+      forwardCandidateOk &&
+      bestForwardIdx !== null &&
+      bestForwardIdx > cursorLine;
     const forcedEvidenceOk =
       slamDunkFinalEarly ||
+      shortFinalForwardEvidenceOk ||
       ((tokenCount >= forcedMinTokens || evidenceChars >= forcedMinChars) && forwardCandidateOk);
     const outrunEligible = !!outrunPick && outrunRecent && forcedEvidenceOk;
     const behindByForBias = cursorLine - rawIdx;
@@ -5415,7 +5423,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         1,
       );
       const weakForwardCandidate = forwardBandScores
-        .filter((entry) => entry.idx > cursorLine)
+        .filter((entry) =>
+          entry.idx > cursorLine &&
+          entry.idx - cursorLine <= DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA &&
+          entry.span <= DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN)
         .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
       if (
         weakForwardCandidate &&
@@ -5430,6 +5441,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `current=${cursorLine}`,
           `best=${before}`,
           `forward=${rawIdx}`,
+          `delta=${rawIdx - cursorLine}`,
+          `span=${weakForwardCandidate.span}`,
           `sim=${formatLogScore(conf)}`,
           `need=${formatLogScore(effectiveThreshold)}`,
           `overlapTokens=${overlapTokensCurrent.length}`,
