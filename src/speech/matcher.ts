@@ -96,6 +96,7 @@ export function normTokens(s: string): string[] {
     .replace(/\[[^\]]+]/g, ' ') // strip [pause]/[beat]/[note]
     .replace(/\([^)]*\)/g, ' ') // strip parentheticals
     .replace(/&/g, ' and ')
+    .replace(/%/g, ' percent ') // normalize 68% -> 68 percent
     .replace(/[\u2018\u2019\u201B\u2032]/g, "'") // normalize apostrophes
     .replace(/[\u201C\u201D\u201F\u2033]/g, '"') // normalize quotes
     .replace(/[\u2010-\u2015]/g, '-') // normalize dashes

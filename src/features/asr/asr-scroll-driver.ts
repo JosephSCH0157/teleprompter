@@ -396,6 +396,17 @@ const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 3;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
 const DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES = 25;
 const DEFAULT_LOST_FORWARD_MIN_SIM = 0.45;
+const LOST_FORWARD_WINDOW_STEPS = [10, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES, 60] as const;
+const LOST_FORWARD_STAGE_STREAKS = [
+  DEFAULT_NO_PROGRESS_STREAK_TRIGGER,
+  DEFAULT_NO_PROGRESS_STREAK_TRIGGER * 2,
+  DEFAULT_NO_PROGRESS_STREAK_TRIGGER * 3,
+] as const;
+const DEFAULT_TELEPORT_MIN_TOKENS = 8;
+const DEFAULT_TELEPORT_COMPETITIVE_MARGIN = 0.05;
+const DEFAULT_TELEPORT_STANDARD_CAP_LINES = 25;
+const DEFAULT_TELEPORT_DEEP_CAP_LINES = 60;
+const ANCHOR_RARE_TOKEN_MIN_LEN = 7;
 const DEFAULT_MICRO_RELOCK_MARGIN = 0.12;
 const DEFAULT_MICRO_RELOCK_COOLDOWN_MS = 3000;
 const DEFAULT_MICRO_RELOCK_PREFERRED_TTL_MS = 1500;
@@ -419,6 +430,13 @@ const SPEAKER_TAG_ONLY_RE = /^\s*\[\s*\/?\s*(s1|s2|guest1|guest2|g1|g2)\s*\]\s*$
 const NOTE_TAG_ONLY_RE = /^\s*\[\s*\/?\s*note(?:[^\]]*)\]\s*$/i;
 const NOTE_INLINE_BLOCK_RE = /^\s*\[\s*note(?:[^\]]*)\][\s\S]*\[\s*\/\s*note\s*\]\s*$/i;
 const MAX_CUE_SKIP_LOOKAHEAD_LINES = 12;
+const ANCHOR_STOPWORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'but', 'if', 'so', 'to', 'of', 'in', 'on',
+  'at', 'for', 'from', 'with', 'by', 'as', 'is', 'are', 'was', 'were', 'be',
+  'been', 'being', 'this', 'that', 'these', 'those', 'it', 'its', 'i', 'you',
+  'he', 'she', 'we', 'they', 'my', 'your', 'our', 'their', 'me', 'him', 'her',
+  'them', 'do', 'does', 'did', 'have', 'has', 'had', 'not', 'no', 'yes',
+]);
 const INDEXED_LINE_SELECTOR = [
   '.line[data-i]',
   '.line[data-index]',
@@ -524,6 +542,23 @@ function getOverlapTokens(leftNormalized: string, rightNormalized: string): stri
     overlap.push(token);
   }
   return overlap;
+}
+
+function isAnchorToken(token: string): boolean {
+  const t = String(token || '').trim().toLowerCase();
+  if (!t) return false;
+  if (/^\d+$/.test(t)) return true;
+  if (t.length >= ANCHOR_RARE_TOKEN_MIN_LEN && !ANCHOR_STOPWORDS.has(t)) return true;
+  return false;
+}
+
+function getAnchorTokenSet(tokens: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const token of tokens) {
+    if (!isAnchorToken(token)) continue;
+    out.add(token);
+  }
+  return out;
 }
 
 function hasMeaningfulTranscriptChange(previousNormalized: string, nextNormalized: string): boolean {
@@ -2067,6 +2102,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let noProgressStreak = 0;
   let lastProgressCursorLine = -1;
   let lostForwardActive = false;
+  let lostForwardStage = 0;
   let lostForwardEnteredAt = 0;
   let lastMicroRelockAt = 0;
   let microRelockPreferredCursor: number | null = null;
@@ -2121,15 +2157,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
   const isPostCatchupActive = (now: number) =>
     now < postCatchupUntil && postCatchupSamplesLeft > 0;
+  const getLostForwardLookaheadLines = () =>
+    LOST_FORWARD_WINDOW_STEPS[
+      Math.min(
+        Math.max(0, Math.floor(lostForwardStage)),
+        LOST_FORWARD_WINDOW_STEPS.length - 1,
+      )
+    ];
+  const isDeepLostForwardMode = () =>
+    Math.max(0, Math.floor(lostForwardStage)) >= LOST_FORWARD_WINDOW_STEPS.length - 1;
+  const getLostForwardCommitCapLines = () =>
+    isDeepLostForwardMode()
+      ? DEFAULT_TELEPORT_DEEP_CAP_LINES
+      : DEFAULT_TELEPORT_STANDARD_CAP_LINES;
   const exitLostForwardMode = (reason: string) => {
     if (!lostForwardActive) return;
+    const stage = lostForwardStage;
+    const windowAhead = getLostForwardLookaheadLines();
     lostForwardActive = false;
+    lostForwardStage = 0;
     lostForwardEnteredAt = 0;
     emitHudStatus('lost_forward', `LOST_FORWARD off (${reason})`);
     if (isDevMode()) {
       try {
         console.info(
-          `ASR_LOST_FORWARD_EXIT reason=${reason} streak=${noProgressStreak} cursor=${lastLineIndex}`,
+          `ASR_LOST_FORWARD_EXIT reason=${reason} stage=${stage} window=+${windowAhead} streak=${noProgressStreak} cursor=${lastLineIndex}`,
         );
       } catch {}
     }
@@ -2140,6 +2192,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastProgressCursorLine = Math.max(lastProgressCursorLine, Math.max(0, Math.floor(cursorLine as number)));
     }
     exitLostForwardMode(reason);
+    if (!lostForwardActive) {
+      lostForwardStage = 0;
+    }
   };
   const noteNoProgressIngest = (
     now: number,
@@ -2157,21 +2212,47 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bestLine = Number.isFinite(bestMatchLine) ? Math.max(0, Math.floor(bestMatchLine)) : cursor;
     const sim = Number.isFinite(similarity) ? similarity : 0;
     const need = Number.isFinite(commitThreshold) ? clamp(commitThreshold, 0, 1) : 1;
-    const commitDidNotFire = true;
+    const commitWouldAdvance = bestLine > cursor && sim >= need;
+    const commitDidNotFire = !commitWouldAdvance;
     const shouldIncrement =
       bestLine <= cursor ||
       sim < need ||
       commitDidNotFire;
     if (!shouldIncrement) return;
     noProgressStreak += 1;
-    if (!lostForwardActive && noProgressStreak >= DEFAULT_NO_PROGRESS_STREAK_TRIGGER) {
+    if (!lostForwardActive && noProgressStreak >= LOST_FORWARD_STAGE_STREAKS[0]) {
       lostForwardActive = true;
+      lostForwardStage = 0;
       lostForwardEnteredAt = now;
-      emitHudStatus('lost_forward', 'LOST_FORWARD on');
+      const windowAhead = getLostForwardLookaheadLines();
+      emitHudStatus('lost_forward', `LOST_FORWARD on (+${windowAhead})`);
       if (isDevMode()) {
         try {
           console.info(
-            `ASR_LOST_FORWARD_ENTER streak=${noProgressStreak} cursor=${cursor} best=${bestLine} sim=${formatLogScore(sim)} need=${formatLogScore(need)}`,
+            `ASR_LOST_FORWARD_ENTER stage=${lostForwardStage} window=+${windowAhead} streak=${noProgressStreak} cursor=${cursor} best=${bestLine} sim=${formatLogScore(sim)} need=${formatLogScore(need)}`,
+          );
+        } catch {}
+      }
+      return;
+    }
+    if (!lostForwardActive) return;
+    const nextStage = Math.min(
+      lostForwardStage + 1,
+      LOST_FORWARD_WINDOW_STEPS.length - 1,
+    );
+    const stageStreakNeed = LOST_FORWARD_STAGE_STREAKS[nextStage];
+    if (
+      nextStage > lostForwardStage &&
+      Number.isFinite(stageStreakNeed as number) &&
+      noProgressStreak >= Math.max(0, Math.floor(stageStreakNeed as number))
+    ) {
+      lostForwardStage = nextStage;
+      const windowAhead = getLostForwardLookaheadLines();
+      emitHudStatus('lost_forward', `LOST_FORWARD ramp (+${windowAhead})`);
+      if (isDevMode()) {
+        try {
+          console.info(
+            `ASR_LOST_FORWARD_RAMP stage=${lostForwardStage} window=+${windowAhead} streak=${noProgressStreak} cursor=${cursor} best=${bestLine} sim=${formatLogScore(sim)} need=${formatLogScore(need)}`,
           );
         } catch {}
       }
@@ -4349,10 +4430,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const lostForwardClampEligible =
         forceTag === 'lost-forward' &&
         targetLine > lastLineIndex &&
-        targetLine - lastLineIndex <= DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES &&
+        targetLine - lastLineIndex <= Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()) &&
         conf >= DEFAULT_LOST_FORWARD_MIN_SIM;
       const effectiveClampDeltaLimit = lostForwardClampEligible
-        ? Math.max(clampDeltaLimit, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+        ? Math.max(
+            clampDeltaLimit,
+            Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()),
+          )
         : (cueBridgeClampEligible
           ? cueBridgeDelta
           : clampDeltaLimit);
@@ -4366,7 +4450,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (lostForwardClampEligible && isDevMode()) {
         try {
           console.info(
-            `ASR_LOST_FORWARD_CLAMP carry=+${DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
+            `ASR_LOST_FORWARD_CLAMP carry=+${Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines())} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
           );
         } catch {}
       }
@@ -5410,7 +5494,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ? clamp(lookaheadBase + DEFAULT_CATCHUP_LOOKAHEAD_BONUS, matchLookaheadLines, matchLookaheadMax + DEFAULT_CATCHUP_LOOKAHEAD_BONUS)
       : lookaheadBase;
     const driverWindowAhead = lostForwardActive
-      ? Math.max(driverWindowAheadBase, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+      ? Math.max(driverWindowAheadBase, getLostForwardLookaheadLines())
       : driverWindowAheadBase;
     const match = incomingMatch;
     if (!match) {
@@ -5731,9 +5815,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     let bandStart = baseBandStart;
     let bandEnd = baseBandEnd;
     if (lostForwardActive) {
+      const lostForwardWindow = getLostForwardLookaheadLines();
       const lostForwardBandEnd = totalLines > 0
-        ? Math.min(totalLines - 1, cursorLine + DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
-        : cursorLine + DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES;
+        ? Math.min(totalLines - 1, cursorLine + lostForwardWindow)
+        : cursorLine + lostForwardWindow;
       bandEnd = Math.max(bandEnd, lostForwardBandEnd);
     }
     const bandBackToleranceStart = Math.max(0, cursorLine - DEFAULT_BAND_BACK_TOLERANCE_LINES);
@@ -6170,19 +6255,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
     const forwardMatcherInputs = buildForwardMatcherInputs(bufferedText, compacted, isFinal);
     const forwardRangeStart = Math.max(0, cursorLine + 1);
+    const lostForwardWindow = lostForwardActive ? getLostForwardLookaheadLines() : 0;
     const forwardInitialEnd = cursorLine + Math.max(
       1,
       lostForwardActive
-        ? Math.max(outrunLookaheadLines, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+        ? lostForwardWindow
         : outrunLookaheadLines,
     );
     const totalForwardLines = getTotalLines();
-    const forwardHardEnd = totalForwardLines > 0
-      ? Math.max(forwardRangeStart, totalForwardLines - 1)
-      : Math.max(forwardRangeStart, cursorLine + Math.max(outrunLookaheadLines * 4, 120));
+    const forwardHardEnd = lostForwardActive
+      ? (totalForwardLines > 0
+          ? Math.min(totalForwardLines - 1, Math.max(forwardRangeStart, cursorLine + lostForwardWindow))
+          : Math.max(forwardRangeStart, cursorLine + lostForwardWindow))
+      : (totalForwardLines > 0
+          ? Math.max(forwardRangeStart, totalForwardLines - 1)
+          : Math.max(forwardRangeStart, cursorLine + Math.max(outrunLookaheadLines * 4, 120)));
     const forwardMinCandidates = 6;
-    const forwardExpandStep = Math.max(12, Math.floor(outrunLookaheadLines));
-    const forwardMaxExpandLines = Math.max(forwardExpandStep, Math.floor(outrunLookaheadLines * 3));
+    const forwardExpandStep = lostForwardActive ? 0 : Math.max(12, Math.floor(outrunLookaheadLines));
+    const forwardMaxExpandLines = lostForwardActive
+      ? 0
+      : Math.max(forwardExpandStep, Math.floor(outrunLookaheadLines * 3));
     let forwardRangeEnd = Math.min(
       forwardHardEnd,
       Math.max(forwardRangeStart, forwardInitialEnd),
@@ -6999,26 +7091,70 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     if (lostForwardActive) {
+      const lostForwardWindow = getLostForwardLookaheadLines();
+      const lostForwardCap = Math.min(lostForwardWindow, getLostForwardCommitCapLines());
       const lostForwardPick = forwardBandScores
         .filter((entry) =>
           entry.idx > cursorLine &&
-          (entry.idx - cursorLine) <= DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES &&
-          entry.score >= DEFAULT_LOST_FORWARD_MIN_SIM)
+          (entry.idx - cursorLine) <= lostForwardCap)
         .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
       if (lostForwardPick) {
-        const before = rawIdx;
-        rawIdx = lostForwardPick.idx;
-        conf = lostForwardPick.score;
-        effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_LOST_FORWARD_MIN_SIM);
-        outrunCommit = true;
-        forceReason = 'lost-forward';
-        if (isDevMode()) {
-          try {
-            const activeMs = lostForwardEnteredAt > 0 ? Math.max(0, now - lostForwardEnteredAt) : 0;
-            console.info(
-              `ASR_LOST_FORWARD_JUMP current=${cursorLine} best=${before} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)} streak=${noProgressStreak} activeMs=${activeMs}`,
-            );
-          } catch {}
+        const transcriptTokens = normTokens(transcriptComparable || bufferedText || compacted || text);
+        const candidateLineTokens = normTokens(getLineTextAt(lostForwardPick.idx));
+        const transcriptAnchorSet = getAnchorTokenSet(transcriptTokens);
+        let sharedAnchorHits = 0;
+        if (transcriptAnchorSet.size > 0 && candidateLineTokens.length > 0) {
+          const candidateSet = new Set(candidateLineTokens);
+          for (const token of transcriptAnchorSet) {
+            if (!candidateSet.has(token)) continue;
+            sharedAnchorHits += 1;
+          }
+        }
+        const neededAnchorHits = transcriptAnchorSet.size >= 2 ? 2 : 1;
+        const longEnough = transcriptTokens.length >= DEFAULT_TELEPORT_MIN_TOKENS;
+        const currentScoreForCompetition = Number.isFinite(arbitrationCurrentScore)
+          ? arbitrationCurrentScore
+          : conf;
+        const strongOrCompetitive =
+          lostForwardPick.score >= DEFAULT_LOST_FORWARD_MIN_SIM ||
+          lostForwardPick.score >= currentScoreForCompetition + DEFAULT_TELEPORT_COMPETITIVE_MARGIN;
+        const anchorGateOk =
+          transcriptAnchorSet.size > 0 &&
+          sharedAnchorHits >= neededAnchorHits;
+        const teleportGateOk =
+          longEnough &&
+          strongOrCompetitive &&
+          anchorGateOk;
+        if (teleportGateOk) {
+          const before = rawIdx;
+          rawIdx = lostForwardPick.idx;
+          conf = lostForwardPick.score;
+          effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_LOST_FORWARD_MIN_SIM);
+          outrunCommit = true;
+          forceReason = 'lost-forward';
+          if (isDevMode()) {
+            try {
+              const activeMs = lostForwardEnteredAt > 0 ? Math.max(0, now - lostForwardEnteredAt) : 0;
+              console.info(
+                `ASR_LOST_FORWARD_JUMP stage=${lostForwardStage} window=+${lostForwardWindow} cap=+${lostForwardCap} current=${cursorLine} best=${before} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)} streak=${noProgressStreak} activeMs=${activeMs} anchors=${sharedAnchorHits}/${neededAnchorHits} tokens=${transcriptTokens.length}`,
+              );
+            } catch {}
+          }
+        } else {
+          warnGuard('lost_forward_gate', [
+            `current=${cursorLine}`,
+            `best=${lostForwardPick.idx}`,
+            `delta=${lostForwardPick.idx - cursorLine}`,
+            `sim=${formatLogScore(lostForwardPick.score)}`,
+            `need=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)}`,
+            `tokens=${transcriptTokens.length}`,
+            `anchors=${sharedAnchorHits}/${neededAnchorHits}`,
+            `long=${longEnough ? 1 : 0}`,
+            `competitive=${strongOrCompetitive ? 1 : 0}`,
+            `window=${lostForwardWindow}`,
+            `cap=${lostForwardCap}`,
+            snippet ? `clue="${snippet}"` : '',
+          ]);
         }
       }
     }
@@ -7802,6 +7938,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     noProgressStreak = 0;
     lastProgressCursorLine = lastLineIndex;
     lostForwardActive = false;
+    lostForwardStage = 0;
     lostForwardEnteredAt = 0;
     lastMicroRelockAt = 0;
     clearMicroRelockPreference();
