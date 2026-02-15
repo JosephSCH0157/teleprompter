@@ -74,6 +74,7 @@ type PendingMatch = {
   searchWindowFrom?: number;
   searchWindowTo?: number;
   lostMode?: boolean;
+  cueBridgeNudgeDelta?: number;
 };
 
 type AsrEventSnapshot = {
@@ -4055,6 +4056,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         searchWindowFrom,
         searchWindowTo,
         lostMode: pendingLostMode,
+        cueBridgeNudgeDelta: pendingCueBridgeNudgeDelta,
       } = pending;
       const thresholds = getAsrDriverThresholds();
       syncMotionTuning(thresholds, now);
@@ -4204,12 +4206,30 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const forceTag = String(forceReason || '').toLowerCase();
       const strongForwardCommit = conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
       const clampDeltaLimit = DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
+      const cueBridgeDelta = Number.isFinite(pendingCueBridgeNudgeDelta ?? NaN)
+        ? Math.max(0, Math.floor(Number(pendingCueBridgeNudgeDelta)))
+        : 0;
+      const cueBridgeClampEligible =
+        cueBridgeDelta > clampDeltaLimit &&
+        cueBridgeDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
+        targetLine > lastLineIndex &&
+        targetLine - lastLineIndex <= cueBridgeDelta;
+      const effectiveClampDeltaLimit = cueBridgeClampEligible
+        ? cueBridgeDelta
+        : clampDeltaLimit;
+      if (cueBridgeClampEligible && isDevMode()) {
+        try {
+          console.info(
+            `ASR_CUE_BRIDGE_COMMIT carry=+${cueBridgeDelta} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
+          );
+        } catch {}
+      }
       if (
-        targetLine > lastLineIndex + clampDeltaLimit &&
+        targetLine > lastLineIndex + effectiveClampDeltaLimit &&
         !strongForwardCommit
       ) {
         const requestedLine = targetLine;
-        targetLine = lastLineIndex + clampDeltaLimit;
+        targetLine = lastLineIndex + effectiveClampDeltaLimit;
         if (isDevMode()) {
           try {
             const clampClass = forceTag === 'watchdog' ? 'watchdog' : forced ? 'forced' : 'normal';
@@ -4223,13 +4243,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const cueSafeInitialTarget = resolveCueSafeCommitLine(
         targetLine,
         lastLineIndex,
-        clampDeltaLimit,
+        effectiveClampDeltaLimit,
       );
       if (cueSafeInitialTarget.nextLine == null) {
         warnGuard('cue_commit_blocked', [
           `current=${lastLineIndex}`,
           `best=${targetLine}`,
-          `windowEnd=${lastLineIndex + clampDeltaLimit}`,
+          `windowEnd=${lastLineIndex + effectiveClampDeltaLimit}`,
           cueSafeInitialTarget.skippedFrom != null ? `cueLine=${cueSafeInitialTarget.skippedFrom}` : '',
           cueSafeInitialTarget.skippedText
             ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
@@ -6329,6 +6349,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     let outrunCommit = false;
     let forceReason: string | undefined;
+    let cueBridgeNudgeDelta: number | undefined;
     let relockOverride = false;
     let relockReason: string | undefined;
     const shortFinalTightEvidenceBypass =
@@ -6904,6 +6925,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (cueBridge.nextLine != null && cueBridge.nextLine > cursorLine) {
         const before = rawIdx;
         rawIdx = Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine));
+        if (cueBridge.skippedReasons.length) {
+          cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
+        }
         logCueBridgeUse(
           cursorLine,
           rawIdx,
@@ -7404,6 +7428,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       searchWindowFrom: bandStart,
       searchWindowTo: bandEnd,
       lostMode,
+      cueBridgeNudgeDelta,
     });
     schedulePending();
   };
