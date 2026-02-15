@@ -301,6 +301,7 @@ const DEFAULT_STARVATION_WARN_COOLDOWN_MS = 1500;
 const DEFAULT_STARVATION_RELOCK_LOOKAHEAD_LINES = 5;
 const DEFAULT_STARVATION_RELOCK_SIM_SLACK = 0.08;
 const DEFAULT_STARVATION_RELOCK_COOLDOWN_MS = 1200;
+const DEFAULT_LOST_FORWARD_WALL_RELOCK_STREAK = 3;
 const BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS = 1500;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
@@ -2142,6 +2143,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastStableInterimNudgeAt = 0;
   let lastBadCursorOnCueLogAt = 0;
   let noProgressStreak = 0;
+  let lostForwardWallStreak = 0;
   let lastProgressCursorLine = -1;
   let lostForwardActive = false;
   let lostForwardStage = 0;
@@ -2230,6 +2232,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   };
   const resetNoProgressStreak = (reason: string, cursorLine?: number) => {
     noProgressStreak = 0;
+    lostForwardWallStreak = 0;
     if (Number.isFinite(cursorLine as number)) {
       lastProgressCursorLine = Math.max(lastProgressCursorLine, Math.max(0, Math.floor(cursorLine as number)));
     }
@@ -6070,6 +6073,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         : cursorLine + matchWindowAhead);
     let bandStart = baseBandStart;
     let bandEnd = baseBandEnd;
+    let lostForwardGateRejected = false;
     if (lostForwardActive) {
       const lostForwardWindow = getLostForwardLookaheadLines();
       const lostForwardBandEnd = totalLines > 0
@@ -7427,6 +7431,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             } catch {}
           }
         } else {
+          lostForwardGateRejected = true;
           warnGuard('lost_forward_gate', [
             `current=${cursorLine}`,
             `best=${lostForwardPick.idx}`,
@@ -7467,6 +7472,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         msLeft: postCatchupUntil - now,
       });
     } else if (effectiveThreshold > 0 && conf < effectiveThreshold) {
+      const lowSimPlusOneBlocked = rawIdx === cursorLine + 1;
+      const lostForwardWallDetected = lostForwardGateRejected && lowSimPlusOneBlocked;
+      if (lostForwardWallDetected) {
+        lostForwardWallStreak += 1;
+      } else {
+        lostForwardWallStreak = 0;
+      }
+      const shouldAttemptEarlyRelock =
+        lostForwardWallDetected &&
+        noProgressStreak >= DEFAULT_LOST_FORWARD_WALL_RELOCK_STREAK &&
+        lostForwardWallStreak >= DEFAULT_LOST_FORWARD_WALL_RELOCK_STREAK;
+      const earlyRelock = shouldAttemptEarlyRelock
+        ? attemptForwardRelock(now, cursorLine, bufferedText || compacted, isFinal)
+        : null;
+      if (earlyRelock?.applied) {
+        lostForwardWallStreak = 0;
+      }
       if (!relockModeActive) {
         if (rawIdx <= cursorLine && maybeSkipCueLine(cursorLine, now, 'low_sim_wait', snippet)) {
           return;
@@ -7532,6 +7554,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `delta=${rawIdx - cursorLine}`,
           `sim=${formatLogScore(conf)}`,
           `need=${formatLogScore(effectiveThreshold)}`,
+          `wall=${lostForwardWallStreak}`,
+          earlyRelock ? `relock=${earlyRelock.reason}` : '',
           snippet ? `clue="${snippet}"` : '',
         ]);
         emitHudStatus('low_sim_wait', 'Low confidence - waiting');
@@ -7561,6 +7585,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `delta=${rawIdx - cursorLine}`,
         `sim=${formatLogScore(conf)}`,
         `need=${formatLogScore(effectiveThreshold)}`,
+        `wall=${lostForwardWallStreak}`,
+        earlyRelock ? `relock=${earlyRelock.reason}` : '',
         relockModeActive ? 'relock=1' : '',
         relockReason ? `relockReason=${relockReason}` : '',
         Number.isFinite(bestSpan) ? `span=${bestSpan}` : '',
@@ -8228,6 +8254,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     finalsSinceCommit = 0;
     eventsSinceCommit = 0;
     noProgressStreak = 0;
+    lostForwardWallStreak = 0;
     lastProgressCursorLine = lastLineIndex;
     lostForwardActive = false;
     lostForwardStage = 0;

@@ -3708,25 +3708,6 @@ function installScrollRouter(opts) {
         });
       } catch {}
       if (mode === 'asr') {
-        if (asrDirect) {
-          try {
-            console.info('[MOTOR_ALLOWED_ASR] source=processAutoIntent mode=asr decision=direct-asr', {
-              motorKind,
-              source: motorSource,
-              phase: currentPhase,
-              sessionIntent: sessionIntentOn,
-            });
-          } catch {}
-          return;
-        }
-        try {
-          console.info('[MOTOR_BLOCKED_ASR] source=processAutoIntent mode=asr decision=forced-stop', {
-            motorKind,
-            source: motorSource,
-            phase: currentPhase,
-            sessionIntent: sessionIntentOn,
-          });
-        } catch {}
         stopAutoMotor('auto-intent:asr');
         return;
       }
@@ -4008,11 +3989,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   function startHybridMotorFromSpeedChange() {
     const modeNow = getScrollMode();
     if (modeNow !== "hybrid") {
-      if (modeNow === "asr") {
-        try {
-          console.info('[MOTOR_BLOCKED_ASR] source=startHybridMotorFromSpeedChange mode=asr');
-        } catch {}
-      }
       logHybridModeMismatch('startHybridMotorFromSpeedChange');
       return;
     }
