@@ -3567,7 +3567,7 @@ function installScrollRouter(opts) {
   let lastAutoIntentMotorRequest: AutoIntentMotorRequest = { kind: 'auto', source: 'unknown' };
   function normalizeRequestedMotorKind(raw: unknown): RequestedMotorKind | null {
     const value = String(raw || '').toLowerCase();
-    if (value === 'auto' || value === 'hybrid' || value === 'asr') return value;
+    if (value === 'auto' || value === 'hybrid') return value;
     return null;
   }
   function resolveAutoIntentMotorRequest(
@@ -3575,23 +3575,17 @@ function installScrollRouter(opts) {
     mode: string,
     reasonRaw?: string,
   ): AutoIntentMotorRequest {
+    const source = typeof detail?.source === 'string'
+      ? detail.source
+      : (reasonRaw || 'unknown');
+    // ASR mode is motorless: auto-intents may still arrive, but must never
+    // resolve to a motor-specific request in this mode.
+    if (mode === 'asr') return { kind: 'auto', source };
     const explicit =
       normalizeRequestedMotorKind(detail?.motorKind) ||
       normalizeRequestedMotorKind(detail?.kind) ||
       normalizeRequestedMotorKind(detail?.intent?.kind);
-    const source = typeof detail?.source === 'string'
-      ? detail.source
-      : (reasonRaw || 'unknown');
     if (explicit) return { kind: explicit, source };
-    const hint = String(source || '').toLowerCase();
-    if (
-      hint.includes('asr') ||
-      hint.includes('asr-driver') ||
-      hint.includes('asr_commit') ||
-      hint.includes('same-line-recenter')
-    ) {
-      return { kind: 'asr', source };
-    }
     if (mode === 'hybrid') return { kind: 'hybrid', source };
     return { kind: 'auto', source };
   }
@@ -5271,6 +5265,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
   let lastMotorIgnoredLogAt = 0;
   let lastMotorIgnoredLogKey = '';
   function logAutoGateAction(action: string, mode: string, line: string, blockedReason = '') {
+    if (mode === 'asr' && blockedReason === 'blocked:mode-asr-motorless') {
+      return;
+    }
     if (action !== 'MOTOR_IGNORED_OFF') {
       try { console.info(line); } catch {}
       return;
@@ -5337,10 +5334,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       let autoBlocked = "blocked:sessionOff";
       if (mode === "step" || mode === "rehearsal") {
         autoBlocked = `blocked:mode-${mode}`;
-      } else if (mode === "asr" && requestedMotorKind !== 'asr') {
-        autoBlocked = "blocked:mode-asr";
       } else if (mode === "asr") {
-        autoBlocked = "blocked:asr-direct";
+        // ASR mode is motorless by design. ASR driver commits are the only mover.
+        autoBlocked = "blocked:mode-asr-motorless";
       } else if (!livePhase) {
         autoBlocked = "blocked:livePhase";
       } else if (sessionBlocked) {
