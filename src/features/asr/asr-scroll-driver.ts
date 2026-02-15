@@ -296,6 +296,8 @@ const DEFAULT_STABLE_INTERIM_PREFIX_MIN_RATIO = 0.7;
 const DEFAULT_STABLE_INTERIM_PREFIX_MAX_TAIL_DRIFT_TOKENS = 3;
 const DEFAULT_NOISE_INTERIM_MIN_TOKENS = 3;
 const DEFAULT_NOISE_INTERIM_MIN_CHARS = 12;
+const DEFAULT_STARVATION_COMMIT_GAP_MS = 3000;
+const DEFAULT_STARVATION_WARN_COOLDOWN_MS = 1500;
 const BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS = 1500;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
@@ -1567,6 +1569,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastKnownScrollTop = 0;
   let summaryEmitted = false;
   let lastStallLogAt = 0;
+  let lastStarvationWarnAt = 0;
   let lastForwardCommitAt = Date.now();
   let finalsSinceCommit = 0;
   let eventsSinceCommit = 0;
@@ -5335,6 +5338,43 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const incomingIdx = Number.isFinite(incomingIdxRaw)
       ? Math.max(0, Math.floor(incomingIdxRaw))
       : null;
+    const currentCursorIndex =
+      stateCurrentIdx ??
+      (lastLineIndex >= 0 ? lastLineIndex : (incomingIdx ?? -1));
+    const sinceCommitMs = Math.max(0, now - lastCommitTime);
+    const starvationDetected =
+      lastCommitIndex != null &&
+      sinceCommitMs > DEFAULT_STARVATION_COMMIT_GAP_MS &&
+      currentCursorIndex === lastCommitIndex;
+    if (starvationDetected && now - lastStarvationWarnAt >= DEFAULT_STARVATION_WARN_COOLDOWN_MS) {
+      lastStarvationWarnAt = now;
+      const pendingForward =
+        pendingMatch != null &&
+        Number.isFinite(pendingMatch.line) &&
+        pendingMatch.line > currentCursorIndex;
+      const lastGuardReason = guardEvents.length
+        ? (guardEvents[guardEvents.length - 1]?.reason ?? null)
+        : null;
+      try {
+        console.warn('[ASR_STARVATION_DETECTED]', {
+          sinceMs: sinceCommitMs,
+          isFinal: !!isFinal,
+          tokenCount: compactedTokenCount,
+          cursorNow: currentCursorIndex,
+          lastCommitIndex,
+          pendingForward: pendingForward ? 1 : 0,
+          pendingLine: pendingMatch?.line ?? null,
+          pendingConf: pendingMatch != null ? Number(pendingMatch.conf.toFixed(3)) : null,
+          lostForwardActive: lostForwardActive ? 1 : 0,
+          lostForwardStage,
+          noProgressStreak,
+          lastForwardCommitAgoMs: Math.max(0, now - lastForwardCommitAt),
+          lastGuardReason,
+          eventsSinceCommit,
+          finalsSinceCommit,
+        });
+      } catch {}
+    }
     const preferredBackstepActive =
       microRelockPreferredCursor != null &&
       now <= microRelockPreferredUntil;
@@ -5370,16 +5410,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         matchAnchorIdx = preferredIdx;
         rememberCommittedBlockFromLine(preferredIdx);
       }
-    }
-    const currentCursorIndex = lastLineIndex >= 0
-      ? lastLineIndex
-      : (stateCurrentIdx ?? incomingIdx ?? -1);
-    if (
-      lastCommitIndex != null &&
-      now - lastCommitTime > 3000 &&
-      currentCursorIndex === lastCommitIndex
-    ) {
-      try { console.warn('ASR_STARVATION_DETECTED'); } catch {}
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     let rawMatchId = (detail as any)?.matchId;
