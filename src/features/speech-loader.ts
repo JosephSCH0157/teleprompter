@@ -42,8 +42,10 @@ type RecognizerLike = {
   stop?: AnyFn;
   abort?: AnyFn;
   on?: AnyFn;
+  onstart?: ((ev: Event) => void) | null;
   onend?: ((ev: Event) => void) | null;
   onerror?: ((ev: Event) => void) | null;
+  onresult?: AnyFn;
 };
 
 type SpeechRecognition = {
@@ -129,6 +131,7 @@ declare global {
     __tpEmitSpeech?: (t: unknown, final?: boolean) => void;
     __tpSendToDisplay?: (payload: unknown) => void;
     __tpGetActiveRecognizer?: () => RecognizerLike | null;
+    __tpHardResetSpeech?: (reason?: string) => void;
     SpeechRecognition?: { new (): SpeechRecognition };
     webkitSpeechRecognition?: { new (): SpeechRecognition };
     getAutoRecordEnabled?: () => boolean;
@@ -469,6 +472,78 @@ function setActiveRecognizer(instance: RecognizerLike | null): void {
   }
 }
 
+function clearRecognizerHandlers(instance: any): void {
+  if (!instance || typeof instance !== 'object') return;
+  try { instance.onstart = null; } catch {}
+  try { instance.onresult = null; } catch {}
+  try { instance.onend = null; } catch {}
+  try { instance.onerror = null; } catch {}
+  try { instance.onspeechstart = null; } catch {}
+  try { instance.onspeechend = null; } catch {}
+  try { instance.onaudiostart = null; } catch {}
+  try { instance.onaudioend = null; } catch {}
+  try { instance.onsoundstart = null; } catch {}
+  try { instance.onsoundend = null; } catch {}
+  try { instance.onnomatch = null; } catch {}
+}
+
+function stopAndAbortRecognizer(instance: any): void {
+  if (!instance) return;
+  clearRecognizerHandlers(instance);
+  try { instance.abort?.(); } catch {}
+  try { instance.stop?.(); } catch {}
+}
+
+function hardResetSpeechEngine(reason?: string): void {
+  const why = String(reason || 'script-reset');
+  asrSessionIntentActive = false;
+  resetAsrInterimStabilizer();
+  fallbackTranscriptMatchSeq = 0;
+  lastResultTs = 0;
+  pendingManualRestartCount = 0;
+  clearAsrRunKey(`hard-reset:${why}`);
+  stopSpeechWatchdog();
+
+  const candidates = new Set<any>();
+  const remember = (value: any) => {
+    if (!value) return;
+    candidates.add(value);
+  };
+  remember(activeRecognizer);
+  remember(rec);
+  try { remember(window.__tpGetActiveRecognizer?.()); } catch {}
+  try { remember((window as any).recog); } catch {}
+  try { remember((window as any).__tpRecognizer); } catch {}
+
+  try { stopAsrRuntime(); } catch {}
+  try { getTpSpeechNamespace()?.stopRecognizer?.(); } catch {}
+
+  for (const recognizer of candidates) {
+    stopAndAbortRecognizer(recognizer);
+  }
+
+  rec = null;
+  setActiveRecognizer(null);
+  running = false;
+  asrBrainLogged = false;
+  detachAsrScrollDriver();
+  try { window.__tpMic?.releaseMic?.(); } catch {}
+  try { (window as any).__tpEmitSpeech = undefined; } catch {}
+  try { (window as any).__tpRecognizer = null; } catch {}
+  try { (window as any).recog = null; } catch {}
+  try { window.speechOn = false; } catch {}
+  try { document.body.classList.remove('listening'); } catch {}
+  try { window.HUD?.bus?.emit?.('speech:toggle', false); } catch {}
+  setListeningUi(false);
+  setReadyUi();
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:speech-state', { detail: { running: false, reason: `hard-reset:${why}` } }),
+    );
+  } catch {}
+  emitHudSnapshot(`speech-hard-reset:${why}`, { force: true });
+}
+
 function requestRecognizerRestart(reasonTag?: string): boolean {
   if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return false;
   pendingManualRestartCount += 1;
@@ -488,6 +563,7 @@ function requestRecognizerRestart(reasonTag?: string): boolean {
 
 try {
   window.__tpGetActiveRecognizer = () => activeRecognizer;
+  window.__tpHardResetSpeech = (reason?: string) => hardResetSpeechEngine(reason);
 } catch {}
 
 let fallbackTranscriptMatchSeq = 0;
@@ -2144,6 +2220,16 @@ function ensureAsrDriverLifecycleHooks(): void {
     }
     emitHudSnapshot(`session-phase:${phase || 'unknown'}`);
   };
+  const onSpeechHardReset = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const reason = String(detail.reason || detail.source || 'script-reset');
+    hardResetSpeechEngine(reason);
+  };
+  const onScriptReset = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const source = String(detail.source || 'script-reset');
+    hardResetSpeechEngine(source);
+  };
   window.addEventListener('tp:session:intent', onSessionIntent, TRANSCRIPT_EVENT_OPTIONS);
   document.addEventListener('tp:session:intent', onSessionIntent as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:scroll:mode', onScrollMode, TRANSCRIPT_EVENT_OPTIONS);
@@ -2151,6 +2237,10 @@ function ensureAsrDriverLifecycleHooks(): void {
   window.addEventListener('tp:session:start', onSessionStart, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:stop', onSessionStop, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:phase', onSessionPhase, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:speech:hard-reset', onSpeechHardReset, TRANSCRIPT_EVENT_OPTIONS);
+  document.addEventListener('tp:speech:hard-reset', onSpeechHardReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:script:reset', onScriptReset, TRANSCRIPT_EVENT_OPTIONS);
+  document.addEventListener('tp:script:reset', onScriptReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:asr:blocks-ready', onBlocksReady, TRANSCRIPT_EVENT_OPTIONS);
   document.addEventListener('tp:asr:blocks-ready', onBlocksReady as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:script-rendered', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
@@ -2290,7 +2380,10 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     const startRecognizer = speechNs?.startRecognizer;
     if (typeof startRecognizer === 'function') {
       startRecognizer(() => {}, { lang: 'en-US' });
-      rec = { stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} } };
+      rec = {
+        stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
+        abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
+      };
       return true;
     }
   } catch {}
@@ -2475,9 +2568,13 @@ export function stopSpeechBackendForSession(reason?: string): void {
   asrBrainLogged = false;
   try { stopAsrRuntime(); } catch {}
   try { window.__tpMic?.releaseMic?.(); } catch {}
+  try { rec?.abort?.(); } catch {}
   try { rec?.stop?.(); } catch {}
+  try { stopAndAbortRecognizer((window as any).__tpRecognizer); } catch {}
+  try { stopAndAbortRecognizer((window as any).recog); } catch {}
   try { getTpSpeechNamespace()?.stopRecognizer?.(); } catch {}
   setActiveRecognizer(null);
+  rec = null;
   running = false;
   try { document.body.classList.remove('listening'); } catch {}
   try { window.HUD?.bus?.emit?.('speech:toggle', false); } catch {}

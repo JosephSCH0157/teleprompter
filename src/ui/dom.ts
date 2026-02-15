@@ -526,6 +526,13 @@ export function wireLoadSample(doc: Document = document) {
 }
 // Reset run without clearing content: rewind to top, reset index/state, keep editor text.
 function resetRun() {
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:speech:hard-reset', {
+        detail: { reason: 'script-reset', source: 'resetScriptBtn' },
+      }),
+    );
+  } catch {}
   try { window.stopAutoScroll && window.stopAutoScroll(); } catch {}
   try { window.__scrollCtl?.stopAutoCatchup?.(); } catch {}
   try { window.resetTimer && window.resetTimer(); } catch {}
@@ -562,7 +569,11 @@ function resetRun() {
   } catch {}
 
   // Notify listeners that the run was rewound
-  try { window.dispatchEvent(new CustomEvent('tp:script:reset', { detail: { at: Date.now() } })); } catch {}
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:script:reset', { detail: { at: Date.now(), source: 'resetScriptBtn' } }),
+    );
+  } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:scroll:status', { detail: { running: false } })); } catch {}
 
   try { (window.setStatus || (()=>{}))('Script reset to start'); } catch {}
