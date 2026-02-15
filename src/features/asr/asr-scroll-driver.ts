@@ -298,6 +298,9 @@ const DEFAULT_NOISE_INTERIM_MIN_TOKENS = 3;
 const DEFAULT_NOISE_INTERIM_MIN_CHARS = 12;
 const DEFAULT_STARVATION_COMMIT_GAP_MS = 3000;
 const DEFAULT_STARVATION_WARN_COOLDOWN_MS = 1500;
+const DEFAULT_STARVATION_RELOCK_LOOKAHEAD_LINES = 5;
+const DEFAULT_STARVATION_RELOCK_SIM_SLACK = 0.08;
+const DEFAULT_STARVATION_RELOCK_COOLDOWN_MS = 1200;
 const BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS = 1500;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
@@ -1570,6 +1573,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let summaryEmitted = false;
   let lastStallLogAt = 0;
   let lastStarvationWarnAt = 0;
+  let lastStarvationRelockAt = 0;
   let lastForwardCommitAt = Date.now();
   let finalsSinceCommit = 0;
   let eventsSinceCommit = 0;
@@ -2307,6 +2311,155 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } catch {}
       }
     }
+  };
+  const attemptForwardRelock = (
+    now: number,
+    cursorLine: number,
+    transcriptText: string,
+    isFinal: boolean,
+  ) => {
+    if (now - lastStarvationRelockAt < DEFAULT_STARVATION_RELOCK_COOLDOWN_MS) {
+      return {
+        attempted: false,
+        applied: false,
+        reason: 'cooldown',
+        candidateIdx: null as number | null,
+        candidateScore: null as number | null,
+        threshold: null as number | null,
+        candidatesChecked: 0,
+      };
+    }
+    lastStarvationRelockAt = now;
+    if (!Number.isFinite(cursorLine) || cursorLine < 0) {
+      return {
+        attempted: true,
+        applied: false,
+        reason: 'cursor_invalid',
+        candidateIdx: null,
+        candidateScore: null,
+        threshold: null,
+        candidatesChecked: 0,
+      };
+    }
+    const matcherInputs = buildForwardMatcherInputs(transcriptText, transcriptText, isFinal);
+    if (!matcherInputs.length) {
+      return {
+        attempted: true,
+        applied: false,
+        reason: 'no_matcher_inputs',
+        candidateIdx: null,
+        candidateScore: null,
+        threshold: null,
+        candidatesChecked: 0,
+      };
+    }
+    const cursor = Math.max(0, Math.floor(cursorLine));
+    const rangeStart = cursor + 1;
+    const totalLines = getTotalLines();
+    const rangeEnd = totalLines > 0
+      ? Math.min(totalLines - 1, cursor + DEFAULT_STARVATION_RELOCK_LOOKAHEAD_LINES)
+      : (cursor + DEFAULT_STARVATION_RELOCK_LOOKAHEAD_LINES);
+    const candidateLineIdx: number[] = [];
+    for (let idx = rangeStart; idx <= rangeEnd; idx += 1) {
+      const lineText = getLineTextAt(idx);
+      if (!lineText || isIgnorableCueLineText(lineText)) continue;
+      candidateLineIdx.push(idx);
+    }
+    if (!candidateLineIdx.length) {
+      return {
+        attempted: true,
+        applied: false,
+        reason: 'no_forward_candidates',
+        candidateIdx: null,
+        candidateScore: null,
+        threshold: null,
+        candidatesChecked: 0,
+      };
+    }
+    const matcherTokenSets = matcherInputs
+      .map((value) => normTokens(value))
+      .filter((tokens) => tokens.length > 0);
+    if (!matcherTokenSets.length) {
+      return {
+        attempted: true,
+        applied: false,
+        reason: 'no_matcher_tokens',
+        candidateIdx: null,
+        candidateScore: null,
+        threshold: null,
+        candidatesChecked: candidateLineIdx.length,
+      };
+    }
+    const scoreByIdx = new Map<number, number>();
+    candidateLineIdx.forEach((idx) => {
+      const lineNorm = normalizeComparableText(getLineTextAt(idx));
+      const lineTokens = lineNorm ? normTokens(lineNorm) : [];
+      if (!lineTokens.length) return;
+      let bestLineScore = 0;
+      for (const tokenSet of matcherTokenSets) {
+        const score = computeLineSimilarityFromTokens(tokenSet, lineTokens);
+        if (score > bestLineScore) bestLineScore = score;
+      }
+      scoreByIdx.set(idx, bestLineScore);
+    });
+    const windowScores = buildForwardWindowScores(
+      candidateLineIdx,
+      matcherInputs,
+      Math.min(DEFAULT_FORWARD_WINDOW_MAX_LINES, DEFAULT_STARVATION_RELOCK_LOOKAHEAD_LINES),
+    );
+    windowScores.forEach((entry) => {
+      const existing = scoreByIdx.get(entry.idx);
+      if (!Number.isFinite(existing as number) || entry.score > (existing as number)) {
+        scoreByIdx.set(entry.idx, entry.score);
+      }
+    });
+    let bestCandidate: { idx: number; score: number } | null = null;
+    scoreByIdx.forEach((score, idx) => {
+      if (!Number.isFinite(score)) return;
+      if (!bestCandidate || score > bestCandidate.score || (score === bestCandidate.score && idx < bestCandidate.idx)) {
+        bestCandidate = { idx, score };
+      }
+    });
+    const thresholds = getAsrDriverThresholds();
+    const baseCommitThreshold = isFinal
+      ? thresholds.commitFinalMinSim
+      : clamp(thresholds.commitInterimMinSim * interimScale, 0, 1);
+    const relockThresholdFloor = Math.max(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM, thresholds.candidateMinSim);
+    const relockThreshold = clamp(baseCommitThreshold - DEFAULT_STARVATION_RELOCK_SIM_SLACK, relockThresholdFloor, 1);
+    if (!bestCandidate || bestCandidate.score < relockThreshold) {
+      return {
+        attempted: true,
+        applied: false,
+        reason: 'below_threshold',
+        candidateIdx: bestCandidate?.idx ?? null,
+        candidateScore: bestCandidate != null ? Number(bestCandidate.score.toFixed(3)) : null,
+        threshold: Number(relockThreshold.toFixed(3)),
+        candidatesChecked: candidateLineIdx.length,
+      };
+    }
+    matchAnchorIdx = bestCandidate.idx;
+    reseedCommitBandFromIndex(bestCandidate.idx, now, 'starvation-relock');
+    resetNoProgressStreak('starvation-relock', cursor);
+    emitHudStatus(
+      'relock',
+      `Relock: starvation +${Math.max(1, bestCandidate.idx - cursor)}`,
+    );
+    logDev('starvation relock', {
+      cursor,
+      candidate: bestCandidate.idx,
+      sim: Number(bestCandidate.score.toFixed(3)),
+      need: Number(relockThreshold.toFixed(3)),
+      lostForwardStage,
+    });
+    return {
+      attempted: true,
+      applied: true,
+      reason: 'applied',
+      candidateIdx: bestCandidate.idx,
+      candidateScore: Number(bestCandidate.score.toFixed(3)),
+      threshold: Number(relockThreshold.toFixed(3)),
+      candidatesChecked: candidateLineIdx.length,
+    };
   };
   const clearMicroRelockPreference = () => {
     microRelockPreferredCursor = null;
@@ -5342,10 +5495,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       stateCurrentIdx ??
       (lastLineIndex >= 0 ? lastLineIndex : (incomingIdx ?? -1));
     const sinceCommitMs = Math.max(0, now - lastCommitTime);
+    const lostForwardAtDetection = lostForwardActive;
     const starvationDetected =
       lastCommitIndex != null &&
       sinceCommitMs > DEFAULT_STARVATION_COMMIT_GAP_MS &&
       currentCursorIndex === lastCommitIndex;
+    const starvationRelock =
+      starvationDetected && lostForwardAtDetection
+        ? attemptForwardRelock(now, currentCursorIndex, compacted, isFinal)
+        : null;
     if (starvationDetected && now - lastStarvationWarnAt >= DEFAULT_STARVATION_WARN_COOLDOWN_MS) {
       lastStarvationWarnAt = now;
       const pendingForward =
@@ -5365,13 +5523,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           pendingForward: pendingForward ? 1 : 0,
           pendingLine: pendingMatch?.line ?? null,
           pendingConf: pendingMatch != null ? Number(pendingMatch.conf.toFixed(3)) : null,
-          lostForwardActive: lostForwardActive ? 1 : 0,
+          lostForwardActive: lostForwardAtDetection ? 1 : 0,
+          lostForwardActiveNow: lostForwardActive ? 1 : 0,
           lostForwardStage,
           noProgressStreak,
           lastForwardCommitAgoMs: Math.max(0, now - lastForwardCommitAt),
           lastGuardReason,
           eventsSinceCommit,
           finalsSinceCommit,
+          relockAttempted: starvationRelock?.attempted ? 1 : 0,
+          relockApplied: starvationRelock?.applied ? 1 : 0,
+          relockReason: starvationRelock?.reason ?? null,
+          relockCandidate: starvationRelock?.candidateIdx ?? null,
+          relockScore: starvationRelock?.candidateScore ?? null,
+          relockNeed: starvationRelock?.threshold ?? null,
+          relockCandidatesChecked: starvationRelock?.candidatesChecked ?? 0,
         });
       } catch {}
     }
@@ -8019,6 +8185,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastIngestAt = 0;
     lastCommitAt = Date.now();
     lastStallLogAt = 0;
+    lastStarvationWarnAt = 0;
+    lastStarvationRelockAt = 0;
     stallHudEmitted = false;
     stallRescueRequested = false;
     matchAnchorIdx = lastLineIndex;
