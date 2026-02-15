@@ -526,11 +526,19 @@ function hardResetSpeechEngine(reason?: string): void {
   setActiveRecognizer(null);
   running = false;
   asrBrainLogged = false;
+  lastAsrBlockSyncAt = 0;
+  lastAsrBlockSyncLogAt = 0;
+  lastAsrBlockSyncCompleteFingerprint = '';
+  lastAsrBlockSyncUnchangedAt = 0;
+  lastAsrSyncLogAtByType = { 'block sync': 0, 'index sync': 0 };
+  lastAsrSyncFingerprintByType = { 'block sync': '', 'index sync': '' };
   detachAsrScrollDriver();
   try { window.__tpMic?.releaseMic?.(); } catch {}
   try { (window as any).__tpEmitSpeech = undefined; } catch {}
   try { (window as any).__tpRecognizer = null; } catch {}
   try { (window as any).recog = null; } catch {}
+  try { (window as any).currentIndex = 0; } catch {}
+  try { (window as any).__lastScrollTarget = 0; } catch {}
   try { window.speechOn = false; } catch {}
   try { document.body.classList.remove('listening'); } catch {}
   try { window.HUD?.bus?.emit?.('speech:toggle', false); } catch {}
