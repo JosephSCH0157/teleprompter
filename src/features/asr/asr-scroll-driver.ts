@@ -4098,13 +4098,48 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         forceReason === 'watchdog' &&
         line > lastLineIndex &&
         conf >= watchdogThreshold;
+      const cueBridgeDelta = Number.isFinite(pendingCueBridgeNudgeDelta ?? NaN)
+        ? Math.max(0, Math.floor(Number(pendingCueBridgeNudgeDelta)))
+        : 0;
+      const cueBridgePathEligible =
+        cueBridgeDelta > 0 &&
+        cueBridgeDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
+        line > lastLineIndex &&
+        line - lastLineIndex <= cueBridgeDelta;
+      const cueBridgeCurrent = Math.max(0, Math.floor(lastLineIndex));
+      const cueBridgeTarget = Math.max(0, Math.floor(line));
+      const cueBridgeIntermediateReasons: CueBridgeSkipReason[] = [];
+      let cueBridgePathValid = cueBridgePathEligible;
+      if (cueBridgePathValid) {
+        for (let idx = cueBridgeCurrent + 1; idx < cueBridgeTarget; idx += 1) {
+          const skipReason = classifySkippableLineForCueBridge(getLineTextAt(idx));
+          if (!skipReason) {
+            cueBridgePathValid = false;
+            break;
+          }
+          cueBridgeIntermediateReasons.push(skipReason);
+        }
+        if (cueBridgePathValid && classifySkippableLineForCueBridge(getLineTextAt(cueBridgeTarget))) {
+          cueBridgePathValid = false;
+        }
+      }
+      const cueBridgeFloor = DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+      const cueBridgeBypass =
+        cueBridgePathValid &&
+        conf >= cueBridgeFloor &&
+        isSessionAsrArmed() &&
+        isSessionLivePhase();
       const progressiveFloorBypass =
         forceReason === 'progressive-floor' &&
         line >= lastLineIndex &&
         conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
         isSessionAsrArmed() &&
         isSessionLivePhase();
-      const strongMatch = watchdogBypass || progressiveFloorBypass || (conf >= effectiveMatchThreshold && tieOk);
+      const strongMatch =
+        watchdogBypass ||
+        progressiveFloorBypass ||
+        cueBridgeBypass ||
+        (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
           ? [`tie=${formatLogScore(tieMargin)}`, `tieNeed=${formatLogScore(thresholds.tieDelta)}`]
@@ -4123,6 +4158,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           ...tieParts,
           ...deltaParts,
           ...riskParts,
+          cueBridgePathEligible ? `cueBridgeDelta=${cueBridgeDelta}` : '',
           relockOverride ? `relock=1` : '',
           relockReason ? `relockReason=${relockReason}` : '',
           Number.isFinite(relockSpan) ? `span=${relockSpan}` : '',
@@ -4167,6 +4203,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           tieGap: tieMargin,
         });
       }
+      if (cueBridgeBypass && isDevMode()) {
+        try {
+          console.info(
+            `ASR_CUE_BRIDGE_LOW_SIM_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(cueBridgeFloor)} skipped=[${cueBridgeIntermediateReasons.join(',')}]`,
+          );
+        } catch {}
+      }
 
       let targetLine = Math.max(0, Math.floor(line));
       const continuityLine = chooseWithinBlockContinuityLine(
@@ -4206,9 +4249,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const forceTag = String(forceReason || '').toLowerCase();
       const strongForwardCommit = conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
       const clampDeltaLimit = DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
-      const cueBridgeDelta = Number.isFinite(pendingCueBridgeNudgeDelta ?? NaN)
-        ? Math.max(0, Math.floor(Number(pendingCueBridgeNudgeDelta)))
-        : 0;
       const cueBridgeClampEligible =
         cueBridgeDelta > clampDeltaLimit &&
         cueBridgeDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
