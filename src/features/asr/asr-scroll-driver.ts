@@ -1560,6 +1560,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastMoveAt = 0;
   let lastIngestAt = 0;
   let lastCommitAt = sessionStartAt;
+  let lastCommitTime = sessionStartAt;
   let commitCount = 0;
   let firstCommitIndex: number | null = null;
   let lastCommitIndex: number | null = null;
@@ -5116,6 +5117,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         commitAfterTop = scroller.scrollTop || (pursuitTargetTop ?? currentTop);
       }
       lastLineIndex = Math.max(lastLineIndex, targetLine);
+      const cursorIndex = lastLineIndex;
+      lastCommitTime = Date.now();
+      lastCommitIndex = cursorIndex;
       creepBudgetLine = -1;
       creepBudgetUsed = 0;
       lastForwardCommitAt = now;
@@ -5366,6 +5370,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         matchAnchorIdx = preferredIdx;
         rememberCommittedBlockFromLine(preferredIdx);
       }
+    }
+    const currentCursorIndex = lastLineIndex >= 0
+      ? lastLineIndex
+      : (stateCurrentIdx ?? incomingIdx ?? -1);
+    if (
+      lastCommitIndex != null &&
+      now - lastCommitTime > 3000 &&
+      currentCursorIndex === lastCommitIndex
+    ) {
+      try { console.warn('ASR_STARVATION_DETECTED'); } catch {}
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     let rawMatchId = (detail as any)?.matchId;
