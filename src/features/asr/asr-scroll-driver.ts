@@ -393,6 +393,9 @@ const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
 const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 1;
 const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 3;
+const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
+const DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES = 25;
+const DEFAULT_LOST_FORWARD_MIN_SIM = 0.45;
 const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
@@ -2058,6 +2061,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let stableInterimLastMeaningfulChangeAt = 0;
   let lastStableInterimNudgeAt = 0;
   let lastBadCursorOnCueLogAt = 0;
+  let noProgressStreak = 0;
+  let lastProgressCursorLine = -1;
+  let lostForwardActive = false;
+  let lostForwardEnteredAt = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -2100,14 +2107,70 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       syntheticMatchIdSeq += 1;
       return `drv-${Date.now().toString(36)}-${syntheticMatchIdSeq}`;
     };
-    const armPostCatchupGrace = (reason: string) => {
-      const now = Date.now();
-      postCatchupUntil = now + POST_CATCHUP_MS;
-      postCatchupSamplesLeft = POST_CATCHUP_SAMPLES;
-      logDev('[ASR] post catchup armed', { reason, until: postCatchupUntil });
-    };
-    const isPostCatchupActive = (now: number) =>
-      now < postCatchupUntil && postCatchupSamplesLeft > 0;
+  const armPostCatchupGrace = (reason: string) => {
+    const now = Date.now();
+    postCatchupUntil = now + POST_CATCHUP_MS;
+    postCatchupSamplesLeft = POST_CATCHUP_SAMPLES;
+    logDev('[ASR] post catchup armed', { reason, until: postCatchupUntil });
+  };
+  const isPostCatchupActive = (now: number) =>
+    now < postCatchupUntil && postCatchupSamplesLeft > 0;
+  const exitLostForwardMode = (reason: string) => {
+    if (!lostForwardActive) return;
+    lostForwardActive = false;
+    lostForwardEnteredAt = 0;
+    emitHudStatus('lost_forward', `LOST_FORWARD off (${reason})`);
+    if (isDevMode()) {
+      try {
+        console.info(
+          `ASR_LOST_FORWARD_EXIT reason=${reason} streak=${noProgressStreak} cursor=${lastLineIndex}`,
+        );
+      } catch {}
+    }
+  };
+  const resetNoProgressStreak = (reason: string, cursorLine?: number) => {
+    noProgressStreak = 0;
+    if (Number.isFinite(cursorLine as number)) {
+      lastProgressCursorLine = Math.max(lastProgressCursorLine, Math.max(0, Math.floor(cursorLine as number)));
+    }
+    exitLostForwardMode(reason);
+  };
+  const noteNoProgressIngest = (
+    now: number,
+    cursorLine: number,
+    bestMatchLine: number,
+    similarity: number,
+    commitThreshold: number,
+  ) => {
+    if (!Number.isFinite(cursorLine) || cursorLine < 0) return;
+    const cursor = Math.max(0, Math.floor(cursorLine));
+    if (cursor > lastProgressCursorLine) {
+      resetNoProgressStreak('cursor-advance', cursor);
+      return;
+    }
+    const bestLine = Number.isFinite(bestMatchLine) ? Math.max(0, Math.floor(bestMatchLine)) : cursor;
+    const sim = Number.isFinite(similarity) ? similarity : 0;
+    const need = Number.isFinite(commitThreshold) ? clamp(commitThreshold, 0, 1) : 1;
+    const commitDidNotFire = true;
+    const shouldIncrement =
+      bestLine <= cursor ||
+      sim < need ||
+      commitDidNotFire;
+    if (!shouldIncrement) return;
+    noProgressStreak += 1;
+    if (!lostForwardActive && noProgressStreak >= DEFAULT_NO_PROGRESS_STREAK_TRIGGER) {
+      lostForwardActive = true;
+      lostForwardEnteredAt = now;
+      emitHudStatus('lost_forward', 'LOST_FORWARD on');
+      if (isDevMode()) {
+        try {
+          console.info(
+            `ASR_LOST_FORWARD_ENTER streak=${noProgressStreak} cursor=${cursor} best=${bestLine} sim=${formatLogScore(sim)} need=${formatLogScore(need)}`,
+          );
+        } catch {}
+      }
+    }
+  };
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
   const matchLookaheadLines = DEFAULT_MATCH_LOOKAHEAD_LINES;
@@ -2433,6 +2496,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     updateManualAnchorGlobalState();
     clearEvidenceBuffer('manual adopt');
     resetLowSimStreak();
+    resetNoProgressStreak('manual-adopt', normalized);
     lowSimFreezeLogged = false;
     strongHits.length = 0;
     pendingMatch = null;
@@ -3199,6 +3263,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     setCurrentIndex(targetLine, 'cue-skip');
     lastForwardCommitAt = now;
     resetLowSimStreak();
+    resetNoProgressStreak('cue-skip', targetLine);
     lowSimFreezeLogged = false;
     emitHudStatus('cue_skip', 'Skipped cue line');
     warnGuard('cue_skip', [
@@ -3231,6 +3296,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastCommitIndex = Math.max(0, Math.floor(nextIndex));
     }
     lastCommitAt = now;
+    const prev = Number.isFinite(prevIndex) ? Math.max(0, Math.floor(prevIndex)) : -1;
+    const next = Number.isFinite(nextIndex) ? Math.max(0, Math.floor(nextIndex)) : -1;
+    if (next > prev) {
+      resetNoProgressStreak('forward-commit', next);
+    }
   };
 
   const emitSummary = (source: string) => {
@@ -4135,10 +4205,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
         isSessionAsrArmed() &&
         isSessionLivePhase();
+      const lostForwardBypass =
+        forceReason === 'lost-forward' &&
+        line > lastLineIndex &&
+        conf >= DEFAULT_LOST_FORWARD_MIN_SIM;
       const strongMatch =
         watchdogBypass ||
         progressiveFloorBypass ||
         cueBridgeBypass ||
+        lostForwardBypass ||
         (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
@@ -4210,6 +4285,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           );
         } catch {}
       }
+      if (lostForwardBypass && isDevMode()) {
+        try {
+          console.info(
+            `ASR_LOST_FORWARD_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)}`,
+          );
+        } catch {}
+      }
 
       let targetLine = Math.max(0, Math.floor(line));
       const continuityLine = chooseWithinBlockContinuityLine(
@@ -4254,13 +4336,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         cueBridgeDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
         targetLine > lastLineIndex &&
         targetLine - lastLineIndex <= cueBridgeDelta;
-      const effectiveClampDeltaLimit = cueBridgeClampEligible
-        ? cueBridgeDelta
-        : clampDeltaLimit;
+      const lostForwardClampEligible =
+        forceTag === 'lost-forward' &&
+        targetLine > lastLineIndex &&
+        targetLine - lastLineIndex <= DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES &&
+        conf >= DEFAULT_LOST_FORWARD_MIN_SIM;
+      const effectiveClampDeltaLimit = lostForwardClampEligible
+        ? Math.max(clampDeltaLimit, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+        : (cueBridgeClampEligible
+          ? cueBridgeDelta
+          : clampDeltaLimit);
       if (cueBridgeClampEligible && isDevMode()) {
         try {
           console.info(
             `ASR_CUE_BRIDGE_COMMIT carry=+${cueBridgeDelta} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
+          );
+        } catch {}
+      }
+      if (lostForwardClampEligible && isDevMode()) {
+        try {
+          console.info(
+            `ASR_LOST_FORWARD_CLAMP carry=+${DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
           );
         } catch {}
       }
@@ -5282,9 +5378,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const driverWindowBack = resyncActive ? resyncBacktrackOverride : matchBacktrackLines;
     const catchUpModeActivePre = catchUpModeUntil > now;
     const lookaheadBase = resolveLookahead(resyncActive);
-    const driverWindowAhead = catchUpModeActivePre
+    const driverWindowAheadBase = catchUpModeActivePre
       ? clamp(lookaheadBase + DEFAULT_CATCHUP_LOOKAHEAD_BONUS, matchLookaheadLines, matchLookaheadMax + DEFAULT_CATCHUP_LOOKAHEAD_BONUS)
       : lookaheadBase;
+    const driverWindowAhead = lostForwardActive
+      ? Math.max(driverWindowAheadBase, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+      : driverWindowAheadBase;
     const match = incomingMatch;
     if (!match) {
       warnGuard('no_match', [
@@ -5517,6 +5616,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const consistencyMinSim = clamp(requiredThreshold - consistencySimSlack, 0, 1);
     const catchupMinSim = clamp(requiredThreshold - catchupSimSlack, 0, 1);
     const prevIndex = cursorLine >= 0 ? cursorLine : 0;
+    const bestMatchLineForProgress = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : prevIndex;
+    noteNoProgressIngest(now, prevIndex, bestMatchLineForProgress, conf, requiredThreshold);
     const candidateAnchorLine = Number.isFinite(rawIdx) ? Math.max(0, Math.floor(rawIdx)) : null;
     if (candidateAnchorLine !== null && conf >= thresholds.anchorMinSim) {
       if (anchorStreakLine === candidateAnchorLine) {
@@ -5601,6 +5702,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         : cursorLine + matchWindowAhead);
     let bandStart = baseBandStart;
     let bandEnd = baseBandEnd;
+    if (lostForwardActive) {
+      const lostForwardBandEnd = totalLines > 0
+        ? Math.min(totalLines - 1, cursorLine + DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+        : cursorLine + DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES;
+      bandEnd = Math.max(bandEnd, lostForwardBandEnd);
+    }
     const bandBackToleranceStart = Math.max(0, cursorLine - DEFAULT_BAND_BACK_TOLERANCE_LINES);
     const reseededBand = getCommitBandReseedWindow(now);
     if (reseededBand) {
@@ -6035,7 +6142,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       isFinal && lastLineIndex >= 0 && now - lastForwardCommitAt <= outrunWindowMs;
     const forwardMatcherInputs = buildForwardMatcherInputs(bufferedText, compacted, isFinal);
     const forwardRangeStart = Math.max(0, cursorLine + 1);
-    const forwardInitialEnd = cursorLine + Math.max(1, outrunLookaheadLines);
+    const forwardInitialEnd = cursorLine + Math.max(
+      1,
+      lostForwardActive
+        ? Math.max(outrunLookaheadLines, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES)
+        : outrunLookaheadLines,
+    );
     const totalForwardLines = getTotalLines();
     const forwardHardEnd = totalForwardLines > 0
       ? Math.max(forwardRangeStart, totalForwardLines - 1)
@@ -6295,6 +6407,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ? currentLineScore
       : (rawIdx === cursorLine ? conf : requiredThreshold);
     if (
+      lostForwardActive &&
       continuationForwardCandidate &&
       transcriptLongerThanCurrent &&
       continuationForwardCandidate.score >= outrunFloor &&
@@ -6341,7 +6454,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx === cursorLine &&
       tokenCount >= DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS &&
       overlapTokensCurrent.length <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS;
-    if (weakCurrentAnchor) {
+    if (weakCurrentAnchor && lostForwardActive) {
       const weakForwardFloor = clamp(
         Math.max(thresholds.candidateMinSim, DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR),
         0,
@@ -6398,7 +6511,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx <= cursorLine + 1 &&
       conf >= requiredThreshold;
     const forcedEvidenceOkTight = forcedEvidenceOk || shortFinalTightEvidenceBypass;
-    const allowForced = !isHybridMode();
+    const allowForced = !isHybridMode() && lostForwardActive;
     if (
       allowForced &&
       outrunRecent &&
@@ -6854,6 +6967,30 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           });
         } catch {
           // ignore
+        }
+      }
+    }
+    if (lostForwardActive) {
+      const lostForwardPick = forwardBandScores
+        .filter((entry) =>
+          entry.idx > cursorLine &&
+          (entry.idx - cursorLine) <= DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES &&
+          entry.score >= DEFAULT_LOST_FORWARD_MIN_SIM)
+        .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
+      if (lostForwardPick) {
+        const before = rawIdx;
+        rawIdx = lostForwardPick.idx;
+        conf = lostForwardPick.score;
+        effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_LOST_FORWARD_MIN_SIM);
+        outrunCommit = true;
+        forceReason = 'lost-forward';
+        if (isDevMode()) {
+          try {
+            const activeMs = lostForwardEnteredAt > 0 ? Math.max(0, now - lostForwardEnteredAt) : 0;
+            console.info(
+              `ASR_LOST_FORWARD_JUMP current=${cursorLine} best=${before} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)} streak=${noProgressStreak} activeMs=${activeMs}`,
+            );
+          } catch {}
         }
       }
     }
@@ -7411,7 +7548,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       stuckResyncActive ||
       catchUpModeActive ||
       lookaheadBase > matchLookaheadLines ||
-      forceReason === 'watchdog';
+      forceReason === 'watchdog' ||
+      lostForwardActive;
     let hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
       ? true
       : isFinal
@@ -7579,6 +7717,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastForwardCommitAt = Date.now();
     finalsSinceCommit = 0;
     eventsSinceCommit = 0;
+    noProgressStreak = 0;
+    lastProgressCursorLine = lastLineIndex;
+    lostForwardActive = false;
+    lostForwardEnteredAt = 0;
     resetLookahead('sync-index');
     if (pendingRaf) {
       try { cancelAnimationFrame(pendingRaf); } catch {}
