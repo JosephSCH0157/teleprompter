@@ -163,6 +163,8 @@ type AsrMoveResult = {
   movedPx: number;
 };
 
+type CueBridgeSkipReason = 'blank' | 'cue' | 'note' | 'speaker';
+
 export interface AsrScrollDriver {
   ingest(text: string, isFinal: boolean, detail?: TranscriptDetail): void;
   dispose(): void;
@@ -571,16 +573,24 @@ function parseBlockIndexFromElement(el: HTMLElement | null, fallback: number): n
   return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : Math.max(0, Math.floor(fallback));
 }
 
-function isIgnorableCueLineText(value: string): boolean {
+function classifySkippableLineForCueBridge(value: string): CueBridgeSkipReason | null {
   const raw = String(value || '').trim();
-  if (!raw) return true;
-  if (SPEAKER_TAG_ONLY_RE.test(raw)) return true;
-  if (NOTE_TAG_ONLY_RE.test(raw) || NOTE_INLINE_BLOCK_RE.test(raw) || /\[\s*\/?\s*note\b/i.test(raw)) return true;
+  if (!raw) return 'blank';
+  if (SPEAKER_TAG_ONLY_RE.test(raw)) return 'speaker';
+  if (NOTE_TAG_ONLY_RE.test(raw) || NOTE_INLINE_BLOCK_RE.test(raw) || /\[\s*\/?\s*note\b/i.test(raw)) return 'note';
   const normalized = normalizeComparableText(raw);
-  if (!normalized) return true;
-  if (CUE_LINE_BRACKET_RE.test(raw)) return true;
+  if (!normalized) return 'blank';
+  if (CUE_LINE_BRACKET_RE.test(raw)) return 'cue';
   const tokenCount = normalized.split(' ').filter(Boolean).length;
-  return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized);
+  return tokenCount <= 4 && CUE_LINE_WORD_RE.test(normalized) ? 'cue' : null;
+}
+
+function isSkippableLineForCueBridge(value: string): boolean {
+  return classifySkippableLineForCueBridge(value) != null;
+}
+
+function isIgnorableCueLineText(value: string): boolean {
+  return isSkippableLineForCueBridge(value);
 }
 
 function isBehindCandidateEligible(
@@ -2728,6 +2738,46 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   };
 
+  const findNextSpeakableWithinBridge = (
+    cursorLine: number,
+    maxLookahead = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+  ): { nextLine: number | null; skippedReasons: CueBridgeSkipReason[] } => {
+    const total = getTotalLines();
+    if (!Number.isFinite(cursorLine) || total <= 0) {
+      return { nextLine: null, skippedReasons: [] };
+    }
+    const base = Math.max(0, Math.floor(cursorLine));
+    const begin = base + 1;
+    if (begin >= total) {
+      return { nextLine: null, skippedReasons: [] };
+    }
+    const end = Math.min(total - 1, begin + Math.max(1, Math.floor(maxLookahead)) - 1);
+    const skippedReasons: CueBridgeSkipReason[] = [];
+    for (let idx = begin; idx <= end; idx += 1) {
+      const reason = classifySkippableLineForCueBridge(getLineTextAt(idx));
+      if (reason) {
+        skippedReasons.push(reason);
+        continue;
+      }
+      return { nextLine: idx, skippedReasons };
+    }
+    return { nextLine: null, skippedReasons };
+  };
+
+  const logCueBridgeUse = (
+    cursorLine: number,
+    landedLine: number,
+    skippedReasons: CueBridgeSkipReason[],
+    source: string,
+  ) => {
+    if (!isDevMode() || !skippedReasons.length) return;
+    try {
+      console.info(
+        `ASR_CUE_BRIDGE used=+${skippedReasons.length} skipped=[${skippedReasons.join(',')}] landedLine=${landedLine} cursorLine=${cursorLine} source=${source}`,
+      );
+    } catch {}
+  };
+
   const findNextSpokenLineIndex = (
     startIndex: number,
     maxLookahead = MAX_CUE_SKIP_LOOKAHEAD_LINES,
@@ -4154,10 +4204,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const forceTag = String(forceReason || '').toLowerCase();
       const strongForwardCommit = conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
       const clampDeltaLimit = DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
-      const cueBridgeDeltaLimit = Math.max(
-        clampDeltaLimit,
-        DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
-      );
       if (
         targetLine > lastLineIndex + clampDeltaLimit &&
         !strongForwardCommit
@@ -4177,13 +4223,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const cueSafeInitialTarget = resolveCueSafeCommitLine(
         targetLine,
         lastLineIndex,
-        cueBridgeDeltaLimit,
+        clampDeltaLimit,
       );
       if (cueSafeInitialTarget.nextLine == null) {
         warnGuard('cue_commit_blocked', [
           `current=${lastLineIndex}`,
           `best=${targetLine}`,
-          `windowEnd=${lastLineIndex + cueBridgeDeltaLimit}`,
+          `windowEnd=${lastLineIndex + clampDeltaLimit}`,
           cueSafeInitialTarget.skippedFrom != null ? `cueLine=${cueSafeInitialTarget.skippedFrom}` : '',
           cueSafeInitialTarget.skippedText
             ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
@@ -4340,26 +4386,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
           if (isFinal && hasEvidence && strongMatch && deltaPx > 0 && deltaPx <= creepNearPx) {
-            const cueSafeNext = resolveCueSafeCommitLine(
-              targetLine + 1,
+            const cueBridge = findNextSpeakableWithinBridge(
               lastLineIndex,
-              cueBridgeDeltaLimit,
+              DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
             );
-            if (cueSafeNext.nextLine == null) {
+            if (cueBridge.nextLine == null) {
               warnGuard('cue_commit_blocked', [
                 `current=${lastLineIndex}`,
                 `best=${targetLine + 1}`,
-                `windowEnd=${lastLineIndex + cueBridgeDeltaLimit}`,
-                cueSafeNext.skippedFrom != null ? `cueLine=${cueSafeNext.skippedFrom}` : '',
-                cueSafeNext.skippedText
-                  ? `cue="${formatLogSnippet(cueSafeNext.skippedText, 48)}"`
+                `windowEnd=${lastLineIndex + DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES}`,
+                cueBridge.skippedReasons.length
+                  ? `skipped=[${cueBridge.skippedReasons.join(',')}]`
                   : '',
                 snippet ? `clue="${snippet}"` : '',
               ]);
               emitHudStatus('cue_commit_blocked', 'Blocked: cue-only commit target');
               return;
             }
-            const nextLine = cueSafeNext.nextLine;
+            const nextLine = cueBridge.nextLine;
+            logCueBridgeUse(lastLineIndex, nextLine, cueBridge.skippedReasons, 'same-line-confirm');
             const nextTop = resolveTargetTop(scroller, nextLine);
             if (nextTop != null) {
               const nextDeltaPx = nextTop - currentTop;
@@ -6855,10 +6900,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS;
     if (finalMatchNudgeEligible || stableInterimNudgeEligible) {
       const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
-      const nudgeTarget = findNextSpokenLineIndexWithin(cursorLine + 1, cursorLine + nudgeDeltaCap);
-      if (Number.isFinite(nudgeTarget as number) && (nudgeTarget as number) > cursorLine) {
+      const cueBridge = findNextSpeakableWithinBridge(cursorLine, nudgeDeltaCap);
+      if (cueBridge.nextLine != null && cueBridge.nextLine > cursorLine) {
         const before = rawIdx;
-        rawIdx = Math.max(cursorLine + 1, Math.floor(nudgeTarget as number));
+        rawIdx = Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine));
+        logCueBridgeUse(
+          cursorLine,
+          rawIdx,
+          cueBridge.skippedReasons,
+          stableInterimNudgeEligible ? 'stable-interim-nudge' : 'final-match-nudge',
+        );
         if (stableInterimNudgeEligible) {
           lastStableInterimNudgeAt = now;
         }
