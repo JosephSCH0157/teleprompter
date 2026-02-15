@@ -396,6 +396,9 @@ const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 3;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
 const DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES = 25;
 const DEFAULT_LOST_FORWARD_MIN_SIM = 0.45;
+const DEFAULT_LOST_HEALTHY_LOCK_SIM = 0.58;
+const DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM = 0.33;
+const DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS = 2;
 const LOST_FORWARD_WINDOW_STEPS = [10, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES, 60] as const;
 const LOST_FORWARD_STAGE_STREAKS = [
   DEFAULT_NO_PROGRESS_STREAK_TRIGGER,
@@ -559,6 +562,37 @@ function getAnchorTokenSet(tokens: string[]): Set<string> {
     out.add(token);
   }
   return out;
+}
+
+function isContentToken(token: string): boolean {
+  const t = String(token || '').trim().toLowerCase();
+  if (!t) return false;
+  if (/^\d+$/.test(t)) return true;
+  if (ANCHOR_STOPWORDS.has(t)) return false;
+  return t.length >= 2;
+}
+
+function getContentTokenSet(tokens: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const token of tokens) {
+    if (!isContentToken(token)) continue;
+    out.add(token);
+  }
+  return out;
+}
+
+function countSharedContentTokenHits(contentSet: Set<string>, candidateTokens: string[]): number {
+  if (!contentSet.size || !candidateTokens.length) return 0;
+  let hits = 0;
+  const seen = new Set<string>();
+  for (const raw of candidateTokens) {
+    const token = String(raw || '').trim().toLowerCase();
+    if (!token || seen.has(token)) continue;
+    if (!contentSet.has(token)) continue;
+    seen.add(token);
+    hits += 1;
+  }
+  return hits;
 }
 
 function hasMeaningfulTranscriptChange(previousNormalized: string, nextNormalized: string): boolean {
@@ -2212,6 +2246,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const bestLine = Number.isFinite(bestMatchLine) ? Math.max(0, Math.floor(bestMatchLine)) : cursor;
     const sim = Number.isFinite(similarity) ? similarity : 0;
     const need = Number.isFinite(commitThreshold) ? clamp(commitThreshold, 0, 1) : 1;
+    const healthyLock = bestLine === cursor && sim >= DEFAULT_LOST_HEALTHY_LOCK_SIM;
+    if (healthyLock) {
+      resetNoProgressStreak('healthy-lock', cursor);
+      if (isDevMode()) {
+        try {
+          console.info(
+            `ASR_LOST_FORWARD_HEALTHY_LOCK cursor=${cursor} sim=${formatLogScore(sim)} lockNeed=${formatLogScore(DEFAULT_LOST_HEALTHY_LOCK_SIM)}`,
+          );
+        } catch {}
+      }
+      return;
+    }
     const commitWouldAdvance = bestLine > cursor && sim >= need;
     const commitDidNotFire = !commitWouldAdvance;
     const shouldIncrement =
@@ -7093,6 +7139,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (lostForwardActive) {
       const lostForwardWindow = getLostForwardLookaheadLines();
       const lostForwardCap = Math.min(lostForwardWindow, getLostForwardCommitCapLines());
+      const lostForwardCandidates = forwardBandScores
+        .filter((entry) =>
+          entry.idx > cursorLine &&
+          (entry.idx - cursorLine) <= lostForwardCap);
       const lostForwardPick = forwardBandScores
         .filter((entry) =>
           entry.idx > cursorLine &&
@@ -7102,6 +7152,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const transcriptTokens = normTokens(transcriptComparable || bufferedText || compacted || text);
         const candidateLineTokens = normTokens(getLineTextAt(lostForwardPick.idx));
         const transcriptAnchorSet = getAnchorTokenSet(transcriptTokens);
+        const transcriptContentSet = getContentTokenSet(transcriptTokens);
         let sharedAnchorHits = 0;
         if (transcriptAnchorSet.size > 0 && candidateLineTokens.length > 0) {
           const candidateSet = new Set(candidateLineTokens);
@@ -7110,33 +7161,58 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             sharedAnchorHits += 1;
           }
         }
+        const sharedContentHits = countSharedContentTokenHits(transcriptContentSet, candidateLineTokens);
+        const firstMeaningfulForwardIdx = lostForwardCandidates
+          .sort((a, b) => a.idx - b.idx)
+          .find((entry) =>
+            countSharedContentTokenHits(
+              transcriptContentSet,
+              normTokens(getLineTextAt(entry.idx)),
+            ) > 0,
+          )?.idx ?? null;
+        const firstMeaningfulOverlap = firstMeaningfulForwardIdx != null && lostForwardPick.idx === firstMeaningfulForwardIdx;
         const neededAnchorHits = transcriptAnchorSet.size >= 2 ? 2 : 1;
         const longEnough = transcriptTokens.length >= DEFAULT_TELEPORT_MIN_TOKENS;
         const currentScoreForCompetition = Number.isFinite(arbitrationCurrentScore)
           ? arbitrationCurrentScore
           : conf;
+        const competitiveForward =
+          lostForwardPick.score >= currentScoreForCompetition + DEFAULT_TELEPORT_COMPETITIVE_MARGIN;
         const strongOrCompetitive =
           lostForwardPick.score >= DEFAULT_LOST_FORWARD_MIN_SIM ||
-          lostForwardPick.score >= currentScoreForCompetition + DEFAULT_TELEPORT_COMPETITIVE_MARGIN;
+          competitiveForward;
         const anchorGateOk =
           transcriptAnchorSet.size > 0 &&
           sharedAnchorHits >= neededAnchorHits;
-        const teleportGateOk =
+        const anchorTeleportGateOk =
           longEnough &&
           strongOrCompetitive &&
           anchorGateOk;
+        const progressEvidenceOk =
+          sharedContentHits >= DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS ||
+          firstMeaningfulOverlap;
+        const reseekTeleportGateOk =
+          longEnough &&
+          competitiveForward &&
+          lostForwardPick.score >= DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM &&
+          progressEvidenceOk;
+        const teleportGateOk = anchorTeleportGateOk || reseekTeleportGateOk;
+        const teleportNeed = anchorTeleportGateOk
+          ? DEFAULT_LOST_FORWARD_MIN_SIM
+          : DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM;
+        const teleportMode = anchorTeleportGateOk ? 'anchor' : 'reseek';
         if (teleportGateOk) {
           const before = rawIdx;
           rawIdx = lostForwardPick.idx;
           conf = lostForwardPick.score;
-          effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_LOST_FORWARD_MIN_SIM);
+          effectiveThreshold = Math.min(effectiveThreshold, teleportNeed);
           outrunCommit = true;
           forceReason = 'lost-forward';
           if (isDevMode()) {
             try {
               const activeMs = lostForwardEnteredAt > 0 ? Math.max(0, now - lostForwardEnteredAt) : 0;
               console.info(
-                `ASR_LOST_FORWARD_JUMP stage=${lostForwardStage} window=+${lostForwardWindow} cap=+${lostForwardCap} current=${cursorLine} best=${before} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)} streak=${noProgressStreak} activeMs=${activeMs} anchors=${sharedAnchorHits}/${neededAnchorHits} tokens=${transcriptTokens.length}`,
+                `ASR_LOST_FORWARD_JUMP mode=${teleportMode} stage=${lostForwardStage} window=+${lostForwardWindow} cap=+${lostForwardCap} current=${cursorLine} best=${before} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(teleportNeed)} streak=${noProgressStreak} activeMs=${activeMs} anchors=${sharedAnchorHits}/${neededAnchorHits} content=${sharedContentHits} firstOverlap=${firstMeaningfulOverlap ? 1 : 0} tokens=${transcriptTokens.length}`,
               );
             } catch {}
           }
@@ -7146,11 +7222,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `best=${lostForwardPick.idx}`,
             `delta=${lostForwardPick.idx - cursorLine}`,
             `sim=${formatLogScore(lostForwardPick.score)}`,
-            `need=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)}`,
+            `needAnchor=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)}`,
+            `needReseek=${formatLogScore(DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM)}`,
             `tokens=${transcriptTokens.length}`,
             `anchors=${sharedAnchorHits}/${neededAnchorHits}`,
+            `content=${sharedContentHits}`,
+            `firstOverlap=${firstMeaningfulOverlap ? 1 : 0}`,
             `long=${longEnough ? 1 : 0}`,
             `competitive=${strongOrCompetitive ? 1 : 0}`,
+            `competitiveForward=${competitiveForward ? 1 : 0}`,
             `window=${lostForwardWindow}`,
             `cap=${lostForwardCap}`,
             snippet ? `clue="${snippet}"` : '',
