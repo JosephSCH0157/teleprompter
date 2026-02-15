@@ -389,6 +389,7 @@ const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.2;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
 const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 1;
+const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 2;
 const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
@@ -4153,6 +4154,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const forceTag = String(forceReason || '').toLowerCase();
       const strongForwardCommit = conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
       const clampDeltaLimit = DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
+      const cueBridgeDeltaLimit = Math.max(
+        clampDeltaLimit,
+        DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+      );
       if (
         targetLine > lastLineIndex + clampDeltaLimit &&
         !strongForwardCommit
@@ -4172,13 +4177,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const cueSafeInitialTarget = resolveCueSafeCommitLine(
         targetLine,
         lastLineIndex,
-        clampDeltaLimit,
+        cueBridgeDeltaLimit,
       );
       if (cueSafeInitialTarget.nextLine == null) {
         warnGuard('cue_commit_blocked', [
           `current=${lastLineIndex}`,
           `best=${targetLine}`,
-          `windowEnd=${lastLineIndex + clampDeltaLimit}`,
+          `windowEnd=${lastLineIndex + cueBridgeDeltaLimit}`,
           cueSafeInitialTarget.skippedFrom != null ? `cueLine=${cueSafeInitialTarget.skippedFrom}` : '',
           cueSafeInitialTarget.skippedText
             ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
@@ -4338,13 +4343,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const cueSafeNext = resolveCueSafeCommitLine(
               targetLine + 1,
               lastLineIndex,
-              clampDeltaLimit,
+              cueBridgeDeltaLimit,
             );
             if (cueSafeNext.nextLine == null) {
               warnGuard('cue_commit_blocked', [
                 `current=${lastLineIndex}`,
                 `best=${targetLine + 1}`,
-                `windowEnd=${lastLineIndex + clampDeltaLimit}`,
+                `windowEnd=${lastLineIndex + cueBridgeDeltaLimit}`,
                 cueSafeNext.skippedFrom != null ? `cueLine=${cueSafeNext.skippedFrom}` : '',
                 cueSafeNext.skippedText
                   ? `cue="${formatLogSnippet(cueSafeNext.skippedText, 48)}"`
@@ -6849,7 +6854,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       stableInterimMs >= DEFAULT_STABLE_INTERIM_NUDGE_MS &&
       now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS;
     if (finalMatchNudgeEligible || stableInterimNudgeEligible) {
-      const nudgeDeltaCap = Math.max(1, Math.min(2, DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES));
+      const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
       const nudgeTarget = findNextSpokenLineIndexWithin(cursorLine + 1, cursorLine + nudgeDeltaCap);
       if (Number.isFinite(nudgeTarget as number) && (nudgeTarget as number) > cursorLine) {
         const before = rawIdx;
