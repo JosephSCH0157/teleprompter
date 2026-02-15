@@ -396,6 +396,9 @@ const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 3;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
 const DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES = 25;
 const DEFAULT_LOST_FORWARD_MIN_SIM = 0.45;
+const DEFAULT_MICRO_RELOCK_MARGIN = 0.12;
+const DEFAULT_MICRO_RELOCK_COOLDOWN_MS = 3000;
+const DEFAULT_MICRO_RELOCK_PREFERRED_TTL_MS = 1500;
 const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
@@ -2065,6 +2068,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastProgressCursorLine = -1;
   let lostForwardActive = false;
   let lostForwardEnteredAt = 0;
+  let lastMicroRelockAt = 0;
+  let microRelockPreferredCursor: number | null = null;
+  let microRelockPreferredUntil = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -2170,6 +2176,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } catch {}
       }
     }
+  };
+  const clearMicroRelockPreference = () => {
+    microRelockPreferredCursor = null;
+    microRelockPreferredUntil = 0;
   };
 
   const matchBacktrackLines = DEFAULT_MATCH_BACKTRACK_LINES;
@@ -5191,11 +5201,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const incomingIdx = Number.isFinite(incomingIdxRaw)
       ? Math.max(0, Math.floor(incomingIdxRaw))
       : null;
-    const preferredIdx = stateCurrentIdx ?? incomingIdx;
+    const preferredBackstepActive =
+      microRelockPreferredCursor != null &&
+      now <= microRelockPreferredUntil;
+    const preferredBackstepIdx = preferredBackstepActive
+      ? Math.max(0, Math.floor(Number(microRelockPreferredCursor)))
+      : null;
+    if (!preferredBackstepActive && microRelockPreferredCursor != null) {
+      clearMicroRelockPreference();
+    }
+    const preferredIdx = preferredBackstepIdx ?? stateCurrentIdx ?? incomingIdx;
+    if (preferredBackstepIdx != null) {
+      clearMicroRelockPreference();
+    }
     const liveAsrSession = getScrollMode() === 'asr' && isSessionLivePhase();
     const committedFloor = lastCommitIndex != null ? Math.max(0, Math.floor(lastCommitIndex)) : null;
     if (preferredIdx != null && preferredIdx !== lastLineIndex) {
-      if (liveAsrSession && commitCount > 0 && committedFloor != null && preferredIdx < committedFloor) {
+      if (
+        liveAsrSession &&
+        commitCount > 0 &&
+        committedFloor != null &&
+        preferredIdx < committedFloor &&
+        preferredBackstepIdx == null
+      ) {
         warnGuard('cursor_regression_ignored', [
           `current=${lastLineIndex}`,
           `incoming=${preferredIdx}`,
@@ -7017,6 +7045,60 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         if (rawIdx <= cursorLine && maybeSkipCueLine(cursorLine, now, 'low_sim_wait', snippet)) {
           return;
         }
+        const microRelockCooldownReady =
+          now - lastMicroRelockAt >= DEFAULT_MICRO_RELOCK_COOLDOWN_MS;
+        if (
+          microRelockCooldownReady &&
+          rawIdx <= cursorLine &&
+          cursorLine > 0 &&
+          conf < effectiveThreshold
+        ) {
+          const prevLine = cursorLine - 1;
+          const prevLineText = getLineTextAt(prevLine);
+          const prevLineSpeakable =
+            !!prevLineText &&
+            !isIgnorableCueLineText(prevLineText);
+          const cursorBlock = findBlockByLine(cursorLine);
+          const prevBlock = findBlockByLine(prevLine);
+          const sameBlock =
+            !cursorBlock ||
+            !prevBlock ||
+            cursorBlock.blockId === prevBlock.blockId;
+          if (prevLineSpeakable && sameBlock) {
+            const transcriptTokens = normTokens(
+              transcriptComparable || bufferedText || compacted || text,
+            );
+            const prevTokens = normTokens(normalizeComparableText(prevLineText));
+            const prevSim =
+              transcriptTokens.length && prevTokens.length
+                ? computeLineSimilarityFromTokens(transcriptTokens, prevTokens)
+                : 0;
+            const currentSim =
+              Number.isFinite(arbitrationCurrentScore) ? arbitrationCurrentScore : conf;
+            if (
+              prevSim >= effectiveThreshold &&
+              prevSim - currentSim >= DEFAULT_MICRO_RELOCK_MARGIN
+            ) {
+              microRelockPreferredCursor = prevLine;
+              microRelockPreferredUntil = now + DEFAULT_MICRO_RELOCK_PREFERRED_TTL_MS;
+              lastMicroRelockAt = now;
+              warnGuard('micro_relock_backstep', [
+                `current=${cursorLine}`,
+                `prefer=${prevLine}`,
+                `simPrev=${formatLogScore(prevSim)}`,
+                `simCur=${formatLogScore(currentSim)}`,
+                `need=${formatLogScore(effectiveThreshold)}`,
+                `margin=${formatLogScore(prevSim - currentSim)}`,
+                snippet ? `clue="${snippet}"` : '',
+              ]);
+              emitHudStatus(
+                'micro_relock',
+                `Re-lock: biasing back to line ${prevLine}`,
+              );
+              return;
+            }
+          }
+        }
         warnGuard('low_sim_wait', [
           matchId ? `matchId=${matchId}` : '',
           `current=${cursorLine}`,
@@ -7721,6 +7803,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastProgressCursorLine = lastLineIndex;
     lostForwardActive = false;
     lostForwardEnteredAt = 0;
+    lastMicroRelockAt = 0;
+    clearMicroRelockPreference();
     resetLookahead('sync-index');
     if (pendingRaf) {
       try { cancelAnimationFrame(pendingRaf); } catch {}

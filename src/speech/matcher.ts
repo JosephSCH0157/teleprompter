@@ -70,6 +70,25 @@ const FILLER_TOKENS = new Set([
   'uhm',
 ]);
 
+const TENS_TOKENS = new Set(['20', '30', '40', '50', '60', '70', '80', '90']);
+const ONES_TOKEN_RE = /^[0-9]$/;
+
+function combineTensAndOnes(tokens: string[]): string[] {
+  if (!tokens.length) return tokens;
+  const combined: string[] = [];
+  for (let i = 0; i < tokens.length; i += 1) {
+    const current = tokens[i];
+    const next = tokens[i + 1];
+    if (TENS_TOKENS.has(current) && typeof next === 'string' && ONES_TOKEN_RE.test(next)) {
+      combined.push(String(Number(current) + Number(next)));
+      i += 1;
+      continue;
+    }
+    combined.push(current);
+  }
+  return combined;
+}
+
 export function normTokens(s: string): string[] {
   // Align with sanitizeForMatch semantics: strip bracketed cues and normalize punctuation.
   const normalized = String(s || '')
@@ -86,11 +105,12 @@ export function normTokens(s: string): string[] {
     .replace(/\s+/g, ' ')
     .trim();
   if (!normalized) return [];
-  return normalized
+  const mappedTokens = normalized
     .split(' ')
     .filter(Boolean)
     .map((token) => NUMBER_TOKENS[token] ?? token)
     .filter((token) => !FILLER_TOKENS.has(token));
+  return combineTensAndOnes(mappedTokens);
 }
 
 export function getNgrams(tokens: string[], n: number) {
@@ -338,4 +358,3 @@ export function matchBatch(
     bestOverlapRatio: resolved.idx >= 0 ? overlapRatioByIdx[resolved.idx] : undefined,
   };
 }
-
