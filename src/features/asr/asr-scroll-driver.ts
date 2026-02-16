@@ -1659,10 +1659,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const resolveAsrAnchorBlockId = (corpus: AsrBlockCorpusEntry[]): number => {
     if (!corpus.length) return -1;
-    const markerIdx = computeMarkerLineIndex(getScroller());
-    if (Number.isFinite(markerIdx) && markerIdx >= 0) {
-      const markerBlock = findBlockByLine(markerIdx, corpus);
-      if (markerBlock) return markerBlock.blockId;
+    const markerRaw = computeMarkerLineIndex(getScroller());
+    if (Number.isFinite(markerRaw) && markerRaw >= 0) {
+      let markerIdx = Math.max(0, Math.floor(markerRaw));
+      const markerText = getLineTextAt(markerIdx);
+      if (isIgnorableCueLineText(markerText)) {
+        const nextSpeakable = findNextSpokenLineIndexWithin(
+          markerIdx + 1,
+          markerIdx + DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+        );
+        if (nextSpeakable != null && nextSpeakable > markerIdx) {
+          markerIdx = Math.max(0, Math.floor(nextSpeakable));
+        } else {
+          markerIdx = -1;
+        }
+      }
+      if (markerIdx >= 0) {
+        const markerBlock = findBlockByLine(markerIdx, corpus);
+        if (markerBlock) return markerBlock.blockId;
+      }
     }
     if (lastCommittedBlockId >= 0 && corpus.some((entry) => entry.blockId === lastCommittedBlockId)) {
       return lastCommittedBlockId;
