@@ -1180,6 +1180,21 @@ function clearHybridSilenceTimer() {
 }
 
 let tpLastWriter: { from: string; at: number; y: number } | null = null;
+function describeEl(el: Element | null | undefined) {
+  if (!el) {
+    return {
+      tag: 'null',
+      id: null,
+      cls: null,
+    };
+  }
+  const e = el as HTMLElement;
+  return {
+    tag: (e.tagName || 'unknown').toLowerCase(),
+    id: e.id || null,
+    cls: (e.className && String(e.className)) || null,
+  };
+}
 function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   if (!isMainViewer()) {
     try {
@@ -1189,7 +1204,9 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   }
   const target =
     viewer ?? scrollerEl ?? (typeof document !== 'undefined' ? document.getElementById('viewer') : null);
-  const before = target?.scrollTop ?? null;
+  const targetInfo = describeEl(target);
+  const beforeTop = target?.scrollTop ?? null;
+  const requestedTop = y;
   let ok = false;
   try {
     const writeFn = (window as any).__tpScrollWrite;
@@ -1205,7 +1222,7 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
       console.error('[SCROLL_WRITE] exception', { y, meta, err });
     } catch {}
   }
-  const after = target?.scrollTop ?? null;
+  const afterTop = target?.scrollTop ?? null;
   const writeAt = nowMs();
   tpLastWriter = { from: meta.from, at: writeAt, y };
   try {
@@ -1219,11 +1236,36 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
       ok,
       from: meta.from,
       reason: meta.reason ?? null,
-      before,
+      before: beforeTop,
       y,
-      after,
+      after: afterTop,
     });
   } catch {}
+  const debugStack = isDevMode() ? (new Error().stack || null) : null;
+  if (target && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    const targetEl = target as HTMLElement;
+    window.requestAnimationFrame(() => {
+      const afterTopRaf = targetEl.scrollTop ?? null;
+      const changedNow =
+        beforeTop != null && afterTop != null ? afterTop !== beforeTop : null;
+      const snappedBack =
+        afterTop != null && afterTopRaf != null ? afterTopRaf !== afterTop : null;
+      try {
+        console.warn('[SCROLL_WRITE_TRUTH]', {
+          from: meta.from,
+          reason: meta.reason ?? null,
+          target: targetInfo,
+          beforeTop,
+          requestedTop,
+          afterTop,
+          afterTopRaf,
+          changedNow,
+          snappedBack,
+          stack: debugStack,
+        });
+      } catch {}
+    });
+  }
   return ok;
 }
 
