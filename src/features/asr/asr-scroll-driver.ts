@@ -1659,25 +1659,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const resolveAsrAnchorBlockId = (corpus: AsrBlockCorpusEntry[]): number => {
     if (!corpus.length) return -1;
-    const markerRaw = computeMarkerLineIndex(getScroller());
-    if (Number.isFinite(markerRaw) && markerRaw >= 0) {
-      let markerIdx = Math.max(0, Math.floor(markerRaw));
-      const markerText = getLineTextAt(markerIdx);
-      if (isIgnorableCueLineText(markerText)) {
-        const nextSpeakable = findNextSpokenLineIndexWithin(
-          markerIdx + 1,
-          markerIdx + DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
-        );
-        if (nextSpeakable != null && nextSpeakable > markerIdx) {
-          markerIdx = Math.max(0, Math.floor(nextSpeakable));
-        } else {
-          markerIdx = -1;
-        }
-      }
-      if (markerIdx >= 0) {
-        const markerBlock = findBlockByLine(markerIdx, corpus);
-        if (markerBlock) return markerBlock.blockId;
-      }
+    const markerIdx = computeCueSafeMarkerIndex(
+      getScroller(),
+      DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+    );
+    if (markerIdx >= 0) {
+      const markerBlock = findBlockByLine(markerIdx, corpus);
+      if (markerBlock) return markerBlock.blockId;
     }
     if (lastCommittedBlockId >= 0 && corpus.some((entry) => entry.blockId === lastCommittedBlockId)) {
       return lastCommittedBlockId;
@@ -3190,6 +3178,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     return null;
+  };
+
+  const computeCueSafeMarkerIndex = (
+    scroller: HTMLElement | null,
+    maxForward = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+  ): number => {
+    const markerRaw = computeMarkerLineIndex(scroller);
+    const markerIdx = Number.isFinite(markerRaw) ? Math.max(0, Math.floor(markerRaw)) : -1;
+    if (markerIdx < 0) return -1;
+    const markerLineText = String(getLineElementByIndex(scroller, markerIdx)?.textContent || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!isIgnorableCueLineText(markerLineText)) return markerIdx;
+    const lookahead = Math.max(1, Math.floor(maxForward));
+    for (let idx = markerIdx + 1; idx <= markerIdx + lookahead; idx += 1) {
+      const lineText = String(getLineElementByIndex(scroller, idx)?.textContent || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!isIgnorableCueLineText(lineText)) {
+        return idx;
+      }
+    }
+    return -1;
   };
 
   const resolveCueSafeCommitLine = (
@@ -7268,9 +7279,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       emitHudStatus('match_out_of_band', 'Out-of-band match ignored');
       return;
     }
-    const markerIdx = consistencyRequireNearMarker ? computeMarkerLineIndex(scrollerForMatch) : -1;
+    const markerIdx = consistencyRequireNearMarker
+      ? computeCueSafeMarkerIndex(scrollerForMatch, DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES)
+      : -1;
     const nearMarker = consistencyRequireNearMarker
-      ? Math.abs(rawIdx - markerIdx) <= Math.max(1, consistencyMarkerBandLines)
+      ? (markerIdx < 0 || Math.abs(rawIdx - markerIdx) <= Math.max(1, consistencyMarkerBandLines))
       : true;
     if (allowCatchup) {
       const lagSample: LagSample = {
