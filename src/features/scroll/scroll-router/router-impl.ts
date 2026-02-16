@@ -3550,7 +3550,7 @@ function installScrollRouter(opts) {
     try { console.info('[scroll-router] tp:scroll:intent listener installed'); } catch {}
   }
   type AutoIntentDecision = 'motor-start-request' | 'motor-stop-request';
-  type RequestedMotorKind = 'auto' | 'hybrid' | 'asr';
+  type RequestedMotorKind = 'auto' | 'hybrid';
   interface AutoIntentMotorRequest {
     kind: RequestedMotorKind;
     source: string;
@@ -3562,7 +3562,6 @@ function installScrollRouter(opts) {
     reason?: string;
     motorKind: RequestedMotorKind;
     motorSource: string;
-    asrDirect: boolean;
   }
   let lastAutoIntentMotorRequest: AutoIntentMotorRequest = { kind: 'auto', source: 'unknown' };
   function normalizeRequestedMotorKind(raw: unknown): RequestedMotorKind | null {
@@ -3635,7 +3634,6 @@ function installScrollRouter(opts) {
       lastAutoIntentMotorRequest = motorRequest;
       setAutoIntentState(enabled, reasonRaw);
       const allowAutoMotor = mode !== 'asr';
-      const asrDirect = mode === 'asr' && motorRequest.kind === 'asr';
       const brain = String(appStore.get('scrollBrain') || 'auto');
       const baseDecision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
       const decision: AutoIntentDecision = allowAutoMotor ? baseDecision : 'motor-stop-request';
@@ -3670,7 +3668,6 @@ function installScrollRouter(opts) {
         reason: reasonRaw,
         motorKind: motorRequest.kind,
         motorSource: motorRequest.source,
-        asrDirect,
       };
     } catch {}
     return null;
@@ -3679,7 +3676,7 @@ function installScrollRouter(opts) {
   function processAutoIntent(detail: any) {
     const payload = handleAutoIntent(detail);
     if (!payload) return;
-    const { enabled, decision, pxs, reason, motorKind, motorSource, asrDirect } = payload;
+    const { enabled, decision, pxs, reason, motorKind, motorSource } = payload;
     const mode = getScrollMode();
       const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       if (enabled && currentPhase !== 'live') {
@@ -3700,7 +3697,6 @@ function installScrollRouter(opts) {
           mode,
           motorKind,
           source: motorSource,
-          asrDirect,
           pxps,
           chosenMotor,
           viewerRole,

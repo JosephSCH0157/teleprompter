@@ -7472,8 +7472,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         msLeft: postCatchupUntil - now,
       });
     } else if (effectiveThreshold > 0 && conf < effectiveThreshold) {
-      const lowSimPlusOneBlocked = rawIdx === cursorLine + 1;
-      const lostForwardWallDetected = lostForwardGateRejected && lowSimPlusOneBlocked;
+      const lowSimForwardContinuationBlocked =
+        rawIdx >= cursorLine &&
+        rawIdx <= cursorLine + 1;
+      const lostForwardWallDetected =
+        lostForwardGateRejected &&
+        lowSimForwardContinuationBlocked;
       if (lostForwardWallDetected) {
         lostForwardWallStreak += 1;
       } else {
