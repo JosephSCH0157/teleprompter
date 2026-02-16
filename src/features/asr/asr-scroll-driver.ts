@@ -302,6 +302,7 @@ const DEFAULT_STARVATION_RELOCK_LOOKAHEAD_LINES = 5;
 const DEFAULT_STARVATION_RELOCK_SIM_SLACK = 0.08;
 const DEFAULT_STARVATION_RELOCK_COOLDOWN_MS = 1200;
 const DEFAULT_LOST_FORWARD_WALL_RELOCK_STREAK = 3;
+const DEFAULT_FINAL_CONTINUATION_SIM_EPS = 0.02;
 const BAD_CURSOR_ON_CUE_LOG_THROTTLE_MS = 1500;
 const DEFAULT_STALL_COMMIT_MS = 15000;
 const DEFAULT_STALL_LOG_COOLDOWN_MS = 4000;
@@ -7463,6 +7464,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       // Recovery picks should carry their floor through low-sim arbitration.
       effectiveThreshold = Math.min(effectiveThreshold, watchdogFloor);
     }
+    const finalNearThresholdContinuation =
+      isFinal &&
+      effectiveThreshold > 0 &&
+      rawIdx >= cursorLine &&
+      rawIdx <= cursorLine + 1 &&
+      conf >= Math.max(
+        DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM,
+        effectiveThreshold - DEFAULT_FINAL_CONTINUATION_SIM_EPS,
+      );
     if (alignedPostCatchup && effectiveThreshold > 0 && conf < effectiveThreshold) {
       logDev('postCatchup relax', {
         sim: conf,
@@ -7472,6 +7482,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         msLeft: postCatchupUntil - now,
       });
     } else if (effectiveThreshold > 0 && conf < effectiveThreshold) {
+      if (finalNearThresholdContinuation) {
+        const needBefore = effectiveThreshold;
+        effectiveThreshold = Math.min(effectiveThreshold, conf);
+        lostForwardWallStreak = 0;
+        if (isDevMode()) {
+          try {
+            console.info(
+              `ASR_FINAL_EPSILON_PASS current=${cursorLine} best=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(needBefore)} eps=${formatLogScore(DEFAULT_FINAL_CONTINUATION_SIM_EPS)}`,
+            );
+          } catch {}
+        }
+      } else {
       const lowSimForwardContinuationBlocked =
         rawIdx >= cursorLine &&
         rawIdx <= cursorLine + 1;
@@ -7620,6 +7642,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         stuckResyncActive,
       });
       return;
+      }
     }
     const finalMatchNudgeEligible =
       isFinal &&
