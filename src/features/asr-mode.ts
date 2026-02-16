@@ -8,7 +8,7 @@ import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { getSpeechStore, type SpeechState } from './speech/speech-store';
 import { emitScrollIntent } from '../scroll/scroll-intent-bus';
-import { getScrollerEl } from '../scroll/scroller';
+import { applyCanonicalScrollTop, getScrollerEl } from '../scroll/scroller';
 
 // How many lines the viewport is allowed to jump per ASR advance
 const ASR_MAX_VISUAL_LEAP = 3;
@@ -409,11 +409,12 @@ export class AsrMode {
     const top = elementTopRelativeTo(target, scroller) - marker;
     requestAnimationFrame(() => {
       if (!scroller) return;
-      if (typeof scroller.scrollTo === 'function') {
-        scroller.scrollTo({ top, behavior: 'auto' });
-      } else {
-        scroller.scrollTop = top;
-      }
+      applyCanonicalScrollTop(top, {
+        scroller,
+        reason: 'asr-mode-scroll',
+        source: 'asr-mode',
+      });
+      markProgrammaticScroll(scroller);
     });
   }
 
@@ -514,4 +515,12 @@ function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement | null): nu
   const r2 = scroller.getBoundingClientRect();
   const scrollTop = scroller.scrollTop;
   return r1.top - r2.top + scrollTop;
+}
+
+function markProgrammaticScroll(scroller: HTMLElement | null): void {
+  if (!scroller) return;
+  const at = Date.now();
+  const y = Number(scroller.scrollTop || 0);
+  try { scroller.dataset.tpLastWriter = 'asr-mode'; } catch {}
+  try { (window as any).__tpLastWriter = { from: 'asr-mode', at, y }; } catch {}
 }

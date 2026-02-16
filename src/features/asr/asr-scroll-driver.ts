@@ -2420,13 +2420,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         scoreByIdx.set(entry.idx, entry.score);
       }
     });
-    let bestCandidate: { idx: number; score: number } | null = null;
+    const scoredCandidates: Array<{ idx: number; score: number }> = [];
     scoreByIdx.forEach((score, idx) => {
       if (!Number.isFinite(score)) return;
-      if (!bestCandidate || score > bestCandidate.score || (score === bestCandidate.score && idx < bestCandidate.idx)) {
-        bestCandidate = { idx, score };
-      }
+      scoredCandidates.push({ idx, score });
     });
+    scoredCandidates.sort((a, b) => b.score - a.score || a.idx - b.idx);
+    const bestCandidate: { idx: number; score: number } | null = scoredCandidates[0] || null;
     const thresholds = getAsrDriverThresholds();
     const baseCommitThreshold = isFinal
       ? thresholds.commitFinalMinSim

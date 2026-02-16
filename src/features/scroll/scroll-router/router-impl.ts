@@ -5,7 +5,7 @@ import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-wri
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { getAsrBlockElements } from '../../../scroll/asr-block-store';
-import { getScrollerEl } from '../../../scroll/scroller';
+import { applyCanonicalScrollTop, getScrollerEl } from '../../../scroll/scroller';
 import {
   DEFAULT_COMPLETION_POLICY,
   decideBlockCompletion,
@@ -1214,7 +1214,11 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
       writeFn(y);
       ok = true;
     } else if (target) {
-      target.scrollTop = y;
+      applyCanonicalScrollTop(y, {
+        scroller: target,
+        reason: meta.reason ?? 'router-scroll-write-fallback',
+        source: meta.from || 'router-scroll-write-fallback',
+      });
       ok = true;
     }
   } catch (err) {
