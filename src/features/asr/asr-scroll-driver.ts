@@ -5575,7 +5575,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
-          if (isFinal && hasEvidence && strongMatch && deltaPx > 0 && deltaPx <= creepNearPx) {
+          const sameLineFinalAdvanceEligible =
+            isFinal &&
+            hasEvidence &&
+            strongMatch &&
+            deltaPx > 0 &&
+            conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+          if (sameLineFinalAdvanceEligible) {
             const cueBridge = findNextSpeakableWithinBridge(
               lastLineIndex,
               DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
@@ -5599,7 +5605,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               !bridgeUsed &&
               nextLine === lastLineIndex + 1 &&
               conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
-            if (bridgeUsed || plainStrongFinalAdvance) {
+            const bridgedFinalAdvance =
+              bridgeUsed &&
+              conf >= DEFAULT_MULTI_JUMP_MIN_SIM;
+            if (bridgedFinalAdvance || plainStrongFinalAdvance) {
               if (bridgeUsed) {
                 logCueBridgeUse(lastLineIndex, nextLine, cueBridge.skippedReasons, 'same-line-confirm');
               }
