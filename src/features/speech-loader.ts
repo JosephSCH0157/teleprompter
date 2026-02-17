@@ -150,6 +150,19 @@ type AsrStallPayload = {
   lifecycleEventTs: number | null;
 };
 
+type AsrStallAutoRestartPayload = {
+  reason: string;
+  ts: number;
+  stall: AsrStallPayload;
+  episodeId: number;
+  attemptCountThisEpisode: number;
+  lastAttemptAt: number | null;
+  cooldownRemainingMs: number;
+  suppressionRemainingMs: number;
+  restartAttempted: boolean;
+  restarted: boolean;
+};
+
 declare global {
   interface Window {
     __tpBus?: { emit?: AnyFn };
@@ -201,6 +214,7 @@ declare global {
     __tpAsrHeartbeatLast?: AsrHeartbeatPayload;
     __tpAsrLifecycleLast?: Record<string, unknown>;
     __tpAsrStallLast?: AsrStallPayload;
+    __tpAsrStallAutoRestartLast?: AsrStallAutoRestartPayload;
   }
 }
 
@@ -246,6 +260,12 @@ let lastLifecycleRestartAt = 0;
 let suppressRecognizerAutoRestart = false;
 let lastHudSnapshotFingerprint = '';
 let lastHudSnapshotAt = 0;
+let asrStallEpisodeId = 0;
+let asrStallEpisodeRestarted = false;
+let asrStallAttemptCountThisEpisode = 0;
+let lastAsrStallEpisodeClass: AsrStallClass = 'unknown';
+let lastAsrStallAutoRestartAt = 0;
+let suppressAsrStallAutoRestartUntil = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
@@ -253,6 +273,8 @@ const ASR_WATCHDOG_THRESHOLD_MS = 4000;
 const ASR_HEARTBEAT_INTERVAL_MS = 1000;
 const ASR_STALL_SPEECH_THRESHOLD_MS = 2500;
 const ASR_STALL_MATCHER_THRESHOLD_MS = 4500;
+const ASR_STALL_AUTORESTART_COOLDOWN_MS = 15000;
+const ASR_STALL_AUTORESTART_SUPPRESS_MS = 30000;
 const LIFECYCLE_RESTART_DELAY_MS = 120;
 const LIFECYCLE_RESTART_COOLDOWN_MS = 350;
 const HUD_SNAPSHOT_THROTTLE_MS = 120;
@@ -528,6 +550,114 @@ function classifyAsrStall(payload: AsrHeartbeatPayload): AsrStallClass {
   return 'unknown';
 }
 
+function resetAsrStallAutoRestartEpisode(reason?: string): void {
+  asrStallEpisodeRestarted = false;
+  asrStallAttemptCountThisEpisode = 0;
+  lastAsrStallEpisodeClass = 'unknown';
+  if (isDevMode() && shouldLogTag('ASR_STALL_AUTORESTART_RESET', 2, 1000)) {
+    try { console.info('[ASR_STALL_AUTORESTART_RESET]', { reason: reason || 'reset' }); } catch {}
+  }
+}
+
+function suppressAsrStallAutoRestart(reason: string, durationMs = ASR_STALL_AUTORESTART_SUPPRESS_MS): void {
+  const now = Date.now();
+  const ttlMs = Math.max(0, Math.floor(Number(durationMs) || 0));
+  suppressAsrStallAutoRestartUntil = Math.max(suppressAsrStallAutoRestartUntil, now + ttlMs);
+  resetAsrStallAutoRestartEpisode(`suppress:${reason}`);
+  if (isDevMode() && shouldLogTag('ASR_STALL_AUTORESTART_SUPPRESS', 2, 1000)) {
+    try {
+      console.info('[ASR_STALL_AUTORESTART_SUPPRESS]', {
+        reason,
+        suppressUntil: suppressAsrStallAutoRestartUntil,
+      });
+    } catch {}
+  }
+}
+
+function emitAsrStallAutoRestart(payload: AsrStallAutoRestartPayload): void {
+  if (typeof window === 'undefined') return;
+  try { window.__tpAsrStallAutoRestartLast = payload; } catch {}
+  try { window.__tpBus?.emit?.('tp:asr:stall-autorestart', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:stall-autorestart', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:stall-autorestart', { detail: payload })); } catch {}
+  if (isDevMode()) {
+    try { console.warn('[ASR_STALL_AUTORESTART]', payload); } catch {}
+  }
+}
+
+function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
+  const nextClass = stallPayload.stallClass;
+  const prevClass = lastAsrStallEpisodeClass;
+  const enteredSpeechStall = nextClass === 'speech_stall' && prevClass !== 'speech_stall';
+  const leftSpeechStall = nextClass !== 'speech_stall' && prevClass === 'speech_stall';
+
+  if (enteredSpeechStall) {
+    asrStallEpisodeId += 1;
+    asrStallEpisodeRestarted = false;
+    asrStallAttemptCountThisEpisode = 0;
+  } else if (leftSpeechStall) {
+    asrStallEpisodeRestarted = false;
+    asrStallAttemptCountThisEpisode = 0;
+  }
+  lastAsrStallEpisodeClass = nextClass;
+
+  if (nextClass !== 'speech_stall') return;
+
+  const now = Date.now();
+  const mode = String(stallPayload.scrollMode || '').toLowerCase();
+  const asrArmed = stallPayload.asrArmed === true;
+  const inAsrMode = mode === 'asr';
+  const recognizerLaneDied = !!stallPayload.recognizerAttached || !stallPayload.speechRunningActual;
+  if (!inAsrMode || !asrArmed) {
+    asrStallEpisodeRestarted = false;
+    asrStallAttemptCountThisEpisode = 0;
+  }
+  const suppressionRemainingMs = Math.max(0, suppressAsrStallAutoRestartUntil - now);
+  const cooldownRemainingBeforeMs = Math.max(0, ASR_STALL_AUTORESTART_COOLDOWN_MS - (now - lastAsrStallAutoRestartAt));
+
+  let reason = 'stall:speech_stall';
+  let restartAttempted = false;
+  let restarted = false;
+
+  if (!inAsrMode || !asrArmed) {
+    reason = 'skip:not-asr-armed';
+  } else if (!recognizerLaneDied) {
+    reason = 'skip:not-speech-lane';
+  } else if (!shouldAutoRestartSpeech()) {
+    reason = 'skip:autorestart-disabled';
+  } else if (asrStallEpisodeRestarted) {
+    reason = 'skip:episode-already-attempted';
+  } else if (suppressionRemainingMs > 0) {
+    reason = 'skip:manual-suppressed';
+  } else if (cooldownRemainingBeforeMs > 0) {
+    reason = 'skip:cooldown';
+  } else {
+    restartAttempted = true;
+    asrStallEpisodeRestarted = true;
+    asrStallAttemptCountThisEpisode += 1;
+    lastAsrStallAutoRestartAt = now;
+    restarted = requestRecognizerRestart('stall:speech_stall', { abortFirst: false });
+    reason = restarted ? 'stall:speech_stall' : 'stall:speech_stall:failed';
+    emitHudSnapshot(`stall-autorestart:${restarted ? 'ok' : 'failed'}`, { force: true });
+  }
+
+  if (!restartAttempted && !enteredSpeechStall) return;
+
+  const cooldownRemainingMs = Math.max(0, ASR_STALL_AUTORESTART_COOLDOWN_MS - (now - lastAsrStallAutoRestartAt));
+  emitAsrStallAutoRestart({
+    reason,
+    ts: now,
+    stall: stallPayload,
+    episodeId: asrStallEpisodeId,
+    attemptCountThisEpisode: asrStallAttemptCountThisEpisode,
+    lastAttemptAt: lastAsrStallAutoRestartAt > 0 ? lastAsrStallAutoRestartAt : null,
+    cooldownRemainingMs,
+    suppressionRemainingMs,
+    restartAttempted,
+    restarted,
+  });
+}
+
 function emitAsrStallIfChanged(payload: AsrHeartbeatPayload, opts?: { force?: boolean }): void {
   if (typeof window === 'undefined') return;
   const stallClass = classifyAsrStall(payload);
@@ -557,6 +687,7 @@ function emitAsrStallIfChanged(payload: AsrHeartbeatPayload, opts?: { force?: bo
   try { window.__tpBus?.emit?.('tp:asr:stall', stallPayload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:asr:stall', { detail: stallPayload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:asr:stall', { detail: stallPayload })); } catch {}
+  maybeAutoRestartSpeechStall(stallPayload);
   if (isDevMode()) {
     try { console.warn('[ASR_STALL_VERDICT]', stallPayload); } catch {}
   }
@@ -839,6 +970,7 @@ function stopAndAbortRecognizer(instance: any): void {
 function hardResetSpeechEngine(reason?: string): void {
   const why = String(reason || 'script-reset');
   suppressRecognizerAutoRestart = true;
+  suppressAsrStallAutoRestart(`hard-reset:${why}`);
   asrSessionIntentActive = false;
   resetAsrInterimStabilizer();
   fallbackTranscriptMatchSeq = 0;
@@ -2956,6 +3088,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     lastRecognizerLifecycleEvent = '';
     lastRecognizerLifecycleAt = 0;
     lastAsrStallClass = '';
+    resetAsrStallAutoRestartEpisode('session-start');
     setSpeechRunningActual(false, 'session-start');
     clearLifecycleRestartTimer();
     startAsrHeartbeat();
@@ -3004,6 +3137,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
 
 export function stopSpeechBackendForSession(reason?: string): void {
   suppressRecognizerAutoRestart = true;
+  suppressAsrStallAutoRestart(`stop:${String(reason || 'unspecified')}`);
   clearLifecycleRestartTimer();
   stopAsrHeartbeat();
   asrSessionIntentActive = false;
