@@ -245,6 +245,7 @@ let lastScrollMode = '';
 let lastResultTs = 0;
 let speechRunningActual = false;
 let lastRecognizerOnResultTs = 0;
+let lastRecognizerAttachedTs = 0;
 let lastAsrIngestTs = 0;
 let lastAsrCommitTs = 0;
 let lastAsrCommitCount = 0;
@@ -274,6 +275,7 @@ const WATCHDOG_THRESHOLD_MS = 15000;
 const ASR_WATCHDOG_THRESHOLD_MS = 4000;
 const ASR_HEARTBEAT_INTERVAL_MS = 1000;
 const ASR_STALL_SPEECH_THRESHOLD_MS = 2500;
+const ASR_DEAF_RECOGNIZER_MS = 6000;
 const ASR_STALL_MATCHER_THRESHOLD_MS = 4500;
 const ASR_STALL_MATCHER_STABLE_COMMIT_MS = 1500;
 const ASR_STALL_AUTORESTART_COOLDOWN_MS = 15000;
@@ -431,6 +433,12 @@ function elapsedSince(ts: number, now: number): number | null {
   return Math.max(0, now - ts);
 }
 
+function resolveRecognizerQuietMs(payload: Pick<AsrHeartbeatPayload, 'sinceOnResultMs' | 'recognizerAttached' | 'speechRunningActual'>, now: number): number | null {
+  if (payload.sinceOnResultMs != null) return payload.sinceOnResultMs;
+  if (!payload.recognizerAttached && !payload.speechRunningActual) return null;
+  return elapsedSince(lastRecognizerAttachedTs, now);
+}
+
 function buildHudSnapshot(reason: string): HudSnapshotPayload {
   const session = getSession();
   const driverRef = resolveAsrDriverRef();
@@ -560,11 +568,12 @@ function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
 
 function classifyAsrStall(payload: AsrHeartbeatPayload): AsrStallClass {
   const now = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
-  const liveArmedDetached = isLiveArmedAsr(
+  const liveArmedAsr = isLiveArmedAsr(
     payload.scrollMode,
     payload.sessionPhase,
     payload.asrArmed,
-  ) && !payload.recognizerAttached;
+  );
+  const liveArmedDetached = liveArmedAsr && !payload.recognizerAttached;
   if (liveArmedDetached) {
     maybeLogLiveArmedDetachedInvariant('stall-classifier');
     return 'speech_stall';
@@ -578,8 +587,20 @@ function classifyAsrStall(payload: AsrHeartbeatPayload): AsrStallClass {
   }
   const commitStagnantMs = Math.max(0, now - lastMatcherStallCommitStableSince);
   const sinceOnResultMs = payload.sinceOnResultMs;
+  const recognizerQuietMs = resolveRecognizerQuietMs(payload, now);
   const sinceIngestMs = payload.sinceIngestMs;
   const sinceCommitMs = payload.sinceCommitMs;
+  const deafRecognizerStalled =
+    liveArmedAsr &&
+    (payload.recognizerAttached || payload.speechRunningActual) &&
+    recognizerQuietMs != null &&
+    recognizerQuietMs > ASR_DEAF_RECOGNIZER_MS;
+  if (deafRecognizerStalled) {
+    if (isDevMode() && shouldLogTag('ASR:deaf-recognizer', 2, 1000)) {
+      try { console.warn(`[ASR_DEAF] no onresult for ${Math.round(recognizerQuietMs)}ms -> speech_stall`); } catch {}
+    }
+    return 'speech_stall';
+  }
   const speechLaneStalled =
     sinceOnResultMs != null &&
     sinceOnResultMs > ASR_STALL_SPEECH_THRESHOLD_MS &&
@@ -658,7 +679,17 @@ function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
   const mode = String(stallPayload.scrollMode || '').toLowerCase();
   const asrArmed = stallPayload.asrArmed === true;
   const inAsrMode = mode === 'asr';
-  const recognizerLaneDied = !stallPayload.recognizerAttached || !stallPayload.speechRunningActual;
+  const liveArmedAsr = isLiveArmedAsr(mode, stallPayload.sessionPhase, asrArmed);
+  const recognizerQuietMs = resolveRecognizerQuietMs(stallPayload, now);
+  const deafRecognizerLane =
+    liveArmedAsr &&
+    (stallPayload.recognizerAttached || stallPayload.speechRunningActual) &&
+    recognizerQuietMs != null &&
+    recognizerQuietMs > ASR_DEAF_RECOGNIZER_MS;
+  const recognizerLaneDied =
+    !stallPayload.recognizerAttached ||
+    !stallPayload.speechRunningActual ||
+    deafRecognizerLane;
   if (!inAsrMode || !asrArmed) {
     asrStallEpisodeRestarted = false;
     asrStallAttemptCountThisEpisode = 0;
@@ -994,6 +1025,9 @@ function setActiveRecognizer(instance: RecognizerLike | null): void {
   pendingManualRestartCount = 0;
   clearLifecycleRestartTimer();
   if (activeRecognizer) {
+    if (!previousRecognizer || previousRecognizer !== activeRecognizer || lastRecognizerAttachedTs <= 0) {
+      lastRecognizerAttachedTs = Date.now();
+    }
     markResultTimestamp();
     startSpeechWatchdog();
     if (previousRecognizer !== activeRecognizer) {
@@ -1004,6 +1038,7 @@ function setActiveRecognizer(instance: RecognizerLike | null): void {
       } catch {}
     }
   } else {
+    lastRecognizerAttachedTs = 0;
     stopSpeechWatchdog();
     setSpeechRunningActual(false, 'detach');
     if (previousRecognizer) {
@@ -1051,6 +1086,7 @@ function hardResetSpeechEngine(reason?: string): void {
   fallbackTranscriptMatchSeq = 0;
   lastResultTs = 0;
   lastRecognizerOnResultTs = 0;
+  lastRecognizerAttachedTs = 0;
   lastAsrIngestTs = 0;
   lastAsrCommitTs = 0;
   lastAsrCommitCount = 0;
