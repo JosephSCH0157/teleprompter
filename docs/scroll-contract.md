@@ -46,6 +46,10 @@ When `scrollMode='asr'`:
 - Stuck watchdog fail-safe: if phase is live, ASR is armed, transcript traffic continues (finals or sustained interim bursts), and commit count has not advanced for watchdog window, attempt a bounded forward recovery commit from forward scan at low floor.
 - If watchdog selects a forward recovery candidate while interim buffer is still growing, treat that as forward-progress evidence: do not reject it as `interim_unstable`, and preserve watchdog floor through low-sim gating for that recovery attempt.
 - Commit-time clamp: before ASR commit finalization (writer/pixel), cap forward delta for all commits to a small window (default `+1` line) unless confidence is strong (default `sim>=0.82`); emit `ASR_CLAMP` dev log when the clamp is applied.
+- Cue-bridge low-sim bypass must be bridge-only: intermediate skipped lines must be skippable cue/meta/blank lines, capped to a small bridge (`<=2` skipped lines), and target must be speakable.
+- Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.
+- Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.
+- Ambiguity is hold-first: for low-confidence/tied/low-information near-line matches, enter HOLD (no commit), continue ingesting, and only relock/commit on strong forward anchor evidence.
 - Guard profile defaults are relaxed for forward continuity: reduce same-line throttle, lower forced-evidence floors, and trigger watchdog recovery sooner while keeping forward recovery bounded.
 - Any non-finite (`NaN`/`Infinity`) value in ASR commit/seek numeric paths must be hard-guarded and dropped; emit a dev diagnostic (`ASR NAN GUARD` / writer non-finite guard) instead of propagating unstable math.
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.

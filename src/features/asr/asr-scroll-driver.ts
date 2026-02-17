@@ -409,6 +409,19 @@ const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
 const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 1;
 const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 3;
+const DEFAULT_CUE_BRIDGE_BYPASS_MAX_SKIPPED_LINES = 2;
+const DEFAULT_MULTI_JUMP_MIN_SIM = 0.45;
+const DEFAULT_MULTI_JUMP_HARD_DENY_SIM = 0.3;
+const DEFAULT_AMBIGUITY_HOLD_MIN_SIM = 0.35;
+const DEFAULT_AMBIGUITY_HOLD_MARGIN = 0.04;
+const DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES = 2;
+const DEFAULT_AMBIGUITY_HOLD_LOW_INFO_CONTENT_TOKENS = 3;
+const DEFAULT_AMBIGUITY_HOLD_LOW_INFO_STRONG_SIM = 0.5;
+const DEFAULT_HOLD_ANCHOR_LOOKAHEAD_LINES = 25;
+const DEFAULT_HOLD_ANCHOR_MIN_SIM = 0.55;
+const DEFAULT_HOLD_ANCHOR_MARGIN = 0.05;
+const DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES = 6;
+const HOLD_TICK_LOG_THROTTLE_MS = 500;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
 const DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES = 25;
 const DEFAULT_LOST_FORWARD_MIN_SIM = 0.45;
@@ -2099,6 +2112,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastSeekTs = now;
     lastEvidenceAt = now;
     noteCommit(cursorLine, lastLineIndex, now);
+    closeAmbiguityHold(now, 'behind-recovery', cursorLine, lastLineIndex, conf);
     resetLowSimStreak();
     behindStrongCount = 0;
     lastBehindStrongIdx = -1;
@@ -2170,6 +2184,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let behindHitWindowStart = 0;
   let lagRelockHits = 0;
   let lagRelockWindowStart = 0;
+  let ambiguityHoldActive = false;
+  let ambiguityHoldSince = 0;
+  let ambiguityHoldReason = '';
+  let ambiguityHoldBestIdx = -1;
+  let ambiguityHoldBestSim = 0;
+  let ambiguityHoldSecondIdx = -1;
+  let ambiguityHoldSecondSim = 0;
+  let lastAmbiguityHoldTickAt = 0;
     let pendingMatch: PendingMatch | null = null;
     let pendingSeq = 0;
 
@@ -2206,6 +2228,182 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       syntheticMatchIdSeq += 1;
       return `drv-${Date.now().toString(36)}-${syntheticMatchIdSeq}`;
     };
+  const resetAmbiguityHoldState = () => {
+    ambiguityHoldActive = false;
+    ambiguityHoldSince = 0;
+    ambiguityHoldReason = '';
+    ambiguityHoldBestIdx = -1;
+    ambiguityHoldBestSim = 0;
+    ambiguityHoldSecondIdx = -1;
+    ambiguityHoldSecondSim = 0;
+    lastAmbiguityHoldTickAt = 0;
+  };
+  const emitAmbiguityHoldEvent = (
+    phase: 'enter' | 'tick' | 'exit',
+    now: number,
+    reason: string,
+    cursorLine: number,
+    bestIdx: number,
+    bestSim: number,
+    secondIdx: number | null,
+    secondSim: number | null,
+    anchorIdx?: number | null,
+    anchorSim?: number | null,
+  ) => {
+    const safeCursor = Number.isFinite(cursorLine)
+      ? Math.max(0, Math.floor(cursorLine))
+      : 0;
+    const safeBest = Number.isFinite(bestIdx)
+      ? Math.max(0, Math.floor(bestIdx))
+      : safeCursor;
+    const safeBestSim = Number.isFinite(bestSim) ? bestSim : 0;
+    const safeSecondIdx = Number.isFinite(secondIdx as number)
+      ? Math.max(0, Math.floor(Number(secondIdx)))
+      : null;
+    const safeSecondSim = Number.isFinite(secondSim as number) ? Number(secondSim) : null;
+    const safeAnchorIdx = Number.isFinite(anchorIdx as number)
+      ? Math.max(0, Math.floor(Number(anchorIdx)))
+      : null;
+    const safeAnchorSim = Number.isFinite(anchorSim as number) ? Number(anchorSim) : null;
+    const holdAgeMs = ambiguityHoldSince > 0 ? Math.max(0, now - ambiguityHoldSince) : 0;
+    const payload = {
+      phase,
+      ts: now,
+      reason,
+      cursorLine: safeCursor,
+      bestIdx: safeBest,
+      bestSim: Number(safeBestSim.toFixed(3)),
+      secondIdx: safeSecondIdx,
+      secondSim: safeSecondSim != null ? Number(safeSecondSim.toFixed(3)) : null,
+      delta: safeBest - safeCursor,
+      holdAgeMs,
+      anchorIdx: safeAnchorIdx,
+      anchorSim: safeAnchorSim != null ? Number(safeAnchorSim.toFixed(3)) : null,
+    };
+    if (typeof window !== 'undefined') {
+      try { (window as any).__tpAsrHoldLast = payload; } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:asr:hold', { detail: payload })); } catch {}
+    }
+    if (!isDevMode()) return;
+    try {
+      const tag = phase === 'enter' ? 'ASR_HOLD_ENTER' : phase === 'exit' ? 'ASR_HOLD_EXIT' : 'ASR_HOLD_TICK';
+      const secondPart = safeSecondIdx != null
+        ? `${safeSecondIdx}:${formatLogScore(safeSecondSim ?? Number.NaN)}`
+        : '-';
+      const anchorPart = safeAnchorIdx != null
+        ? ` anchor=${safeAnchorIdx}:${formatLogScore(safeAnchorSim ?? Number.NaN)}`
+        : '';
+      console.info(
+        `${tag} reason=${reason} current=${safeCursor} best=${safeBest} sim=${formatLogScore(safeBestSim)} second=${secondPart} holdMs=${holdAgeMs}${anchorPart}`,
+      );
+    } catch {}
+  };
+  const beginOrRefreshAmbiguityHold = (
+    now: number,
+    reason: string,
+    cursorLine: number,
+    bestIdx: number,
+    bestSim: number,
+    secondIdx: number | null,
+    secondSim: number | null,
+  ) => {
+    const safeReason = String(reason || '').trim() || 'await_anchor';
+    ambiguityHoldReason = safeReason;
+    ambiguityHoldBestIdx = Number.isFinite(bestIdx)
+      ? Math.max(0, Math.floor(bestIdx))
+      : Math.max(0, Math.floor(cursorLine));
+    ambiguityHoldBestSim = Number.isFinite(bestSim) ? bestSim : 0;
+    ambiguityHoldSecondIdx = Number.isFinite(secondIdx as number)
+      ? Math.max(0, Math.floor(Number(secondIdx)))
+      : -1;
+    ambiguityHoldSecondSim = Number.isFinite(secondSim as number) ? Number(secondSim) : 0;
+    if (!ambiguityHoldActive) {
+      ambiguityHoldActive = true;
+      ambiguityHoldSince = now;
+      lastAmbiguityHoldTickAt = now;
+      warnGuard('hold_wait', [
+        `reason=${safeReason}`,
+        `current=${Math.max(0, Math.floor(cursorLine))}`,
+        `best=${ambiguityHoldBestIdx}`,
+        `sim=${formatLogScore(ambiguityHoldBestSim)}`,
+        ambiguityHoldSecondIdx >= 0
+          ? `second=${ambiguityHoldSecondIdx}:${formatLogScore(ambiguityHoldSecondSim)}`
+          : '',
+      ]);
+      emitHudStatus(
+        'hold_wait',
+        `Hold: waiting for anchor (${safeReason}, sim=${formatLogScore(ambiguityHoldBestSim)})`,
+      );
+      emitAmbiguityHoldEvent(
+        'enter',
+        now,
+        safeReason,
+        cursorLine,
+        ambiguityHoldBestIdx,
+        ambiguityHoldBestSim,
+        ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondIdx : null,
+        ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondSim : null,
+      );
+      return;
+    }
+    emitHudStatus(
+      'hold_wait',
+      `Hold: waiting for anchor (${safeReason}, sim=${formatLogScore(ambiguityHoldBestSim)})`,
+    );
+    if (now - lastAmbiguityHoldTickAt < HOLD_TICK_LOG_THROTTLE_MS) return;
+    lastAmbiguityHoldTickAt = now;
+    emitAmbiguityHoldEvent(
+      'tick',
+      now,
+      safeReason,
+      cursorLine,
+      ambiguityHoldBestIdx,
+      ambiguityHoldBestSim,
+      ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondIdx : null,
+      ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondSim : null,
+    );
+  };
+  const closeAmbiguityHold = (
+    now: number,
+    reason: string,
+    cursorLine?: number,
+    bestIdx?: number,
+    bestSim?: number,
+    secondIdx?: number | null,
+    secondSim?: number | null,
+    anchorIdx?: number | null,
+    anchorSim?: number | null,
+  ) => {
+    if (!ambiguityHoldActive) return;
+    const safeCursor = Number.isFinite(cursorLine as number)
+      ? Math.max(0, Math.floor(Number(cursorLine)))
+      : Math.max(0, Math.floor(lastLineIndex));
+    const safeBestIdx = Number.isFinite(bestIdx as number)
+      ? Math.max(0, Math.floor(Number(bestIdx)))
+      : (ambiguityHoldBestIdx >= 0 ? ambiguityHoldBestIdx : safeCursor);
+    const safeBestSim = Number.isFinite(bestSim as number)
+      ? Number(bestSim)
+      : ambiguityHoldBestSim;
+    const safeSecondIdx = Number.isFinite(secondIdx as number)
+      ? Math.max(0, Math.floor(Number(secondIdx)))
+      : (ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondIdx : null);
+    const safeSecondSim = Number.isFinite(secondSim as number)
+      ? Number(secondSim)
+      : (ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondSim : null);
+    emitAmbiguityHoldEvent(
+      'exit',
+      now,
+      String(reason || '').trim() || 'resolved',
+      safeCursor,
+      safeBestIdx,
+      safeBestSim,
+      safeSecondIdx,
+      safeSecondSim,
+      anchorIdx,
+      anchorSim,
+    );
+    resetAmbiguityHoldState();
+  };
   const armPostCatchupGrace = (reason: string) => {
     const now = Date.now();
     postCatchupUntil = now + POST_CATCHUP_MS;
@@ -2886,6 +3084,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         tuningProfileId: activeTuningProfileId,
         bufferChars: evidenceText.length,
         bufferEntries: evidenceEntries.length,
+        holdActive: ambiguityHoldActive,
+        holdAgeMs:
+          ambiguityHoldActive && ambiguityHoldSince > 0
+            ? Math.max(0, Date.now() - ambiguityHoldSince)
+            : 0,
+        holdReason: ambiguityHoldActive ? ambiguityHoldReason : null,
+        holdBestSim: ambiguityHoldActive ? Number(ambiguityHoldBestSim.toFixed(3)) : null,
+        holdSecondSim:
+          ambiguityHoldActive && ambiguityHoldSecondIdx >= 0
+            ? Number(ambiguityHoldSecondSim.toFixed(3))
+            : null,
       };
     } catch {}
   };
@@ -4526,9 +4735,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           cueBridgePathValid = false;
         }
       }
-      const cueBridgeFloor = DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+      const cueBridgeSkippedCount = cueBridgeIntermediateReasons.length;
+      const cueBridgeSkipCountOk =
+        cueBridgeSkippedCount > 0 &&
+        cueBridgeSkippedCount <= DEFAULT_CUE_BRIDGE_BYPASS_MAX_SKIPPED_LINES;
+      const cueBridgeFloor =
+        cueBridgeDelta >= 2 ? DEFAULT_MULTI_JUMP_MIN_SIM : DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
       const cueBridgeBypass =
         cueBridgePathValid &&
+        cueBridgeSkipCountOk &&
         conf >= cueBridgeFloor &&
         isSessionAsrArmed() &&
         isSessionLivePhase();
@@ -4674,18 +4889,32 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetLine > lastLineIndex &&
         targetLine - lastLineIndex <= Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()) &&
         conf >= DEFAULT_LOST_FORWARD_MIN_SIM;
-      const effectiveClampDeltaLimit = lostForwardClampEligible
+      const holdAnchorClampEligible =
+        forceTag === 'hold-anchor' &&
+        targetLine > lastLineIndex &&
+        targetLine - lastLineIndex <= DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES &&
+        conf >= DEFAULT_HOLD_ANCHOR_MIN_SIM;
+      const effectiveClampDeltaLimit = holdAnchorClampEligible
+        ? Math.max(clampDeltaLimit, DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES)
+        : (lostForwardClampEligible
         ? Math.max(
             clampDeltaLimit,
             Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()),
           )
         : (cueBridgeClampEligible
           ? cueBridgeDelta
-          : clampDeltaLimit);
+          : clampDeltaLimit));
       if (cueBridgeClampEligible && isDevMode()) {
         try {
           console.info(
             `ASR_CUE_BRIDGE_COMMIT carry=+${cueBridgeDelta} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
+          );
+        } catch {}
+      }
+      if (holdAnchorClampEligible && isDevMode()) {
+        try {
+          console.info(
+            `ASR_HOLD_ANCHOR_CLAMP carry=+${DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
           );
         } catch {}
       }
@@ -4742,6 +4971,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           snippet ? `clue="${snippet}"` : '',
         ]);
         targetLine = cueSafeInitialTarget.nextLine;
+      }
+      const multiJumpDelta = targetLine - lastLineIndex;
+      if (multiJumpDelta > 1) {
+        const hardDeny = conf < DEFAULT_MULTI_JUMP_HARD_DENY_SIM;
+        const need = DEFAULT_MULTI_JUMP_MIN_SIM;
+        if (hardDeny || conf < need) {
+          warnGuard('multi_jump_low_sim', [
+            `current=${lastLineIndex}`,
+            `best=${targetLine}`,
+            `delta=${multiJumpDelta}`,
+            `sim=${formatLogScore(conf)}`,
+            `need=${formatLogScore(need)}`,
+            hardDeny ? `hardFloor=${formatLogScore(DEFAULT_MULTI_JUMP_HARD_DENY_SIM)}` : '',
+            forceReason ? `force=${forceReason}` : '',
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+          emitHudStatus(
+            'multi_jump_low_sim',
+            `Hold: ambiguous jump blocked (sim=${formatLogScore(conf)}, need=${formatLogScore(need)})`,
+          );
+          return;
+        }
       }
       const confirmDelta = targetLine - lastLineIndex;
       if (confirmDelta < DELTA_LARGE_MIN_LINES && largeDeltaConfirm) {
@@ -5332,6 +5583,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         jumpHistory.push(now);
       }
       noteCommit(prevLineIndex, targetLine, now);
+      closeAmbiguityHold(now, 'commit', prevLineIndex, targetLine, conf);
       if (forwardDelta >= OVERSHOOT_RISK_DELTA_LINES) {
         overshootRiskUntil = now + OVERSHOOT_RISK_WINDOW_MS;
         logDev('overshoot risk', { delta: forwardDelta, until: overshootRiskUntil });
@@ -7944,6 +8196,139 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logDev('ambiguous match', { near, far, cursorLine });
       }
     }
+    const holdCandidates = topScoresSpeakable
+      .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
+      .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+      .map((entry) => ({ idx: Math.max(0, Math.floor(entry.idx)), score: entry.score }))
+      .sort((a, b) => b.score - a.score || Math.abs(a.idx - cursorLine) - Math.abs(b.idx - cursorLine) || a.idx - b.idx);
+    const holdBestCandidate = holdCandidates[0] || null;
+    const holdSecondCandidate = holdCandidates[1] || null;
+    const holdTieNearby =
+      !!holdBestCandidate &&
+      !!holdSecondCandidate &&
+      Math.abs(holdBestCandidate.idx - holdSecondCandidate.idx) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES &&
+      Math.abs(holdBestCandidate.score - holdSecondCandidate.score) < DEFAULT_AMBIGUITY_HOLD_MARGIN;
+    const holdTranscript = transcriptComparable || bufferedText || compacted || text;
+    const holdContentTokenCount = getContentTokenSet(normTokens(holdTranscript)).size;
+    const holdLowInfoWeak =
+      holdContentTokenCount > 0 &&
+      holdContentTokenCount <= DEFAULT_AMBIGUITY_HOLD_LOW_INFO_CONTENT_TOKENS &&
+      conf < DEFAULT_AMBIGUITY_HOLD_LOW_INFO_STRONG_SIM;
+    const holdReasonCode =
+      conf < DEFAULT_AMBIGUITY_HOLD_MIN_SIM
+        ? 'low_best_sim'
+        : holdTieNearby
+          ? 'near_tie'
+          : (holdLowInfoWeak ? 'low_info_weak' : '');
+    const shouldHoldCandidate = rawIdx >= cursorLine && holdReasonCode.length > 0;
+    const holdAnchorCandidates = forwardBandScores
+      .filter((entry) =>
+        entry.idx > cursorLine &&
+        entry.idx <= cursorLine + DEFAULT_HOLD_ANCHOR_LOOKAHEAD_LINES)
+      .slice()
+      .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span);
+    const holdAnchorBest = holdAnchorCandidates[0] || null;
+    const holdAnchorSecond = holdAnchorCandidates[1] || null;
+    const holdAnchorMargin = holdAnchorBest && holdAnchorSecond
+      ? holdAnchorBest.score - holdAnchorSecond.score
+      : Number.POSITIVE_INFINITY;
+    const holdAnchorReady =
+      !!holdAnchorBest &&
+      holdAnchorBest.score >= DEFAULT_HOLD_ANCHOR_MIN_SIM &&
+      holdAnchorMargin >= DEFAULT_HOLD_ANCHOR_MARGIN;
+    const holdBestIdx = holdBestCandidate ? holdBestCandidate.idx : Math.max(0, Math.floor(rawIdx));
+    const holdBestSim = holdBestCandidate ? holdBestCandidate.score : conf;
+    const holdSecondIdx = holdSecondCandidate ? holdSecondCandidate.idx : null;
+    const holdSecondSim = holdSecondCandidate ? holdSecondCandidate.score : null;
+    if (ambiguityHoldActive) {
+      if (holdAnchorReady && holdAnchorBest) {
+        closeAmbiguityHold(
+          now,
+          'anchor_relock',
+          cursorLine,
+          holdBestIdx,
+          holdBestSim,
+          holdSecondIdx,
+          holdSecondSim,
+          holdAnchorBest.idx,
+          holdAnchorBest.score,
+        );
+        const before = rawIdx;
+        rawIdx = holdAnchorBest.idx;
+        conf = holdAnchorBest.score;
+        forceReason = forceReason || 'hold-anchor';
+        relockOverride = true;
+        relockReason = relockReason || 'hold-anchor';
+        emitHudStatus(
+          'hold_anchor',
+          `Anchor relock +${rawIdx - cursorLine} (sim=${formatLogScore(conf)})`,
+        );
+        if (isDevMode()) {
+          try {
+            const holdMarginText = Number.isFinite(holdAnchorMargin)
+              ? formatLogScore(holdAnchorMargin)
+              : 'na';
+            console.info(
+              `ASR_HOLD_ANCHOR current=${cursorLine} best=${before} anchor=${rawIdx} sim=${formatLogScore(conf)} margin=${holdMarginText}`,
+            );
+          } catch {}
+        }
+      } else if (
+        shouldHoldCandidate ||
+        conf < Math.max(requiredThreshold, DEFAULT_AMBIGUITY_HOLD_LOW_INFO_STRONG_SIM)
+      ) {
+        beginOrRefreshAmbiguityHold(
+          now,
+          holdReasonCode || ambiguityHoldReason || 'await_anchor',
+          cursorLine,
+          holdBestIdx,
+          holdBestSim,
+          holdSecondIdx,
+          holdSecondSim,
+        );
+        return;
+      } else {
+        closeAmbiguityHold(
+          now,
+          'resolved',
+          cursorLine,
+          holdBestIdx,
+          holdBestSim,
+          holdSecondIdx,
+          holdSecondSim,
+        );
+      }
+    } else if (shouldHoldCandidate) {
+      if (holdAnchorReady && holdAnchorBest) {
+        const before = rawIdx;
+        rawIdx = holdAnchorBest.idx;
+        conf = holdAnchorBest.score;
+        forceReason = forceReason || 'hold-anchor';
+        relockOverride = true;
+        relockReason = relockReason || 'hold-anchor';
+        if (isDevMode()) {
+          try {
+            const holdMarginText = Number.isFinite(holdAnchorMargin)
+              ? formatLogScore(holdAnchorMargin)
+              : 'na';
+            console.info(
+              `ASR_HOLD_ANCHOR_IMMEDIATE current=${cursorLine} best=${before} anchor=${rawIdx} sim=${formatLogScore(conf)} margin=${holdMarginText}`,
+            );
+          } catch {}
+        }
+      } else {
+        beginOrRefreshAmbiguityHold(
+          now,
+          holdReasonCode,
+          cursorLine,
+          holdBestIdx,
+          holdBestSim,
+          holdSecondIdx,
+          holdSecondSim,
+        );
+        return;
+      }
+    }
 
     const behindBy = cursorLine - rawIdx;
     if (behindBy > 0) {
@@ -8019,6 +8404,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         lastSeekTs = now;
         lastEvidenceAt = now;
         noteCommit(cursorLine, lastLineIndex, now);
+        closeAmbiguityHold(now, 'behind-reanchor', cursorLine, lastLineIndex, conf);
         resetLowSimStreak();
         behindStrongSince = 0;
         behindStrongCount = 0;
@@ -8253,6 +8639,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     try { window.removeEventListener('tp:asr:rescue', rescueHandler as EventListener); } catch {}
     detachManualScrollWatcher();
     manualAnchorPending = null;
+    resetAmbiguityHoldState();
     updateManualAnchorGlobalState();
     if (activeGuardCounts === guardCounts) {
       activeGuardCounts = null;
@@ -8324,6 +8711,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lostForwardStage = 0;
     lostForwardEnteredAt = 0;
     lastMicroRelockAt = 0;
+    resetAmbiguityHoldState();
     clearMicroRelockPreference();
     resetLookahead('sync-index');
     if (pendingRaf) {
