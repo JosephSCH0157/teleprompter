@@ -5176,11 +5176,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         forceReason === 'lost-forward' &&
         line > lastLineIndex &&
         conf >= DEFAULT_LOST_FORWARD_MIN_SIM;
+      const permissiveForwardBypass =
+        forceReason === 'permissive-final-advance' &&
+        isPermissiveAsrMatcherEnabled() &&
+        line > lastLineIndex &&
+        conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+        isSessionAsrArmed() &&
+        isSessionLivePhase();
       const strongMatch =
         watchdogBypass ||
         progressiveFloorBypass ||
         cueBridgeBypass ||
         lostForwardBypass ||
+        permissiveForwardBypass ||
         (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
@@ -5256,6 +5264,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try {
           console.info(
             `ASR_LOST_FORWARD_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_LOST_FORWARD_MIN_SIM)}`,
+          );
+        } catch {}
+      }
+      if (permissiveForwardBypass && isDevMode()) {
+        try {
+          console.info(
+            `ASR_PERMISSIVE_FINAL_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)}`,
           );
         } catch {}
       }
@@ -8682,13 +8697,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       );
       return;
     }
-    const blockCueBridgeForHold = ambiguityHoldActive || preNudgeShortLineAmbiguous;
+    const blockCueBridgeForHold =
+      ambiguityHoldActive ||
+      (preNudgeShortLineAmbiguous && !permissiveMatcher);
     const finalMatchNudgeEligible =
       isFinal &&
       rawIdx === cursorLine &&
       conf >= effectiveThreshold &&
       cueBridgeNudgeEvidenceOk &&
       !blockCueBridgeForHold;
+    const permissiveFinalNudgeEligible =
+      permissiveMatcher &&
+      isFinal &&
+      rawIdx === cursorLine &&
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+      (
+        overlapTokensCurrent.length >= 2 ||
+        overlapRatioCurrent >= 0.2
+      );
     const strongFinalNudgeHoldBypass =
       preNudgeStrongFinalHoldBypass &&
       blockCueBridgeForHold;
@@ -8703,7 +8729,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS &&
       cueBridgeNudgeEvidenceOk &&
       !blockCueBridgeForHold;
-    if (finalMatchNudgeEligible || stableInterimNudgeEligible || strongFinalNudgeHoldBypass) {
+    if (
+      finalMatchNudgeEligible ||
+      stableInterimNudgeEligible ||
+      strongFinalNudgeHoldBypass ||
+      permissiveFinalNudgeEligible
+    ) {
       const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
       const cueBridge = findNextSpeakableWithinBridge(cursorLine, nudgeDeltaCap);
       const bridgeUsed = cueBridge.skippedReasons.length > 0;
@@ -8711,16 +8742,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         cueBridge.nextLine != null && cueBridge.nextLine > cursorLine
           ? Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine))
           : null;
-      const allowBridgeNudge = bridgeUsed && (finalMatchNudgeEligible || stableInterimNudgeEligible);
+      const allowBridgeNudge =
+        bridgeUsed &&
+        (finalMatchNudgeEligible || stableInterimNudgeEligible || permissiveFinalNudgeEligible);
       const plainStrongFinalNudge =
         !bridgeUsed &&
         nudgeTarget === cursorLine + 1 &&
-        conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM &&
-        (finalMatchNudgeEligible || strongFinalNudgeHoldBypass);
+        conf >= (
+          permissiveFinalNudgeEligible
+            ? DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM
+            : DEFAULT_STRONG_FORWARD_COMMIT_SIM
+        ) &&
+        (finalMatchNudgeEligible || strongFinalNudgeHoldBypass || permissiveFinalNudgeEligible);
       if (nudgeTarget != null && (allowBridgeNudge || plainStrongFinalNudge)) {
         const before = rawIdx;
         rawIdx = nudgeTarget;
         cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
+        if (permissiveFinalNudgeEligible && !forceReason) {
+          forceReason = 'permissive-final-advance';
+        }
         if (bridgeUsed) {
           logCueBridgeUse(
             cursorLine,
@@ -8745,6 +8785,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 ? `ASR_NUDGE final_match best=${before} cursor=${cursorLine} -> next=${rawIdx}`
                 : strongFinalNudgeHoldBypass
                 ? `ASR_NUDGE final_match_strong_hold_bypass best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} overlap=${overlapTokensCurrent.length}/${tokenCount} -> next=${rawIdx}`
+                : permissiveFinalNudgeEligible
+                ? `ASR_NUDGE permissive_final best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} overlap=${overlapTokensCurrent.length}/${tokenCount} -> next=${rawIdx}`
                 : `ASR_NUDGE final_match_strong best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`,
             );
           } catch {}
