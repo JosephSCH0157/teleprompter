@@ -37,6 +37,15 @@ interface AsrStallDetail {
   commitCount: number;
 }
 
+interface AsrHeartbeatDetail {
+  ts: number;
+  sinceOnResultMs: number | null;
+  sinceCommitMs: number | null;
+  speechRunningActual: boolean;
+  recognizerAttached: boolean;
+  commitCount: number;
+}
+
 export interface ScrollStripHudOptions {
   root: HTMLElement;
 }
@@ -77,6 +86,7 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   let offsetY = 0;
   let guardStallText = '';
   let lastStall: AsrStallDetail | null = null;
+  let lastHeartbeat: AsrHeartbeatDetail | null = null;
   let stallOkVisibleUntil = 0;
   let stallOkHideTimer: number | null = null;
   const STALL_OK_LINGER_MS = 1200;
@@ -287,7 +297,8 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
     return `${Math.max(0, Math.round(value))}ms`;
   }
 
-  function buildStallTitle(detail: AsrStallDetail | null): string {
+  function buildStallTitle(stallDetail: AsrStallDetail | null, heartbeatDetail: AsrHeartbeatDetail | null): string {
+    const detail = heartbeatDetail ?? stallDetail;
     if (!detail) return '';
     const commitCount = Number.isFinite(detail.commitCount) ? Math.max(0, Math.floor(detail.commitCount)) : 0;
     return [
@@ -324,7 +335,7 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
 
     if (stallEl) {
       stallEl.textContent = text;
-      stallEl.title = buildStallTitle(lastStall);
+      stallEl.title = buildStallTitle(lastStall, lastHeartbeat);
       stallEl.style.display = '';
     }
 
@@ -363,6 +374,17 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
       const stallClass = String((detail as any).stallClass || '').toLowerCase();
       if (stallClass !== 'speech_stall' && stallClass !== 'matcher_stall' && stallClass !== 'unknown') return null;
       return detail as AsrStallDetail;
+    } catch {
+      return null;
+    }
+  }
+
+  function readWindowHeartbeat(): AsrHeartbeatDetail | null {
+    try {
+      const detail = (window as any).__tpAsrHeartbeatLast;
+      if (!detail || typeof detail !== 'object') return null;
+      if (typeof (detail as any).ts !== 'number' || !Number.isFinite((detail as any).ts)) return null;
+      return detail as AsrHeartbeatDetail;
     } catch {
       return null;
     }
@@ -470,12 +492,8 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   }
 
   function handleAsrHeartbeat() {
-    const snapshot = readWindowStall();
-    if (!snapshot) return;
-    if (!lastStall || snapshot.ts !== lastStall.ts || snapshot.stallClass !== lastStall.stallClass) {
-      applyStall(snapshot);
-      return;
-    }
+    const snapshot = readWindowHeartbeat();
+    if (snapshot) lastHeartbeat = snapshot;
     renderStall();
   }
 
@@ -489,6 +507,11 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
 
   const initialStall = readWindowStall();
   if (initialStall) applyStall(initialStall);
+  const initialHeartbeat = readWindowHeartbeat();
+  if (initialHeartbeat) {
+    lastHeartbeat = initialHeartbeat;
+    renderStall();
+  }
 
   if (resyncBtn) {
     resyncBtn.addEventListener('click', () => triggerResync('hud'));
