@@ -1,7 +1,10 @@
-import { getSession, setSessionPhase } from '../state/session';
-import { completePrerollSession } from './preroll-session';
-import type { AppStore } from '../state/app-store';
-import { stopAsrRuntime } from '../speech/runtime-control';
+import {
+  clearSessionLearnedPatches,
+  getSessionLearnedPatches,
+} from '../asr/asr-threshold-store';
+import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
+import { bootTrace } from '../boot/boot-trace';
+import { shouldLogLevel, shouldLogTag } from '../env/dev-log';
 import {
   createAsrScrollDriver,
   type AsrScrollDriver,
@@ -10,19 +13,20 @@ import {
 import { getAsrBlockElements, getAsrBlockIndex } from '../scroll/asr-block-store';
 import {
   describeElement,
-  getRuntimeScroller,
-  getScrollerEl,
   getPrimaryScroller,
+  getRuntimeScroller,
   getScriptRoot,
+  getScrollerEl,
   isWindowScroller,
   resolveActiveScroller,
 } from '../scroll/scroller';
-import { bootTrace } from '../boot/boot-trace';
+import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
+import { normTokens } from '../speech/matcher';
+import { stopAsrRuntime } from '../speech/runtime-control';
+import type { AppStore } from '../state/app-store';
+import { getSession, setSessionPhase } from '../state/session';
+import type { SpeakerSlot } from '../types/speaker-profiles';
 import { maybePromptSaveSpeakerProfiles } from '../ui/save-speaker-profiles-prompt';
-import {
-  getSessionLearnedPatches,
-  clearSessionLearnedPatches,
-} from '../asr/asr-threshold-store';
 import {
   applyProfileToSlot,
   createProfile,
@@ -31,11 +35,7 @@ import {
   getSpeakerBindings,
   setProfileAsrTweaks,
 } from '../ui/speaker-profiles-store';
-import { DEFAULT_ASR_THRESHOLDS, clamp01 } from '../asr/asr-thresholds';
-import { normTokens } from '../speech/matcher';
-import type { SpeakerSlot } from '../types/speaker-profiles';
-import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
-import { shouldLogLevel, shouldLogTag } from '../env/dev-log';
+import { completePrerollSession } from './preroll-session';
 
 ensureSpeechGlobals();
 
