@@ -2253,6 +2253,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     bestSim: number,
     secondIdx: number | null,
     secondSim: number | null,
+    overlapCount?: number | null,
     anchorIdx?: number | null,
     anchorSim?: number | null,
   ) => {
@@ -2267,6 +2268,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ? Math.max(0, Math.floor(Number(secondIdx)))
       : null;
     const safeSecondSim = Number.isFinite(secondSim as number) ? Number(secondSim) : null;
+    const safeOverlapCount = Number.isFinite(overlapCount as number)
+      ? Math.max(0, Math.floor(Number(overlapCount)))
+      : null;
     const safeAnchorIdx = Number.isFinite(anchorIdx as number)
       ? Math.max(0, Math.floor(Number(anchorIdx)))
       : null;
@@ -2281,6 +2285,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       bestSim: Number(safeBestSim.toFixed(3)),
       secondIdx: safeSecondIdx,
       secondSim: safeSecondSim != null ? Number(safeSecondSim.toFixed(3)) : null,
+      overlapCount: safeOverlapCount,
       delta: safeBest - safeCursor,
       holdAgeMs,
       anchorIdx: safeAnchorIdx,
@@ -2292,6 +2297,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     if (!isDevMode()) return;
     try {
+      if (phase === 'enter') {
+        const gap = safeSecondSim != null
+          ? Number((safeBestSim - safeSecondSim).toFixed(3))
+          : null;
+        console.info('ASR_HOLD_ENTER', {
+          reason,
+          bestSim: Number(safeBestSim.toFixed(3)),
+          gap,
+          overlapCount: safeOverlapCount,
+          bestIdx: safeBest,
+          secondIdx: safeSecondIdx,
+        });
+      }
+      if (
+        phase === 'exit' &&
+        safeAnchorIdx != null &&
+        safeAnchorSim != null &&
+        /anchor/i.test(String(reason || ''))
+      ) {
+        console.info('ASR_HOLD_EXIT', {
+          reason: 'anchor',
+          anchorIdx: safeAnchorIdx,
+          anchorSim: Number(safeAnchorSim.toFixed(3)),
+        });
+      }
       const tag = phase === 'enter' ? 'ASR_HOLD_ENTER' : phase === 'exit' ? 'ASR_HOLD_EXIT' : 'ASR_HOLD_TICK';
       const secondPart = safeSecondIdx != null
         ? `${safeSecondIdx}:${formatLogScore(safeSecondSim ?? Number.NaN)}`
@@ -2312,6 +2342,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     bestSim: number,
     secondIdx: number | null,
     secondSim: number | null,
+    overlapCount?: number | null,
   ) => {
     const safeReason = String(reason || '').trim() || 'await_anchor';
     ambiguityHoldReason = safeReason;
@@ -2349,6 +2380,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         ambiguityHoldBestSim,
         ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondIdx : null,
         ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondSim : null,
+        overlapCount,
       );
       return;
     }
@@ -2367,6 +2399,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ambiguityHoldBestSim,
       ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondIdx : null,
       ambiguityHoldSecondIdx >= 0 ? ambiguityHoldSecondSim : null,
+      overlapCount,
     );
   };
   const closeAmbiguityHold = (
@@ -2405,6 +2438,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       safeBestSim,
       safeSecondIdx,
       safeSecondSim,
+      null,
       anchorIdx,
       anchorSim,
     );
@@ -8006,6 +8040,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         preNudgeBest ? preNudgeBest.score : conf,
         preNudgeSecond ? preNudgeSecond.idx : null,
         preNudgeSecond ? preNudgeSecond.score : null,
+        preNudgeBestOverlapHits,
       );
       return;
     }
@@ -8393,6 +8428,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           holdBestSim,
           holdSecondIdx,
           holdSecondSim,
+          holdBestOverlapHits,
         );
         return;
       } else {
@@ -8433,6 +8469,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           holdBestSim,
           holdSecondIdx,
           holdSecondSim,
+          holdBestOverlapHits,
         );
         return;
       }
