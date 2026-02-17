@@ -1000,11 +1000,18 @@ function startSpeechWatchdog(): void {
   stopSpeechWatchdog();
   speechWatchdogTimer = window.setInterval(() => {
     if (!shouldAutoRestartSpeech()) return;
+    const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase();
+    const session = getSession();
+    const phase = String(session.phase || '').toLowerCase();
+    const asrArmed = !!session.asrArmed;
+    // In live ASR, stall classifier + one-shot autorestart is the single recovery lane.
+    // Keeping watchdog active here causes repeated 5s restarts that mask stall diagnosis.
+    if (isLiveArmedAsr(mode, phase, asrArmed)) return;
     if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return;
-    const idleFor = Date.now() - (lastResultTs || 0);
-    const mode = lastScrollMode || getScrollMode();
-    const thresholdMs = (mode === 'asr' || mode === 'hybrid') ? ASR_WATCHDOG_THRESHOLD_MS : WATCHDOG_THRESHOLD_MS;
-    if (lastResultTs && idleFor > thresholdMs) {
+    const lastResultAt = Math.max(lastRecognizerOnResultTs, lastResultTs);
+    const idleFor = Date.now() - (lastResultAt || 0);
+    const thresholdMs = mode === 'hybrid' ? ASR_WATCHDOG_THRESHOLD_MS : WATCHDOG_THRESHOLD_MS;
+    if (lastResultAt > 0 && idleFor > thresholdMs) {
       try { console.warn('[speech] watchdog: no results for', idleFor, 'ms; restarting recognition'); } catch {}
       const restarted = requestRecognizerRestart('idle-watchdog');
       if (!restarted) {
@@ -1156,7 +1163,6 @@ function requestRecognizerRestart(
   if (abortFirst) {
     pendingManualRestartCount += 1;
   }
-  markResultTimestamp();
   if (abortFirst) {
     try { activeRecognizer.abort?.(); } catch {}
   }
