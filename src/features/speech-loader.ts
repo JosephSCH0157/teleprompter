@@ -266,6 +266,8 @@ let asrStallAttemptCountThisEpisode = 0;
 let lastAsrStallEpisodeClass: AsrStallClass = 'unknown';
 let lastAsrStallAutoRestartAt = 0;
 let suppressAsrStallAutoRestartUntil = 0;
+let lastMatcherStallCommitCount = -1;
+let lastMatcherStallCommitStableSince = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
@@ -273,6 +275,7 @@ const ASR_WATCHDOG_THRESHOLD_MS = 4000;
 const ASR_HEARTBEAT_INTERVAL_MS = 1000;
 const ASR_STALL_SPEECH_THRESHOLD_MS = 2500;
 const ASR_STALL_MATCHER_THRESHOLD_MS = 4500;
+const ASR_STALL_MATCHER_STABLE_COMMIT_MS = 1500;
 const ASR_STALL_AUTORESTART_COOLDOWN_MS = 15000;
 const ASR_STALL_AUTORESTART_SUPPRESS_MS = 30000;
 const LIFECYCLE_RESTART_DELAY_MS = 120;
@@ -532,18 +535,31 @@ function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
 }
 
 function classifyAsrStall(payload: AsrHeartbeatPayload): AsrStallClass {
+  const now = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
+  const commitCount = Math.max(0, Math.floor(Number(payload.commitCount) || 0));
+  if (commitCount !== lastMatcherStallCommitCount) {
+    lastMatcherStallCommitCount = commitCount;
+    lastMatcherStallCommitStableSince = now;
+  } else if (lastMatcherStallCommitStableSince <= 0) {
+    lastMatcherStallCommitStableSince = now;
+  }
+  const commitStagnantMs = Math.max(0, now - lastMatcherStallCommitStableSince);
   const sinceOnResultMs = payload.sinceOnResultMs;
+  const sinceIngestMs = payload.sinceIngestMs;
   const sinceCommitMs = payload.sinceCommitMs;
   const speechLaneStalled =
     sinceOnResultMs != null &&
     sinceOnResultMs > ASR_STALL_SPEECH_THRESHOLD_MS &&
     (!payload.speechRunningActual || !payload.recognizerAttached);
   if (speechLaneStalled) return 'speech_stall';
+  const resultFlowing =
+    (sinceOnResultMs != null && sinceOnResultMs <= ASR_STALL_SPEECH_THRESHOLD_MS) ||
+    (sinceIngestMs != null && sinceIngestMs <= ASR_STALL_SPEECH_THRESHOLD_MS);
   const matcherLaneStalled =
-    sinceOnResultMs != null &&
-    sinceOnResultMs <= ASR_STALL_SPEECH_THRESHOLD_MS &&
+    resultFlowing &&
     sinceCommitMs != null &&
     sinceCommitMs > ASR_STALL_MATCHER_THRESHOLD_MS &&
+    commitStagnantMs >= ASR_STALL_MATCHER_STABLE_COMMIT_MS &&
     payload.speechRunningActual &&
     payload.recognizerAttached;
   if (matcherLaneStalled) return 'matcher_stall';
@@ -554,6 +570,8 @@ function resetAsrStallAutoRestartEpisode(reason?: string): void {
   asrStallEpisodeRestarted = false;
   asrStallAttemptCountThisEpisode = 0;
   lastAsrStallEpisodeClass = 'unknown';
+  lastMatcherStallCommitCount = -1;
+  lastMatcherStallCommitStableSince = 0;
   if (isDevMode() && shouldLogTag('ASR_STALL_AUTORESTART_RESET', 2, 1000)) {
     try { console.info('[ASR_STALL_AUTORESTART_RESET]', { reason: reason || 'reset' }); } catch {}
   }

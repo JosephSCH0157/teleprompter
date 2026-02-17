@@ -410,16 +410,22 @@ const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
 const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 1;
 const DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES = 3;
 const DEFAULT_CUE_BRIDGE_BYPASS_MAX_SKIPPED_LINES = 2;
+const DEFAULT_CUE_BRIDGE_STRONG_SIM = 0.6;
+const DEFAULT_CUE_BRIDGE_LARGE_GAP = 0.12;
+const DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS = 2;
 const DEFAULT_MULTI_JUMP_MIN_SIM = 0.45;
 const DEFAULT_MULTI_JUMP_HARD_DENY_SIM = 0.3;
 const DEFAULT_AMBIGUITY_HOLD_MIN_SIM = 0.35;
-const DEFAULT_AMBIGUITY_HOLD_MARGIN = 0.04;
 const DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES = 2;
-const DEFAULT_AMBIGUITY_HOLD_LOW_INFO_CONTENT_TOKENS = 3;
-const DEFAULT_AMBIGUITY_HOLD_LOW_INFO_STRONG_SIM = 0.5;
-const DEFAULT_HOLD_ANCHOR_LOOKAHEAD_LINES = 25;
+const DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS = 5;
+const DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS = 2;
+const DEFAULT_AMBIG_SHORT_LINE_MAX_SIM = 0.62;
+const DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN = 0.08;
+const DEFAULT_HOLD_ANCHOR_LOOKAHEAD_LINES = 8;
 const DEFAULT_HOLD_ANCHOR_MIN_SIM = 0.55;
 const DEFAULT_HOLD_ANCHOR_MARGIN = 0.05;
+const DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS = 5;
+const DEFAULT_HOLD_ANCHOR_MIN_SHARED_CONTENT_HITS = 2;
 const DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES = 6;
 const HOLD_TICK_LOG_THROTTLE_MS = 500;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
@@ -4741,9 +4747,28 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         cueBridgeSkippedCount <= DEFAULT_CUE_BRIDGE_BYPASS_MAX_SKIPPED_LINES;
       const cueBridgeFloor =
         cueBridgeDelta >= 2 ? DEFAULT_MULTI_JUMP_MIN_SIM : DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+      const cueBridgeStrongSim =
+        conf >= Math.max(DEFAULT_CUE_BRIDGE_STRONG_SIM, cueBridgeFloor);
+      const cueBridgeLargeSimGap =
+        typeof tieMargin === 'number' &&
+        Number.isFinite(tieMargin) &&
+        tieMargin >= Math.max(thresholds.tieDelta, DEFAULT_CUE_BRIDGE_LARGE_GAP);
+      const cueBridgeStableEvidenceCount = Number(consistency?.count);
+      const cueBridgeStableEvidenceNeed = Number(consistency?.needed);
+      const cueBridgeStableEvidence =
+        Number.isFinite(cueBridgeStableEvidenceCount) &&
+        Number.isFinite(cueBridgeStableEvidenceNeed) &&
+        cueBridgeStableEvidenceNeed > 0 &&
+        cueBridgeStableEvidenceCount >= Math.max(
+          Math.min(cueBridgeStableEvidenceNeed, DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS),
+          1,
+        );
+      const cueBridgeEvidenceOk =
+        cueBridgeStrongSim || cueBridgeLargeSimGap || cueBridgeStableEvidence;
       const cueBridgeBypass =
         cueBridgePathValid &&
         cueBridgeSkipCountOk &&
+        cueBridgeEvidenceOk &&
         conf >= cueBridgeFloor &&
         isSessionAsrArmed() &&
         isSessionLivePhase();
@@ -7933,10 +7958,64 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
       }
     }
+    const preNudgeCandidates = topScoresSpeakable
+      .map((entry) => ({ idx: Number(entry.idx), score: Number(entry.score) }))
+      .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+      .map((entry) => ({ idx: Math.max(0, Math.floor(entry.idx)), score: entry.score }))
+      .sort((a, b) => b.score - a.score || Math.abs(a.idx - cursorLine) - Math.abs(b.idx - cursorLine) || a.idx - b.idx);
+    const preNudgeBest = preNudgeCandidates[0] || null;
+    const preNudgeSecond = preNudgeCandidates[1] || null;
+    const preNudgeTranscript = transcriptComparable || bufferedText || compacted || text;
+    const preNudgeTranscriptContent = getContentTokenSet(normTokens(preNudgeTranscript));
+    const preNudgeBestLine = preNudgeBest ? preNudgeBest.idx : Math.max(0, Math.floor(rawIdx));
+    const preNudgeBestTokens = normTokens(normalizeComparableText(getLineTextAt(preNudgeBestLine)));
+    const preNudgeBestContentCount = getContentTokenSet(preNudgeBestTokens).size;
+    const preNudgeBestOverlapHits = countSharedContentTokenHits(preNudgeTranscriptContent, preNudgeBestTokens);
+    const preNudgeRunnerUpNearby =
+      !!preNudgeBest &&
+      !!preNudgeSecond &&
+      Math.abs(preNudgeSecond.idx - preNudgeBest.idx) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES &&
+      preNudgeSecond.score >= preNudgeBest.score - DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN;
+    const preNudgeSimGap =
+      preNudgeBest && preNudgeSecond
+        ? preNudgeBest.score - preNudgeSecond.score
+        : Number.NaN;
+    const preNudgeStrongSim = conf >= DEFAULT_CUE_BRIDGE_STRONG_SIM;
+    const preNudgeLargeGap =
+      Number.isFinite(preNudgeSimGap) &&
+      preNudgeSimGap >= DEFAULT_CUE_BRIDGE_LARGE_GAP;
+    const preNudgeStableEvidence =
+      !isFinal &&
+      interimRepeatCount >= DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS;
+    const cueBridgeNudgeEvidenceOk =
+      preNudgeStrongSim || preNudgeLargeGap || preNudgeStableEvidence;
+    const preNudgeShortLineAmbiguous =
+      rawIdx >= cursorLine &&
+      preNudgeBestContentCount > 0 &&
+      preNudgeBestContentCount <= DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS &&
+      preNudgeBestOverlapHits <= DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS &&
+      conf >= DEFAULT_AMBIGUITY_HOLD_MIN_SIM &&
+      conf <= DEFAULT_AMBIG_SHORT_LINE_MAX_SIM &&
+      preNudgeRunnerUpNearby;
+    if (preNudgeShortLineAmbiguous && !ambiguityHoldActive) {
+      beginOrRefreshAmbiguityHold(
+        now,
+        'short_line_ambiguous',
+        cursorLine,
+        preNudgeBestLine,
+        preNudgeBest ? preNudgeBest.score : conf,
+        preNudgeSecond ? preNudgeSecond.idx : null,
+        preNudgeSecond ? preNudgeSecond.score : null,
+      );
+      return;
+    }
+    const blockCueBridgeForHold = ambiguityHoldActive || preNudgeShortLineAmbiguous;
     const finalMatchNudgeEligible =
       isFinal &&
       rawIdx === cursorLine &&
-      conf >= effectiveThreshold;
+      conf >= effectiveThreshold &&
+      cueBridgeNudgeEvidenceOk &&
+      !blockCueBridgeForHold;
     const stableInterimNudgeEligible =
       !isFinal &&
       isSessionAsrArmed() &&
@@ -7945,7 +8024,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx === cursorLine &&
       conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
       stableInterimMs >= DEFAULT_STABLE_INTERIM_NUDGE_MS &&
-      now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS;
+      now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS &&
+      cueBridgeNudgeEvidenceOk &&
+      !blockCueBridgeForHold;
     if (finalMatchNudgeEligible || stableInterimNudgeEligible) {
       const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
       const cueBridge = findNextSpeakableWithinBridge(cursorLine, nudgeDeltaCap);
@@ -8203,40 +8284,67 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       .sort((a, b) => b.score - a.score || Math.abs(a.idx - cursorLine) - Math.abs(b.idx - cursorLine) || a.idx - b.idx);
     const holdBestCandidate = holdCandidates[0] || null;
     const holdSecondCandidate = holdCandidates[1] || null;
-    const holdTieNearby =
+    const holdTranscript = transcriptComparable || bufferedText || compacted || text;
+    const holdTranscriptContentSet = getContentTokenSet(normTokens(holdTranscript));
+    const holdBestIdx = holdBestCandidate ? holdBestCandidate.idx : Math.max(0, Math.floor(rawIdx));
+    const holdBestLineTokens = normTokens(normalizeComparableText(getLineTextAt(holdBestIdx)));
+    const holdBestLineContentCount = getContentTokenSet(holdBestLineTokens).size;
+    const holdBestOverlapHits = countSharedContentTokenHits(holdTranscriptContentSet, holdBestLineTokens);
+    const holdRunnerUpNearby =
       !!holdBestCandidate &&
       !!holdSecondCandidate &&
-      Math.abs(holdBestCandidate.idx - holdSecondCandidate.idx) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES &&
-      Math.abs(holdBestCandidate.score - holdSecondCandidate.score) < DEFAULT_AMBIGUITY_HOLD_MARGIN;
-    const holdTranscript = transcriptComparable || bufferedText || compacted || text;
-    const holdContentTokenCount = getContentTokenSet(normTokens(holdTranscript)).size;
-    const holdLowInfoWeak =
-      holdContentTokenCount > 0 &&
-      holdContentTokenCount <= DEFAULT_AMBIGUITY_HOLD_LOW_INFO_CONTENT_TOKENS &&
-      conf < DEFAULT_AMBIGUITY_HOLD_LOW_INFO_STRONG_SIM;
+      Math.abs(holdSecondCandidate.idx - holdBestCandidate.idx) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES &&
+      holdSecondCandidate.score >= holdBestCandidate.score - DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN;
+    const holdShortLineAmbiguous =
+      rawIdx >= cursorLine &&
+      holdBestLineContentCount > 0 &&
+      holdBestLineContentCount <= DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS &&
+      holdBestOverlapHits <= DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS &&
+      conf >= DEFAULT_AMBIGUITY_HOLD_MIN_SIM &&
+      conf <= DEFAULT_AMBIG_SHORT_LINE_MAX_SIM &&
+      holdRunnerUpNearby;
     const holdReasonCode =
-      conf < DEFAULT_AMBIGUITY_HOLD_MIN_SIM
-        ? 'low_best_sim'
-        : holdTieNearby
-          ? 'near_tie'
-          : (holdLowInfoWeak ? 'low_info_weak' : '');
-    const shouldHoldCandidate = rawIdx >= cursorLine && holdReasonCode.length > 0;
+      holdShortLineAmbiguous
+        ? 'short_line_ambiguous'
+        : '';
+    const shouldHoldCandidate = rawIdx >= cursorLine && holdShortLineAmbiguous;
     const holdAnchorCandidates = forwardBandScores
       .filter((entry) =>
         entry.idx > cursorLine &&
         entry.idx <= cursorLine + DEFAULT_HOLD_ANCHOR_LOOKAHEAD_LINES)
+      .map((entry) => {
+        const lineTokens = normTokens(normalizeComparableText(getLineTextAt(entry.idx)));
+        const contentTokenCount = getContentTokenSet(lineTokens).size;
+        const sharedContentHits = countSharedContentTokenHits(holdTranscriptContentSet, lineTokens);
+        const longAnchor = contentTokenCount >= DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS || entry.span >= 2;
+        const boostedScore = entry.score + (longAnchor ? 0.03 : 0);
+        return {
+          ...entry,
+          contentTokenCount,
+          sharedContentHits,
+          longAnchor,
+          boostedScore,
+        };
+      })
       .slice()
-      .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span);
+      .sort((a, b) =>
+        b.boostedScore - a.boostedScore ||
+        b.sharedContentHits - a.sharedContentHits ||
+        b.contentTokenCount - a.contentTokenCount ||
+        b.span - a.span ||
+        a.idx - b.idx,
+      );
     const holdAnchorBest = holdAnchorCandidates[0] || null;
     const holdAnchorSecond = holdAnchorCandidates[1] || null;
     const holdAnchorMargin = holdAnchorBest && holdAnchorSecond
-      ? holdAnchorBest.score - holdAnchorSecond.score
+      ? holdAnchorBest.boostedScore - holdAnchorSecond.boostedScore
       : Number.POSITIVE_INFINITY;
     const holdAnchorReady =
       !!holdAnchorBest &&
       holdAnchorBest.score >= DEFAULT_HOLD_ANCHOR_MIN_SIM &&
+      holdAnchorBest.longAnchor &&
+      holdAnchorBest.sharedContentHits >= DEFAULT_HOLD_ANCHOR_MIN_SHARED_CONTENT_HITS &&
       holdAnchorMargin >= DEFAULT_HOLD_ANCHOR_MARGIN;
-    const holdBestIdx = holdBestCandidate ? holdBestCandidate.idx : Math.max(0, Math.floor(rawIdx));
     const holdBestSim = holdBestCandidate ? holdBestCandidate.score : conf;
     const holdSecondIdx = holdSecondCandidate ? holdSecondCandidate.idx : null;
     const holdSecondSim = holdSecondCandidate ? holdSecondCandidate.score : null;
@@ -8275,7 +8383,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       } else if (
         shouldHoldCandidate ||
-        conf < Math.max(requiredThreshold, DEFAULT_AMBIGUITY_HOLD_LOW_INFO_STRONG_SIM)
+        conf < Math.max(requiredThreshold, DEFAULT_HOLD_ANCHOR_MIN_SIM)
       ) {
         beginOrRefreshAmbiguityHold(
           now,
