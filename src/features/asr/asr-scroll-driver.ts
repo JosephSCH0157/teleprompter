@@ -417,15 +417,17 @@ const DEFAULT_MULTI_JUMP_MIN_SIM = 0.45;
 const DEFAULT_MULTI_JUMP_HARD_DENY_SIM = 0.3;
 const DEFAULT_AMBIGUITY_HOLD_MIN_SIM = 0.35;
 const DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES = 2;
-const DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS = 5;
+const DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS = 7;
 const DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS = 2;
-const DEFAULT_AMBIG_SHORT_LINE_MAX_SIM = 0.62;
+const DEFAULT_AMBIG_SHORT_LINE_MAX_SIM = 0.72;
 const DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN = 0.08;
+const DEFAULT_AMBIG_SHORT_LINE_SHAPE_PREFIX_RATIO = 0.6;
+const DEFAULT_AMBIG_SHORT_LINE_SHAPE_PREFIX_TOKENS = 2;
 const DEFAULT_HOLD_ANCHOR_LOOKAHEAD_LINES = 8;
-const DEFAULT_HOLD_ANCHOR_MIN_SIM = 0.55;
+const DEFAULT_HOLD_ANCHOR_MIN_SIM = 0.62;
 const DEFAULT_HOLD_ANCHOR_MARGIN = 0.05;
-const DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS = 5;
-const DEFAULT_HOLD_ANCHOR_MIN_SHARED_CONTENT_HITS = 2;
+const DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS = 12;
+const DEFAULT_HOLD_ANCHOR_MIN_SHARED_CONTENT_HITS = 3;
 const DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES = 6;
 const HOLD_TICK_LOG_THROTTLE_MS = 500;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
@@ -448,6 +450,11 @@ const ANCHOR_RARE_TOKEN_MIN_LEN = 7;
 const DEFAULT_MICRO_RELOCK_MARGIN = 0.12;
 const DEFAULT_MICRO_RELOCK_COOLDOWN_MS = 3000;
 const DEFAULT_MICRO_RELOCK_PREFERRED_TTL_MS = 1500;
+const DEFAULT_GRACE_ROLLBACK_WINDOW_MS = 2000;
+const DEFAULT_GRACE_ROLLBACK_MIN_PREV_SIM = 0.7;
+const DEFAULT_GRACE_ROLLBACK_MAX_CURRENT_SIM = 0.25;
+const DEFAULT_GRACE_ROLLBACK_MIN_MARGIN = 0.35;
+const DEFAULT_GRACE_ROLLBACK_COOLDOWN_MS = 5000;
 const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
@@ -628,6 +635,75 @@ function countSharedContentTokenHits(contentSet: Set<string>, candidateTokens: s
     hits += 1;
   }
   return hits;
+}
+
+function countSharedPrefixTokens(leftTokens: string[], rightTokens: string[]): number {
+  if (!leftTokens.length || !rightTokens.length) return 0;
+  const limit = Math.min(leftTokens.length, rightTokens.length);
+  let count = 0;
+  while (count < limit && leftTokens[count] === rightTokens[count]) {
+    count += 1;
+  }
+  return count;
+}
+
+function isNearDuplicateShortLineStructure(bestTokens: string[], secondTokens: string[]): boolean {
+  if (!bestTokens.length || !secondTokens.length) return false;
+  const firstTokenShared = bestTokens[0] === secondTokens[0];
+  const prefixShared = countSharedPrefixTokens(bestTokens, secondTokens);
+  const firstTwoShared =
+    bestTokens.length >= 2 &&
+    secondTokens.length >= 2 &&
+    prefixShared >= 2;
+  const lastTokenShared =
+    bestTokens[bestTokens.length - 1] === secondTokens[secondTokens.length - 1];
+  const minLen = Math.min(bestTokens.length, secondTokens.length);
+  const sameTokenCount = bestTokens.length === secondTokens.length;
+  const prefixRatio = minLen > 0 ? prefixShared / minLen : 0;
+  const sameShape =
+    sameTokenCount &&
+    prefixShared >= Math.min(DEFAULT_AMBIG_SHORT_LINE_SHAPE_PREFIX_TOKENS, minLen) &&
+    prefixRatio >= DEFAULT_AMBIG_SHORT_LINE_SHAPE_PREFIX_RATIO;
+  return firstTokenShared || firstTwoShared || lastTokenShared || sameShape;
+}
+
+function evaluateShortLineAmbiguityHold(
+  cursorLine: number,
+  bestIdx: number,
+  bestSim: number,
+  bestContentCount: number,
+  bestOverlapHits: number,
+  bestTokens: string[],
+  secondCandidate: { idx: number; score: number } | null,
+  secondTokens: string[],
+): { hold: boolean; reason: string } {
+  if (!secondCandidate) return { hold: false, reason: '' };
+  if (bestIdx < cursorLine) return { hold: false, reason: '' };
+  if (!Number.isFinite(bestSim) || !Number.isFinite(secondCandidate.score)) {
+    return { hold: false, reason: '' };
+  }
+  if (
+    Math.abs(secondCandidate.idx - bestIdx) > DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES
+  ) {
+    return { hold: false, reason: '' };
+  }
+  const simGap = bestSim - secondCandidate.score;
+  if (!Number.isFinite(simGap) || simGap > DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN) {
+    return { hold: false, reason: '' };
+  }
+  if (!(bestContentCount > 0 && bestContentCount <= DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS)) {
+    return { hold: false, reason: '' };
+  }
+  if (bestSim < DEFAULT_AMBIGUITY_HOLD_MIN_SIM || bestSim > DEFAULT_AMBIG_SHORT_LINE_MAX_SIM) {
+    return { hold: false, reason: '' };
+  }
+  const sparseOverlap = bestOverlapHits <= DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS;
+  const nearDuplicateShape = isNearDuplicateShortLineStructure(bestTokens, secondTokens);
+  if (!sparseOverlap && !nearDuplicateShape) return { hold: false, reason: '' };
+  return {
+    hold: true,
+    reason: nearDuplicateShape ? 'short_line_near_duplicate' : 'short_line_ambiguous',
+  };
 }
 
 function hasMeaningfulTranscriptChange(previousNormalized: string, nextNormalized: string): boolean {
@@ -2144,6 +2220,100 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     updateDebugState('behind-recovery');
     return true;
   };
+  const tryGraceRollback = (
+    cursorLine: number,
+    prevLine: number,
+    now: number,
+    prevSim: number,
+    currentSim: number,
+    needSim: number,
+    matchId?: string,
+    clue?: string,
+  ): boolean => {
+    if (!Number.isFinite(cursorLine) || !Number.isFinite(prevLine)) return false;
+    if (getScrollMode() !== 'asr') return false;
+    if (!isSessionLivePhase() || !isSessionAsrArmed()) return false;
+    const safeCursor = Math.max(0, Math.floor(cursorLine));
+    const safePrev = Math.max(0, Math.floor(prevLine));
+    if (safePrev !== safeCursor - 1) return false;
+    if (now - lastCommitAt > DEFAULT_GRACE_ROLLBACK_WINDOW_MS) return false;
+    if (now < graceRollbackCooldownUntil) return false;
+    if (!Number.isFinite(prevSim) || prevSim < DEFAULT_GRACE_ROLLBACK_MIN_PREV_SIM) return false;
+    if (!Number.isFinite(currentSim)) return false;
+    const currentSimLow =
+      currentSim <= needSim || currentSim <= DEFAULT_GRACE_ROLLBACK_MAX_CURRENT_SIM;
+    if (!currentSimLow) return false;
+    const margin = prevSim - currentSim;
+    if (!Number.isFinite(margin) || margin < DEFAULT_GRACE_ROLLBACK_MIN_MARGIN) return false;
+    const sinceCommitMs = Math.max(0, now - lastCommitAt);
+    const scroller = getScroller();
+    const targetTop = scroller ? resolveTargetTop(scroller, safePrev) : null;
+    if (scroller && targetTop != null) {
+      stopGlide('grace-rollback');
+      const applied = applyScrollWithHybridGuard(targetTop, {
+        scroller,
+        reason: 'asr-grace-rollback',
+      });
+      lastKnownScrollTop = applied;
+      lastMoveAt = Date.now();
+      markProgrammaticScroll();
+    }
+    lastLineIndex = safePrev;
+    matchAnchorIdx = lastLineIndex;
+    lastForwardCommitAt = now;
+    lastSeekTs = now;
+    lastEvidenceAt = now;
+    noteCommit(safeCursor, lastLineIndex, now);
+    closeAmbiguityHold(now, 'grace-rollback', safeCursor, lastLineIndex, prevSim);
+    resetLowSimStreak();
+    behindStrongCount = 0;
+    lastBehindStrongIdx = -1;
+    lastBehindStrongAt = 0;
+    behindStrongSince = 0;
+    lastCommitDeltaPx = 0;
+    microPursuitUntil = 0;
+    setCurrentIndex(lastLineIndex, 'grace-rollback');
+    resetLookahead('grace-rollback');
+    behindRecoveryHits.length = 0;
+    largeDeltaConfirm = null;
+    overshootRiskUntil = Math.max(overshootRiskUntil, now + OVERSHOOT_RISK_WINDOW_MS);
+    lastBehindRecoveryAt = now;
+    graceRollbackCooldownUntil = now + DEFAULT_GRACE_ROLLBACK_COOLDOWN_MS;
+    warnGuard('grace_rollback', [
+      matchId ? `matchId=${matchId}` : '',
+      `current=${safeCursor}`,
+      `rollback=${safePrev}`,
+      `simPrev=${formatLogScore(prevSim)}`,
+      `simCur=${formatLogScore(currentSim)}`,
+      `need=${formatLogScore(needSim)}`,
+      `margin=${formatLogScore(margin)}`,
+      `sinceCommitMs=${sinceCommitMs}`,
+      `cooldownMs=${DEFAULT_GRACE_ROLLBACK_COOLDOWN_MS}`,
+      clue ? `clue="${clue}"` : '',
+    ]);
+    emitHudStatus(
+      'grace_rollback',
+      `Rollback: corrected to line ${safePrev}`,
+    );
+    logThrottled('ASR_COMMIT', 'log', 'ASR_COMMIT', {
+      prevIndex: safeCursor,
+      nextIndex: lastLineIndex,
+      delta: lastLineIndex - safeCursor,
+      sim: Number.isFinite(prevSim) ? Number(prevSim.toFixed(3)) : prevSim,
+      forced: false,
+      mode: getScrollMode() || 'unknown',
+      reason: 'grace-rollback',
+    });
+    if (isDevMode()) {
+      try {
+        console.info(
+          `ASR_GRACE_ROLLBACK current=${safeCursor} rollback=${safePrev} simPrev=${formatLogScore(prevSim)} simCur=${formatLogScore(currentSim)} need=${formatLogScore(needSim)} margin=${formatLogScore(margin)}`,
+        );
+      } catch {}
+    }
+    updateDebugState('grace-rollback');
+    return true;
+  };
   let lastEvidenceAt = 0;
   let lastCommitDeltaPx = 0;
   let glideAnim: { cancel: () => void } | null = null;
@@ -2184,6 +2354,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastMicroRelockAt = 0;
   let microRelockPreferredCursor: number | null = null;
   let microRelockPreferredUntil = 0;
+  let graceRollbackCooldownUntil = 0;
   let lookaheadStepIndex = 0;
   let lastLookaheadBumpAt = 0;
   let behindHitCount = 0;
@@ -3054,9 +3225,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastEvidenceAt = now;
     lastForwardCommitAt = now;
     lastCommitAt = now;
+    lastCommitTime = now;
     lastSeekTs = now;
     lastMoveAt = now;
     lastIngestAt = now;
+    graceRollbackCooldownUntil = 0;
     resyncUntil = 0;
     resyncAnchorIdx = null;
     resyncReason = null;
@@ -3878,6 +4051,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lastCommitIndex = Math.max(0, Math.floor(nextIndex));
     }
     lastCommitAt = now;
+    lastCommitTime = now;
     const prev = Number.isFinite(prevIndex) ? Math.max(0, Math.floor(prevIndex)) : -1;
     const next = Number.isFinite(nextIndex) ? Math.max(0, Math.floor(nextIndex)) : -1;
     if (next > prev) {
@@ -4738,9 +4912,34 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (overshootActive) {
         effectiveMatchThreshold = Math.max(effectiveMatchThreshold, OVERSHOOT_RISK_MIN_SIM);
       }
-      const secondScore = topScores.length > 1 ? Number(topScores[1].score) : undefined;
-      const tieMargin = typeof secondScore === 'number' && Number.isFinite(secondScore)
-        ? conf - secondScore
+      const rankedTopScores = topScores
+        .map((entry) => ({
+          idx: Number((entry as any)?.idx),
+          score: Number((entry as any)?.score),
+        }))
+        .filter((entry) => Number.isFinite(entry.idx) && Number.isFinite(entry.score))
+        .map((entry) => ({
+          idx: Math.max(0, Math.floor(entry.idx)),
+          score: entry.score,
+        }))
+        .sort((a, b) =>
+          b.score - a.score ||
+          Math.abs(a.idx - commitCursorLine) - Math.abs(b.idx - commitCursorLine) ||
+          a.idx - b.idx,
+        );
+      const rankedPrimaryIdx = Math.max(0, Math.floor(line));
+      const secondCandidate =
+        rankedTopScores.find((entry) => entry.idx !== rankedPrimaryIdx) || null;
+      const secondIdx = secondCandidate ? secondCandidate.idx : null;
+      const secondSim = secondCandidate ? secondCandidate.score : undefined;
+      const simGap = typeof secondSim === 'number' && Number.isFinite(secondSim)
+        ? conf - secondSim
+        : undefined;
+      const secondTextForLogs = secondIdx != null
+        ? formatLogSnippet(getLineTextAt(secondIdx), 60)
+        : '';
+      const tieMargin = typeof secondSim === 'number' && Number.isFinite(secondSim)
+        ? conf - secondSim
         : typeof tieGap === 'number'
           ? tieGap
           : undefined;
@@ -5735,9 +5934,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const searchFromOut = debugSearchFrom ?? 'na';
         const searchToOut = debugSearchTo ?? 'na';
         const commitPathOut = writerAllowed ? 'writer' : 'pixel';
+        const secondIdxOut = secondIdx != null ? secondIdx : 'na';
+        const secondSimOut = typeof secondSim === 'number' && Number.isFinite(secondSim)
+          ? formatLogScore(secondSim)
+          : 'na';
+        const simGapOut = typeof simGap === 'number' && Number.isFinite(simGap)
+          ? formatLogScore(simGap)
+          : 'na';
         try {
           console.info(
-            `ASR_COMMIT_DEBUG cursorLine=${commitCursorLine} bestMatchLine=${Math.max(0, Math.floor(line))} searchWindow={from:${searchFromOut},to:${searchToOut}} lostMode=${debugLostMode ? 1 : 0} writerSeekLine=${writerSeekLineOut} commitPath=${commitPathOut}`,
+            `ASR_COMMIT_DEBUG cursorLine=${commitCursorLine} bestMatchLine=${Math.max(0, Math.floor(line))} secondIdx=${secondIdxOut} secondSim=${secondSimOut} simGap=${simGapOut} searchWindow={from:${searchFromOut},to:${searchToOut}} lostMode=${debugLostMode ? 1 : 0} writerSeekLine=${writerSeekLineOut} commitPath=${commitPathOut}${secondTextForLogs ? ` secondText="${secondTextForLogs}"` : ''}`,
           );
         } catch {
           // ignore
@@ -5771,6 +5977,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `scrollTop=${Math.round(logScroller?.scrollTop || 0)}`,
             `lineH=${lineHeight}`,
             matchId ? `matchId=${matchId}` : '',
+            secondIdx != null ? `secondIdx=${secondIdx}` : '',
+            typeof secondSim === 'number' && Number.isFinite(secondSim)
+              ? `secondSim=${formatLogScore(secondSim)}`
+              : '',
+            typeof simGap === 'number' && Number.isFinite(simGap)
+              ? `simGap=${formatLogScore(simGap)}`
+              : '',
             `forced=${forced ? 1 : 0}`,
             forced ? `forceReason=${forceReason || 1}` : '',
             relockOverride ? `relock=1` : '',
@@ -5784,6 +5997,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             forcedCooldown ? `cooldown=${forcedCooldown}` : 'cooldown=0',
             currentText ? `currentText="${currentText}"` : '',
             bestText ? `bestText="${bestText}"` : '',
+            secondTextForLogs ? `secondText="${secondTextForLogs}"` : '',
             markerText ? `markerText="${markerText}"` : '',
             snippet ? `clue="${snippet}"` : '',
           ].filter(Boolean).join(' ');
@@ -7897,7 +8111,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 : 0;
             const currentSim =
               Number.isFinite(arbitrationCurrentScore) ? arbitrationCurrentScore : conf;
+            if (tryGraceRollback(
+              cursorLine,
+              prevLine,
+              now,
+              prevSim,
+              currentSim,
+              effectiveThreshold,
+              matchId,
+              snippet,
+            )) {
+              return;
+            }
+            const graceRollbackCoolingDown = now < graceRollbackCooldownUntil;
             if (
+              !graceRollbackCoolingDown &&
               prevSim >= effectiveThreshold &&
               prevSim - currentSim >= DEFAULT_MICRO_RELOCK_MARGIN
             ) {
@@ -8003,13 +8231,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const preNudgeTranscriptContent = getContentTokenSet(normTokens(preNudgeTranscript));
     const preNudgeBestLine = preNudgeBest ? preNudgeBest.idx : Math.max(0, Math.floor(rawIdx));
     const preNudgeBestTokens = normTokens(normalizeComparableText(getLineTextAt(preNudgeBestLine)));
+    const preNudgeSecondTokens = preNudgeSecond
+      ? normTokens(normalizeComparableText(getLineTextAt(preNudgeSecond.idx)))
+      : [];
     const preNudgeBestContentCount = getContentTokenSet(preNudgeBestTokens).size;
     const preNudgeBestOverlapHits = countSharedContentTokenHits(preNudgeTranscriptContent, preNudgeBestTokens);
-    const preNudgeRunnerUpNearby =
-      !!preNudgeBest &&
-      !!preNudgeSecond &&
-      Math.abs(preNudgeSecond.idx - preNudgeBest.idx) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES &&
-      preNudgeSecond.score >= preNudgeBest.score - DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN;
     const preNudgeSimGap =
       preNudgeBest && preNudgeSecond
         ? preNudgeBest.score - preNudgeSecond.score
@@ -8023,18 +8249,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       interimRepeatCount >= DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS;
     const cueBridgeNudgeEvidenceOk =
       preNudgeStrongSim || preNudgeLargeGap || preNudgeStableEvidence;
+    const preNudgeAmbiguity = evaluateShortLineAmbiguityHold(
+      cursorLine,
+      preNudgeBestLine,
+      preNudgeBest ? preNudgeBest.score : conf,
+      preNudgeBestContentCount,
+      preNudgeBestOverlapHits,
+      preNudgeBestTokens,
+      preNudgeSecond,
+      preNudgeSecondTokens,
+    );
     const preNudgeShortLineAmbiguous =
       rawIdx >= cursorLine &&
-      preNudgeBestContentCount > 0 &&
-      preNudgeBestContentCount <= DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS &&
-      preNudgeBestOverlapHits <= DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS &&
-      conf >= DEFAULT_AMBIGUITY_HOLD_MIN_SIM &&
-      conf <= DEFAULT_AMBIG_SHORT_LINE_MAX_SIM &&
-      preNudgeRunnerUpNearby;
+      preNudgeAmbiguity.hold;
+    const preNudgeHoldReason = preNudgeAmbiguity.reason || 'short_line_ambiguous';
     if (preNudgeShortLineAmbiguous && !ambiguityHoldActive) {
       beginOrRefreshAmbiguityHold(
         now,
-        'short_line_ambiguous',
+        preNudgeHoldReason,
         cursorLine,
         preNudgeBestLine,
         preNudgeBest ? preNudgeBest.score : conf,
@@ -8323,24 +8555,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const holdTranscriptContentSet = getContentTokenSet(normTokens(holdTranscript));
     const holdBestIdx = holdBestCandidate ? holdBestCandidate.idx : Math.max(0, Math.floor(rawIdx));
     const holdBestLineTokens = normTokens(normalizeComparableText(getLineTextAt(holdBestIdx)));
+    const holdSecondLineTokens = holdSecondCandidate
+      ? normTokens(normalizeComparableText(getLineTextAt(holdSecondCandidate.idx)))
+      : [];
     const holdBestLineContentCount = getContentTokenSet(holdBestLineTokens).size;
     const holdBestOverlapHits = countSharedContentTokenHits(holdTranscriptContentSet, holdBestLineTokens);
-    const holdRunnerUpNearby =
-      !!holdBestCandidate &&
-      !!holdSecondCandidate &&
-      Math.abs(holdSecondCandidate.idx - holdBestCandidate.idx) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES &&
-      holdSecondCandidate.score >= holdBestCandidate.score - DEFAULT_AMBIG_SHORT_LINE_RUNNERUP_MARGIN;
+    const holdAmbiguity = evaluateShortLineAmbiguityHold(
+      cursorLine,
+      holdBestIdx,
+      holdBestCandidate ? holdBestCandidate.score : conf,
+      holdBestLineContentCount,
+      holdBestOverlapHits,
+      holdBestLineTokens,
+      holdSecondCandidate,
+      holdSecondLineTokens,
+    );
     const holdShortLineAmbiguous =
       rawIdx >= cursorLine &&
-      holdBestLineContentCount > 0 &&
-      holdBestLineContentCount <= DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS &&
-      holdBestOverlapHits <= DEFAULT_AMBIG_SHORT_LINE_MAX_OVERLAP_TOKENS &&
-      conf >= DEFAULT_AMBIGUITY_HOLD_MIN_SIM &&
-      conf <= DEFAULT_AMBIG_SHORT_LINE_MAX_SIM &&
-      holdRunnerUpNearby;
+      holdAmbiguity.hold;
     const holdReasonCode =
       holdShortLineAmbiguous
-        ? 'short_line_ambiguous'
+        ? (holdAmbiguity.reason || 'short_line_ambiguous')
         : '';
     const shouldHoldCandidate = rawIdx >= cursorLine && holdShortLineAmbiguous;
     const holdAnchorCandidates = forwardBandScores
@@ -8351,7 +8586,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const lineTokens = normTokens(normalizeComparableText(getLineTextAt(entry.idx)));
         const contentTokenCount = getContentTokenSet(lineTokens).size;
         const sharedContentHits = countSharedContentTokenHits(holdTranscriptContentSet, lineTokens);
-        const longAnchor = contentTokenCount >= DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS || entry.span >= 2;
+        const longAnchor = contentTokenCount >= DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS;
         const boostedScore = entry.score + (longAnchor ? 0.03 : 0);
         return {
           ...entry,
@@ -8856,6 +9091,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lostForwardStage = 0;
     lostForwardEnteredAt = 0;
     lastMicroRelockAt = 0;
+    graceRollbackCooldownUntil = 0;
     resetAmbiguityHoldState();
     clearMicroRelockPreference();
     resetLookahead('sync-index');
