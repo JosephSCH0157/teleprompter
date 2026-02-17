@@ -267,6 +267,7 @@ let asrStallAttemptCountThisEpisode = 0;
 let lastAsrStallEpisodeClass: AsrStallClass = 'unknown';
 let lastAsrStallAutoRestartAt = 0;
 let suppressAsrStallAutoRestartUntil = 0;
+let lastAsrStallRescueAt = 0;
 let lastMatcherStallCommitCount = -1;
 let lastMatcherStallCommitStableSince = 0;
 
@@ -280,6 +281,7 @@ const ASR_STALL_MATCHER_THRESHOLD_MS = 4500;
 const ASR_STALL_MATCHER_STABLE_COMMIT_MS = 1500;
 const ASR_STALL_AUTORESTART_COOLDOWN_MS = 15000;
 const ASR_STALL_AUTORESTART_SUPPRESS_MS = 30000;
+const ASR_STALL_RESCUE_COOLDOWN_MS = 2000;
 const LIFECYCLE_RESTART_DELAY_MS = 120;
 const LIFECYCLE_RESTART_COOLDOWN_MS = 350;
 const HUD_SNAPSHOT_THROTTLE_MS = 120;
@@ -624,6 +626,7 @@ function resetAsrStallAutoRestartEpisode(reason?: string): void {
   asrStallEpisodeRestarted = false;
   asrStallAttemptCountThisEpisode = 0;
   lastAsrStallEpisodeClass = 'unknown';
+  lastAsrStallRescueAt = 0;
   lastMatcherStallCommitCount = -1;
   lastMatcherStallCommitStableSince = 0;
   if (isDevMode() && shouldLogTag('ASR_STALL_AUTORESTART_RESET', 2, 1000)) {
@@ -654,6 +657,28 @@ function emitAsrStallAutoRestart(payload: AsrStallAutoRestartPayload): void {
   try { document.dispatchEvent(new CustomEvent('tp:asr:stall-autorestart', { detail: payload })); } catch {}
   if (isDevMode()) {
     try { console.warn('[ASR_STALL_AUTORESTART]', payload); } catch {}
+  }
+}
+
+function emitAsrStallRescue(reason: string, stall: AsrStallPayload): void {
+  if (typeof window === 'undefined') return;
+  const payload = {
+    reason: String(reason || 'stall:speech_stall'),
+    ts: Date.now(),
+    scrollMode: stall.scrollMode,
+    sessionPhase: stall.sessionPhase,
+    asrArmed: stall.asrArmed,
+    stallClass: stall.stallClass,
+    sinceOnResultMs: stall.sinceOnResultMs,
+    sinceCommitMs: stall.sinceCommitMs,
+    commitCount: stall.commitCount,
+  };
+  try { window.__tpBus?.emit?.('tp:asr:rescue', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: payload })); } catch {}
+  try { (window as any).__tpAsrRequestRescue?.(); } catch {}
+  if (isDevMode() && shouldLogTag('ASR_STALL_RESCUE', 2, 1000)) {
+    try { console.info('[ASR_STALL_RESCUE]', payload); } catch {}
   }
 }
 
@@ -690,6 +715,16 @@ function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
     !stallPayload.recognizerAttached ||
     !stallPayload.speechRunningActual ||
     deafRecognizerLane;
+  if (liveArmedAsr && recognizerLaneDied) {
+    const rescueCooldownRemainingMs = Math.max(
+      0,
+      ASR_STALL_RESCUE_COOLDOWN_MS - (now - lastAsrStallRescueAt),
+    );
+    if (rescueCooldownRemainingMs <= 0) {
+      lastAsrStallRescueAt = now;
+      emitAsrStallRescue('stall:speech_stall', stallPayload);
+    }
+  }
   if (!inAsrMode || !asrArmed) {
     asrStallEpisodeRestarted = false;
     asrStallAttemptCountThisEpisode = 0;

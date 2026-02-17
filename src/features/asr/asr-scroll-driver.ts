@@ -3650,8 +3650,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const resetHandler = () => {
     clearEvidenceBuffer('script-reset');
   };
-  const rescueHandler = () => {
+  const rescueHandler = (event?: Event) => {
     stallRescueRequested = true;
+    const source =
+      String((event as CustomEvent | undefined)?.detail?.reason || '').trim() ||
+      'signal';
+    try { maybeScheduleStallCueRescue(source); } catch {}
   };
 
   try { window.addEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
@@ -4204,6 +4208,59 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     });
     return true;
   };
+
+  function maybeScheduleStallCueRescue(reason: string): boolean {
+    if (disposed) return false;
+    if (getScrollMode() !== 'asr') return false;
+    if (!isSessionLivePhase() || !isSessionAsrArmed()) return false;
+    const cursorRaw = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
+    if (!Number.isFinite(cursorRaw) || cursorRaw < 0) return false;
+    const cursorLine = Math.max(0, Math.floor(cursorRaw));
+    const cueBridge = findNextSpeakableWithinBridge(
+      cursorLine,
+      DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+    );
+    const targetLine = cueBridge.nextLine;
+    if (targetLine == null || targetLine <= cursorLine) return false;
+    if (!cueBridge.skippedReasons.length) return false;
+    const deltaLines = targetLine - cursorLine;
+    if (deltaLines <= 0 || deltaLines > DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES) return false;
+    const targetText = getLineTextAt(targetLine);
+    if (!targetText || isIgnorableCueLineText(targetText)) return false;
+    const rescueSim = Math.max(DEFAULT_STRONG_FORWARD_COMMIT_SIM, DEFAULT_MULTI_JUMP_MIN_SIM);
+    const matchId = `stall-rescue-${Date.now().toString(36)}-${targetLine}`;
+    adoptPendingMatch({
+      line: targetLine,
+      conf: rescueSim,
+      isFinal: true,
+      hasEvidence: true,
+      snippet: formatLogSnippet(targetText, 80),
+      minThreshold: DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM,
+      forced: true,
+      forceReason: 'stall-rescue',
+      matchId,
+      requiredThreshold: DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM,
+      topScores: [{ idx: targetLine, score: rescueSim }],
+      cursorLine,
+      searchWindowFrom: cursorLine,
+      searchWindowTo: targetLine,
+      lostMode: false,
+      cueBridgeNudgeDelta: deltaLines,
+    });
+    logCueBridgeUse(cursorLine, targetLine, cueBridge.skippedReasons, 'stall-rescue');
+    warnGuard('cue_stall_rescue', [
+      `from=${cursorLine}`,
+      `to=${targetLine}`,
+      `delta=${deltaLines}`,
+      reason ? `reason=${reason}` : '',
+      `sim=${formatLogScore(rescueSim)}`,
+      `skipped=[${cueBridge.skippedReasons.join(',')}]`,
+      targetText ? `line="${formatLogSnippet(targetText, 56)}"` : '',
+    ]);
+    emitHudStatus('cue_rescue', `Rescue: cue bridge +${deltaLines}`);
+    schedulePending();
+    return true;
+  }
 
   const noteCommit = (prevIndex: number, nextIndex: number, now: number) => {
     commitCount += 1;
@@ -5187,6 +5244,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
         isSessionAsrArmed() &&
         isSessionLivePhase();
+      const stallRescueBypass =
+        forceReason === 'stall-rescue' &&
+        line > lastLineIndex &&
+        line - lastLineIndex <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
+        conf >= DEFAULT_MULTI_JUMP_MIN_SIM &&
+        isSessionAsrArmed() &&
+        isSessionLivePhase();
       const strongMatch =
         watchdogBypass ||
         progressiveFloorBypass ||
@@ -5194,6 +5258,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         lostForwardBypass ||
         permissiveForwardBypass ||
         finalForwardBypass ||
+        stallRescueBypass ||
         (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
@@ -5283,6 +5348,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try {
           console.info(
             `ASR_FINAL_FORWARD_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)} reason=${forceReason}`,
+          );
+        } catch {}
+      }
+      if (stallRescueBypass && isDevMode()) {
+        try {
+          console.info(
+            `ASR_STALL_RESCUE_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_MULTI_JUMP_MIN_SIM)}`,
           );
         } catch {}
       }
