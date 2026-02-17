@@ -461,8 +461,15 @@ const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
+const DEFAULT_WEAK_CURRENT_FORWARD_SPARSE_SLACK = 0.14;
+const DEFAULT_WEAK_CURRENT_FORWARD_CONF_CAP = 0.6;
+const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_RATIO = 0.25;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_DELTA = 2;
 const DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN = 2;
+const DEFAULT_WEAK_CURRENT_FORWARD_INTERIM_MIN_SIM = 0.58;
+const DEFAULT_WEAK_CURRENT_FORWARD_FINAL_MIN_SIM = 0.45;
+const DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_TOKENS = 4;
+const DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_RATIO = 0.55;
 const DEFAULT_FIRST_COMMIT_NEAR_START_MAX_DELTA = 1;
 const DEFAULT_WRITER_ADDRESSABLE_MIN_INDEXED_LINES = 8;
 const DEFAULT_WRITER_ADDRESSABLE_MIN_RATIO = 0.15;
@@ -7555,11 +7562,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     const overlapTokensCurrent = getOverlapTokens(currentLineComparable, transcriptComparable);
+    const overlapRatioCurrent = tokenCount > 0
+      ? overlapTokensCurrent.length / tokenCount
+      : 0;
     const weakCurrentAnchor =
       rawIdx === cursorLine &&
       tokenCount >= DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS &&
-      overlapTokensCurrent.length <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS;
-    if (weakCurrentAnchor && lostForwardActive) {
+      overlapTokensCurrent.length <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS &&
+      overlapRatioCurrent <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_RATIO;
+    const weakCurrentAdvanceEligible =
+      isFinal ||
+      conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM ||
+      (
+        bufferGrowing &&
+        transcriptLongerThanCurrent &&
+        stableInterimMs >= DEFAULT_STABLE_INTERIM_NUDGE_MS
+      );
+    if (weakCurrentAnchor && weakCurrentAdvanceEligible) {
       const weakForwardFloor = clamp(
         Math.max(thresholds.candidateMinSim, DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR),
         0,
@@ -7575,10 +7594,22 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           entry.idx - cursorLine <= weakForwardMaxDelta &&
           entry.span <= DEFAULT_WEAK_CURRENT_FORWARD_MAX_SPAN)
         .sort((a, b) => b.score - a.score || a.idx - b.idx || a.span - b.span)[0] || null;
+      const weakAnchorComparableSim = Math.min(conf, DEFAULT_WEAK_CURRENT_FORWARD_CONF_CAP);
+      const weakCurrentSlack = overlapRatioCurrent <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_RATIO
+        ? DEFAULT_WEAK_CURRENT_FORWARD_SPARSE_SLACK
+        : DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK;
+      const weakForwardNeed = Math.max(
+        weakForwardFloor,
+        weakAnchorComparableSim - weakCurrentSlack,
+      );
+      const weakForwardMinSim = isFinal
+        ? DEFAULT_WEAK_CURRENT_FORWARD_FINAL_MIN_SIM
+        : DEFAULT_WEAK_CURRENT_FORWARD_INTERIM_MIN_SIM;
       if (
         weakForwardCandidate &&
         weakForwardCandidate.score >= weakForwardFloor &&
-        weakForwardCandidate.score >= conf - DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK
+        weakForwardCandidate.score >= weakForwardMinSim &&
+        weakForwardCandidate.score >= weakForwardNeed
       ) {
         const before = rawIdx;
         rawIdx = weakForwardCandidate.idx;
@@ -7593,7 +7624,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `maxDelta=${weakForwardMaxDelta}`,
           `sim=${formatLogScore(conf)}`,
           `need=${formatLogScore(effectiveThreshold)}`,
+          `minSim=${formatLogScore(weakForwardMinSim)}`,
           `overlapTokens=${overlapTokensCurrent.length}`,
+          `overlapRatio=${formatLogScore(overlapRatioCurrent)}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
       }
@@ -8559,8 +8592,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx >= cursorLine &&
       preNudgeAmbiguity.hold &&
       !preNudgeAnchorOverride;
+    const preNudgeStrongFinalHoldBypass =
+      isFinal &&
+      rawIdx === cursorLine &&
+      conf >= Math.max(effectiveThreshold, DEFAULT_STRONG_FORWARD_COMMIT_SIM) &&
+      overlapTokensCurrent.length >= DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_TOKENS &&
+      overlapRatioCurrent >= DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_RATIO;
     const preNudgeHoldReason = preNudgeAmbiguity.reason || 'short_line_ambiguous';
-    if (preNudgeShortLineAmbiguous && !ambiguityHoldActive) {
+    if (preNudgeShortLineAmbiguous && !ambiguityHoldActive && !preNudgeStrongFinalHoldBypass) {
       beginOrRefreshAmbiguityHold(
         now,
         preNudgeHoldReason,
@@ -8580,6 +8619,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       conf >= effectiveThreshold &&
       cueBridgeNudgeEvidenceOk &&
       !blockCueBridgeForHold;
+    const strongFinalNudgeHoldBypass =
+      preNudgeStrongFinalHoldBypass &&
+      blockCueBridgeForHold;
     const stableInterimNudgeEligible =
       !isFinal &&
       isSessionAsrArmed() &&
@@ -8591,7 +8633,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       now - lastStableInterimNudgeAt >= DEFAULT_STABLE_INTERIM_NUDGE_COOLDOWN_MS &&
       cueBridgeNudgeEvidenceOk &&
       !blockCueBridgeForHold;
-    if (finalMatchNudgeEligible || stableInterimNudgeEligible) {
+    if (finalMatchNudgeEligible || stableInterimNudgeEligible || strongFinalNudgeHoldBypass) {
       const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
       const cueBridge = findNextSpeakableWithinBridge(cursorLine, nudgeDeltaCap);
       const bridgeUsed = cueBridge.skippedReasons.length > 0;
@@ -8599,12 +8641,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         cueBridge.nextLine != null && cueBridge.nextLine > cursorLine
           ? Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine))
           : null;
+      const allowBridgeNudge = bridgeUsed && (finalMatchNudgeEligible || stableInterimNudgeEligible);
       const plainStrongFinalNudge =
-        finalMatchNudgeEligible &&
         !bridgeUsed &&
         nudgeTarget === cursorLine + 1 &&
-        conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
-      if (nudgeTarget != null && (bridgeUsed || plainStrongFinalNudge)) {
+        conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM &&
+        (finalMatchNudgeEligible || strongFinalNudgeHoldBypass);
+      if (nudgeTarget != null && (allowBridgeNudge || plainStrongFinalNudge)) {
         const before = rawIdx;
         rawIdx = nudgeTarget;
         cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
@@ -8630,6 +8673,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             console.info(
               bridgeUsed
                 ? `ASR_NUDGE final_match best=${before} cursor=${cursorLine} -> next=${rawIdx}`
+                : strongFinalNudgeHoldBypass
+                ? `ASR_NUDGE final_match_strong_hold_bypass best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} overlap=${overlapTokensCurrent.length}/${tokenCount} -> next=${rawIdx}`
                 : `ASR_NUDGE final_match_strong best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`,
             );
           } catch {}

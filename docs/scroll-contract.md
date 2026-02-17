@@ -34,6 +34,7 @@ When `scrollMode='asr'`:
 - Arbitration must allow forward continuation when transcript length exceeds current-line length and a forward window (`span>=2`) meets floor and near-current score slack.
 - If current-line evidence is lexically weak (very low overlap tokens) and a forward candidate is near-score and above floor, prefer forward candidate instead of same-line recenter.
 - Weak-current forward rescue must be continuity-bounded (`delta<=2`, `span<=2`) so low-overlap anchors cannot leap multiple lines/paragraphs.
+- Weak-current forward rescue may run before LOST_FORWARD when same-line overlap is sparse and bounded forward evidence is competitive, but only with strong evidence (final/strong-score or stable-growing interim) and not because LOST_FORWARD is active by itself; keep near-start capped at `+1` and otherwise max `+2`.
 - If arbitration regresses behind the current cursor after a forward commit, continuation recovery must stay near-forward (`+1` preferred, max `+2`) and never long-jump.
 - First near-start commit is continuity-capped (`delta<=1`, non-forced) to prevent startup overshoot from buffered multi-line transcript chunks.
 - Match selection is band-preferred: pick best candidate from active band (+tiny backward tolerance) first, but permit forward-window continuation/fallback before hard reject.
@@ -48,6 +49,7 @@ When `scrollMode='asr'`:
 - Commit-time clamp: before ASR commit finalization (writer/pixel), cap forward delta for all commits to a small window (default `+1` line) unless confidence is strong (default `sim>=0.82`); emit `ASR_CLAMP` dev log when the clamp is applied.
 - Cue-bridge low-sim bypass must be bridge-only: intermediate skipped lines must be skippable cue/meta/blank lines, capped to a small bridge (`<=2` skipped lines), and target must be speakable.
 - Cue-bridge progression for multi-line advancement requires an actual bridge (`>=1` skipped skippable line). Same-line final confirmation may plain-advance only `+1` to the adjacent speakable line when confidence is strong (`sim>=0.82`); otherwise plain advancement without a bridge is disallowed.
+- Strong same-line final `+1` nudge may bypass short-line ambiguity HOLD only when lexical overlap with current line is high, with no bridge skip and adjacent speakable target only.
 - Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.
 - Cue-bridge nudge/confirm into content must require strong evidence (`strongSim`, or large sim-gap, or multi-event stability); low-sim nudges may not bridge into regular content lines.
 - Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.

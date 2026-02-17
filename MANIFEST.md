@@ -75,6 +75,7 @@ In `scrollMode='asr'`:
 - Score arbitration must bias forward continuation when transcript evidence is longer than the current line and a forward multi-line window (`span>=2`) scores at/near current-line score (within small slack) and above floor.
 - If current-line match has weak lexical overlap (token-poor anchor) while a forward candidate clears floor and near-score slack, prefer forward candidate over same-line recenter.
 - Weak-current forward rescue is bounded to near-forward continuity (`delta<=2`, `span<=2`) so token-poor anchors cannot trigger paragraph jumps.
+- Weak-current forward rescue may activate before LOST_FORWARD when same-line overlap is sparse (token-poor anchor) and bounded forward evidence is competitive, but only with strong evidence (final/strong-score or stable-growing interim) and never from LOST_FORWARD state alone; this must remain continuity-bounded (`+1` near start, max `+2` otherwise).
 - If match arbitration regresses behind the current line after a forward commit, continuation recovery must stay near-forward (`+1` preferred, max `+2`) and must not long-jump.
 - First near-start commit continuity is capped (`delta<=1`, non-forced) to avoid startup overshoot from buffered multi-line transcript bursts.
 - Match selection must be band-preferred: choose best candidate from the active band first (with at most a tiny backward tolerance), but allow forward-window continuation/fallback before hard rejecting.
@@ -91,6 +92,7 @@ In `scrollMode='asr'`:
 - Add a stable interim nudge bridge: in live armed ASR after first commit, if interim transcript shows meaningful prefix stability (stable leading phrase with append-only/minor tail edits) for ~0.4-0.5s while matching current line at/above progressive floor, trigger the same one-line nudge path used by final confirmations.
 - Same-line nudge/confirmation paths must apply a cue-boundary bridge: when immediate forward lines are skippable (`blank` or cue-only), allow advancing to the first speakable line within `+3` before declaring same-line/noop.
 - Cue-boundary bridge progression for multi-line advancement requires an actual bridge (`>=1` skipped skippable line). Same-line final confirmation may plain-advance only `+1` to the adjacent speakable line when confidence is strong (`sim>=0.82`); otherwise plain advancement without a bridge is disallowed.
+- Same-line strong-final plain `+1` nudge may bypass short-line ambiguity HOLD only when current-line lexical overlap is strong (high token hit count and ratio), with no bridge skip and adjacent speakable target only.
 - Cue-boundary bridge widening applies to same-line confirm/nudge flow only; full commit target resolution remains bounded by the normal commit clamp window.
 - When same-line cue bridge selects a forward target, pending commit must carry the same bounded bridge delta (`<=+3`) through clamp arbitration; it must not clamp back to `+1` and re-block on an intermediate cue-only line.
 - Pending commit cue-bridge bypass must be true bridge-only: intermediate skipped lines must all be cue/blank/note/speaker skippable, capped to a small span (`<=2` skipped lines), and target must be speakable.
