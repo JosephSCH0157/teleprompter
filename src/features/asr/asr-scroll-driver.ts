@@ -1178,6 +1178,43 @@ function isDevMode(): boolean {
   return false;
 }
 
+function isPermissiveAsrMatcherEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__tpAsrPermissiveMatcher === false || w.__tpAsrLooseMatcher === false) return false;
+    if (w.__tpAsrPermissiveMatcher === true || w.__tpAsrLooseMatcher === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    const mode = String(
+      params.get('asr_matcher') ||
+      params.get('asr_permissive') ||
+      params.get('asr_loose') ||
+      '',
+    ).toLowerCase();
+    if (
+      mode === '1' ||
+      mode === 'true' ||
+      mode === 'loose' ||
+      mode === 'permissive' ||
+      mode === 'aggressive'
+    ) {
+      return true;
+    }
+    if (mode === '0' || mode === 'false' || mode === 'strict') {
+      return false;
+    }
+    const ls = w.localStorage;
+    if (ls?.getItem('tp_asr_permissive_matcher') === '0') return false;
+    if (ls?.getItem('tp_asr_loose_matcher') === '0') return false;
+    if (ls?.getItem('tp_asr_permissive_matcher') === '1') return true;
+    if (ls?.getItem('tp_asr_loose_matcher') === '1') return true;
+  } catch {
+    // ignore
+  }
+  // Default permissive behavior in dev to prioritize progress during tuning.
+  return isDevMode();
+}
+
 function shouldForcePixelAsrCommitPath(): boolean {
   if (typeof window === 'undefined') return false;
   try {
@@ -6163,6 +6200,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!normalized) return;
     const compacted = normalized.replace(/\s+/g, ' ').trim();
     const now = Date.now();
+    const permissiveMatcher = isPermissiveAsrMatcherEnabled();
     const compactedComparable = normalizeComparableText(compacted);
     const compactedTokenCount = normTokens(compactedComparable).length;
     if (
@@ -7433,7 +7471,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `eps=${forwardTieEps}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
-        return;
+        if (!permissiveMatcher) return;
       }
       if (hasTie && !forwardPick && !forwardBiasEligible && !shortFinalRecent && !outrunEligible) {
         const guardReason = rawIdx <= cursorLine ? 'same_line_noop' : 'no_match_wait';
@@ -7449,7 +7487,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `eps=${forwardTieEps}`,
           snippet ? `clue="${snippet}"` : '',
         ]);
-        return;
+        if (!permissiveMatcher) return;
       }
       if (forwardPick && (forwardPick.idx !== rawIdx || forwardPick.score !== conf)) {
         const before = rawIdx;
@@ -7570,13 +7608,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       tokenCount >= DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS &&
       overlapTokensCurrent.length <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS &&
       overlapRatioCurrent <= DEFAULT_WEAK_CURRENT_OVERLAP_MAX_RATIO;
-    const weakCurrentAdvanceEligible =
-      isFinal ||
-      conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM ||
-      (
-        bufferGrowing &&
-        transcriptLongerThanCurrent &&
-        stableInterimMs >= DEFAULT_STABLE_INTERIM_NUDGE_MS
+    const weakCurrentAdvanceEligible = permissiveMatcher
+      ? (
+        isFinal ||
+        lostForwardActive ||
+        conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM ||
+        (bufferGrowing && transcriptLongerThanCurrent)
+      )
+      : (
+        isFinal ||
+        conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM ||
+        (
+          bufferGrowing &&
+          transcriptLongerThanCurrent &&
+          stableInterimMs >= DEFAULT_STABLE_INTERIM_NUDGE_MS
+        )
       );
     if (weakCurrentAnchor && weakCurrentAdvanceEligible) {
       const weakForwardFloor = clamp(
@@ -7602,7 +7648,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         weakForwardFloor,
         weakAnchorComparableSim - weakCurrentSlack,
       );
-      const weakForwardMinSim = isFinal
+      const weakForwardMinSim = permissiveMatcher
+        ? weakForwardFloor
+        : isFinal
         ? DEFAULT_WEAK_CURRENT_FORWARD_FINAL_MIN_SIM
         : DEFAULT_WEAK_CURRENT_FORWARD_INTERIM_MIN_SIM;
       if (
@@ -8471,24 +8519,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           snippet ? `clue="${snippet}"` : '',
         ]);
         emitHudStatus('low_sim_wait', 'Low confidence - waiting');
-        noteLowSimFreeze(now, {
-          cursorLine,
-          bestIdx: rawIdx,
-          delta: rawIdx - cursorLine,
-          sim: conf,
-          inBand,
-          requiredSim: requiredThreshold,
-          need: effectiveThreshold,
-          repeatCount: relockRepeatCount,
-          bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
-          overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
-          snippet: freezeSnippet,
-          matchId,
-          relockModeActive,
-          catchUpModeActive,
-          stuckResyncActive,
-        });
-        return;
+        if (!permissiveMatcher) {
+          noteLowSimFreeze(now, {
+            cursorLine,
+            bestIdx: rawIdx,
+            delta: rawIdx - cursorLine,
+            sim: conf,
+            inBand,
+            requiredSim: requiredThreshold,
+            need: effectiveThreshold,
+            repeatCount: relockRepeatCount,
+            bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
+            overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
+            snippet: freezeSnippet,
+            matchId,
+            relockModeActive,
+            catchUpModeActive,
+            stuckResyncActive,
+          });
+          return;
+        }
+        if (rawIdx >= cursorLine) {
+          effectiveThreshold = Math.min(effectiveThreshold, Math.max(thresholds.candidateMinSim, conf));
+        }
       }
       warnGuard('low_sim', [
         matchId ? `matchId=${matchId}` : '',
@@ -8510,24 +8563,29 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         'low_sim_ingest',
         `Ignored: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
       );
-      noteLowSimFreeze(now, {
-        cursorLine,
-        bestIdx: rawIdx,
-        delta: rawIdx - cursorLine,
-        sim: conf,
-        inBand,
-        requiredSim: requiredThreshold,
-        need: effectiveThreshold,
-        repeatCount: relockRepeatCount,
-        bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
-        overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
-        snippet: freezeSnippet,
-        matchId,
-        relockModeActive,
-        catchUpModeActive,
-        stuckResyncActive,
-      });
-      return;
+      if (!permissiveMatcher) {
+        noteLowSimFreeze(now, {
+          cursorLine,
+          bestIdx: rawIdx,
+          delta: rawIdx - cursorLine,
+          sim: conf,
+          inBand,
+          requiredSim: requiredThreshold,
+          need: effectiveThreshold,
+          repeatCount: relockRepeatCount,
+          bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
+          overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
+          snippet: freezeSnippet,
+          matchId,
+          relockModeActive,
+          catchUpModeActive,
+          stuckResyncActive,
+        });
+        return;
+      }
+      if (rawIdx >= cursorLine) {
+        effectiveThreshold = Math.min(effectiveThreshold, Math.max(thresholds.candidateMinSim, conf));
+      }
       }
     }
     const preNudgeCandidates = topScoresSpeakable
@@ -8595,11 +8653,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const preNudgeStrongFinalHoldBypass =
       isFinal &&
       rawIdx === cursorLine &&
-      conf >= Math.max(effectiveThreshold, DEFAULT_STRONG_FORWARD_COMMIT_SIM) &&
-      overlapTokensCurrent.length >= DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_TOKENS &&
-      overlapRatioCurrent >= DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_RATIO;
+      conf >= Math.max(
+        effectiveThreshold,
+        permissiveMatcher ? DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM : DEFAULT_STRONG_FORWARD_COMMIT_SIM,
+      ) &&
+      overlapTokensCurrent.length >= (
+        permissiveMatcher ? 2 : DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_TOKENS
+      ) &&
+      overlapRatioCurrent >= (
+        permissiveMatcher ? 0.25 : DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_RATIO
+      );
     const preNudgeHoldReason = preNudgeAmbiguity.reason || 'short_line_ambiguous';
-    if (preNudgeShortLineAmbiguous && !ambiguityHoldActive && !preNudgeStrongFinalHoldBypass) {
+    if (
+      preNudgeShortLineAmbiguous &&
+      !ambiguityHoldActive &&
+      !preNudgeStrongFinalHoldBypass &&
+      !permissiveMatcher
+    ) {
       beginOrRefreshAmbiguityHold(
         now,
         preNudgeHoldReason,
