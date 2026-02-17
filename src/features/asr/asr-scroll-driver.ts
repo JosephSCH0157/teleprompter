@@ -5510,7 +5510,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
             );
             const bridgeUsed = cueBridge.skippedReasons.length > 0;
-            if (cueBridge.nextLine == null) {
+            const nextLine = cueBridge.nextLine;
+            if (nextLine == null) {
               warnGuard('cue_commit_blocked', [
                 `current=${lastLineIndex}`,
                 `best=${targetLine + 1}`,
@@ -5523,9 +5524,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               emitHudStatus('cue_commit_blocked', 'Blocked: cue-only commit target');
               return;
             }
-            if (bridgeUsed) {
-              const nextLine = cueBridge.nextLine;
-              logCueBridgeUse(lastLineIndex, nextLine, cueBridge.skippedReasons, 'same-line-confirm');
+            const plainStrongFinalAdvance =
+              !bridgeUsed &&
+              nextLine === lastLineIndex + 1 &&
+              conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
+            if (bridgeUsed || plainStrongFinalAdvance) {
+              if (bridgeUsed) {
+                logCueBridgeUse(lastLineIndex, nextLine, cueBridge.skippedReasons, 'same-line-confirm');
+              }
               const nextTop = resolveTargetTop(scroller, nextLine);
               if (nextTop != null) {
                 const nextDeltaPx = nextTop - currentTop;
@@ -5533,7 +5539,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                   targetLine = nextLine;
                   targetTop = nextTop;
                   deltaPx = nextDeltaPx;
-                  logDev('same-line advance', { line: targetLine, px: Math.round(nextDeltaPx), conf });
+                  logDev(
+                    bridgeUsed ? 'same-line advance' : 'same-line advance (strong final)',
+                    { line: targetLine, px: Math.round(nextDeltaPx), conf },
+                  );
                 }
               }
             }
@@ -8586,16 +8595,27 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
       const cueBridge = findNextSpeakableWithinBridge(cursorLine, nudgeDeltaCap);
       const bridgeUsed = cueBridge.skippedReasons.length > 0;
-      if (cueBridge.nextLine != null && cueBridge.nextLine > cursorLine && bridgeUsed) {
+      const nudgeTarget =
+        cueBridge.nextLine != null && cueBridge.nextLine > cursorLine
+          ? Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine))
+          : null;
+      const plainStrongFinalNudge =
+        finalMatchNudgeEligible &&
+        !bridgeUsed &&
+        nudgeTarget === cursorLine + 1 &&
+        conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
+      if (nudgeTarget != null && (bridgeUsed || plainStrongFinalNudge)) {
         const before = rawIdx;
-        rawIdx = Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine));
+        rawIdx = nudgeTarget;
         cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
-        logCueBridgeUse(
-          cursorLine,
-          rawIdx,
-          cueBridge.skippedReasons,
-          stableInterimNudgeEligible ? 'stable-interim-nudge' : 'final-match-nudge',
-        );
+        if (bridgeUsed) {
+          logCueBridgeUse(
+            cursorLine,
+            rawIdx,
+            cueBridge.skippedReasons,
+            stableInterimNudgeEligible ? 'stable-interim-nudge' : 'final-match-nudge',
+          );
+        }
         if (stableInterimNudgeEligible) {
           lastStableInterimNudgeAt = now;
         }
@@ -8608,7 +8628,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         } else if (isDevMode()) {
           try {
             console.info(
-              `ASR_NUDGE final_match best=${before} cursor=${cursorLine} -> next=${rawIdx}`,
+              bridgeUsed
+                ? `ASR_NUDGE final_match best=${before} cursor=${cursorLine} -> next=${rawIdx}`
+                : `ASR_NUDGE final_match_strong best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`,
             );
           } catch {}
         }
