@@ -2,7 +2,15 @@
 // All code that moves the main script viewport should route through this helper.
 
 import { getAsrBlockElements } from './asr-block-store';
-import { getDisplayViewerElement, getViewerElement } from './scroller';
+import {
+  describeElement,
+  getDisplayViewerElement,
+  getRuntimeScroller,
+  getScrollerEl,
+  getViewerElement,
+  resolveViewerRole,
+} from './scroller';
+import { shouldLogLevel } from '../env/dev-log';
 
 export interface ScrollWriter {
   /** Absolute scroll in CSS px from top of script viewport. */
@@ -16,16 +24,56 @@ export interface ScrollWriter {
 let cached: ScrollWriter | null = null;
 let warned = false;
 let activeSeekAnim: { cancel: () => void } | null = null;
+let activeSeekAnimRunId = 0;
+let lastWriteMismatchAt = 0;
+let lastWriteMismatchKey = '';
+let lastNonFiniteGuardAt = 0;
+
+const WRITE_MISMATCH_LOG_THROTTLE_MS = 2000;
+const WRITE_MISMATCH_EPSILON_PX = 1;
+const NON_FINITE_GUARD_THROTTLE_MS = 1000;
+const ASR_SEEK_DEFAULT_LINES_PER_SEC = 1;
+const ASR_SEEK_MIN_DURATION_MS = 280;
+const ASR_SEEK_MAX_DURATION_MS = 900;
+const ASR_SEEK_EPSILON_PX = 0.5;
+const ASR_SEEK_MIN_PX_PER_SEC = 36;
+const ASR_SEEK_MAX_PX_PER_SEC = 280;
+const ASR_SEEK_MAX_VIEWPORTS_PER_SEC = 0.75;
+
+type SeekAnimationOptions = {
+  targetTop?: number | null;
+  maxPxPerSecond?: number | null;
+  minDurationMs?: number;
+  maxDurationMs?: number;
+  forceAnimated?: boolean;
+};
+
+function shouldWarnWrites(): boolean {
+  return shouldLogLevel(1);
+}
+
+function shouldVerboseWrites(): boolean {
+  return shouldLogLevel(2);
+}
 
 function shouldTraceWrites(): boolean {
+  return shouldLogLevel(3);
+}
+
+function logNonFiniteGuard(reason: string, value: unknown, detail?: Record<string, unknown>): void {
+  if (!shouldWarnWrites()) return;
+  const now = Date.now();
+  if (now - lastNonFiniteGuardAt < NON_FINITE_GUARD_THROTTLE_MS) return;
+  lastNonFiniteGuardAt = now;
   try {
-    const w = window as any;
-    if (w.__TP_DEV || w.__TP_DEV1) return true;
-    const qs = new URLSearchParams(String(location.search || ''));
-    if (qs.get('dev') === '1' || qs.has('dev')) return true;
-    if (w.localStorage?.getItem('tp_dev_mode') === '1') return true;
-  } catch {}
-  return false;
+    console.warn('[scroll-writer] non-finite value', {
+      reason,
+      value,
+      ...(detail || {}),
+    });
+  } catch {
+    // ignore
+  }
 }
 
 function withWriteEnabled<T>(reason: string, delta: number, fn: () => T): T {
@@ -39,45 +87,20 @@ function withWriteEnabled<T>(reason: string, delta: number, fn: () => T): T {
   finally { w.__tpScrollWriteActive = prev; }
 }
 
-function isWindowScroller(scroller: HTMLElement): boolean {
-  return (
-    scroller === document.scrollingElement ||
-    scroller === document.documentElement ||
-    scroller === document.body
-  );
-}
-
 function findScroller(el: HTMLElement): HTMLElement {
-  let node = el?.parentElement as HTMLElement | null;
-  while (node) {
-    try {
-      const st = getComputedStyle(node);
-      if (/(auto|scroll)/.test(st.overflowY || '')) return node;
-    } catch {
-      // ignore
-    }
-    node = node.parentElement as HTMLElement | null;
-  }
+  const runtime = getRuntimeScroller(resolveViewerRole());
   return (
-    (document.scrollingElement as HTMLElement | null) ||
-    (document.documentElement as HTMLElement | null) ||
-    (document.body as HTMLElement | null) ||
+    runtime ||
+    getScrollerEl('main') ||
+    getScrollerEl('display') ||
+    getDisplayViewerElement() ||
+    getViewerElement() ||
     el
   );
 }
 
 function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
   try {
-    const isWin =
-      scroller === document.scrollingElement ||
-      scroller === document.documentElement ||
-      scroller === document.body;
-    if (isWin) {
-      const rect = el.getBoundingClientRect();
-      const scrollTop =
-        window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-      return rect.top + scrollTop;
-    }
     const rect = el.getBoundingClientRect();
     const scRect = scroller.getBoundingClientRect();
     return rect.top - scRect.top + scroller.scrollTop;
@@ -116,20 +139,6 @@ function getScrollMode(): string {
   return '';
 }
 
-function asrLandingBiasPx(fallbackScroller: HTMLElement): number {
-  const viewer = getViewerElement();
-  const host = viewer || fallbackScroller;
-  const h = host?.clientHeight || window.innerHeight || 0;
-  const overridePx = (window as any).__TP_ASR_LANDING_BIAS_PX;
-  if (typeof overridePx === 'number' && Number.isFinite(overridePx)) {
-    return Math.max(0, Math.round(overridePx));
-  }
-  const overridePct = (window as any).__TP_ASR_LANDING_BIAS_PCT;
-  const pctRaw = typeof overridePct === 'number' ? overridePct : 0.12;
-  const pct = Math.max(0, Math.min(0.5, pctRaw));
-  return Math.max(0, Math.round(h * pct));
-}
-
 function prefersReducedMotion(): boolean {
   try {
     return !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
@@ -139,27 +148,27 @@ function prefersReducedMotion(): boolean {
 }
 
 function cancelSeekAnimation(): void {
+  activeSeekAnimRunId += 1;
   if (!activeSeekAnim) return;
   try { activeSeekAnim.cancel(); } catch {}
   activeSeekAnim = null;
 }
 
+export function isSeekAnimationActive(): boolean {
+  return activeSeekAnim != null;
+}
+
 function readScrollTop(scroller: HTMLElement): number {
-  if (isWindowScroller(scroller)) {
-    return window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-  }
   return scroller.scrollTop || 0;
 }
 
 function getDeltaScroller(): HTMLElement | null {
   return (
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-    (document.getElementById('viewer') as HTMLElement | null) ||
-    (document.getElementById('wrap') as HTMLElement | null) ||
+    getRuntimeScroller(resolveViewerRole()) ||
+    getScrollerEl('main') ||
+    getScrollerEl('display') ||
     getDisplayViewerElement() ||
-    (document.scrollingElement as HTMLElement | null) ||
-    (document.documentElement as HTMLElement | null) ||
-    (document.body as HTMLElement | null)
+    (document.getElementById('wrap') as HTMLElement | null)
   );
 }
 
@@ -173,28 +182,129 @@ function estimateDelta(targetTop: number): number {
   }
 }
 
-function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrollTop'): void {
-  const from = readScrollTop(scroller);
-  const delta = (Number(top) || 0) - (Number(from) || 0);
-  withWriteEnabled(reason, delta, () => {
-    if (isWindowScroller(scroller)) {
-      window.scrollTo({ top, behavior: 'auto' });
-    } else {
-      scroller.scrollTo({ top, behavior: 'auto' });
-    }
-  });
+function logWriteMismatch(scroller: HTMLElement, target: number, before: number, after: number, reason: string): void {
+  if (!shouldWarnWrites()) return;
+  if (Math.abs(after - target) <= WRITE_MISMATCH_EPSILON_PX) return;
+  const now = Date.now();
+  const key = `${reason}|${describeElement(scroller)}|${Math.round(target)}|${Math.round(after)}`;
+  if (key === lastWriteMismatchKey && now - lastWriteMismatchAt < WRITE_MISMATCH_LOG_THROTTLE_MS) return;
+  lastWriteMismatchKey = key;
+  lastWriteMismatchAt = now;
+  let overflow = '';
+  let overflowY = '';
+  try {
+    const style = getComputedStyle(scroller);
+    overflow = String(style.overflow || '');
+    overflowY = String(style.overflowY || '');
+  } catch {
+    overflow = '';
+    overflowY = '';
+  }
+  const maxTop = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const activeScroller = getRuntimeScroller(resolveViewerRole());
+  try {
+    console.warn('[scroll-writer] write mismatch', {
+      reason,
+      scroller: describeElement(scroller),
+      targetTop: Math.round(target),
+      before: Math.round(before),
+      after: Math.round(after),
+      deltaPx: Math.round(after - before),
+      overflow,
+      overflowY,
+      scrollHeight: Math.round(scroller.scrollHeight || 0),
+      clientHeight: Math.round(scroller.clientHeight || 0),
+      maxTop: Math.round(maxTop),
+      activeScroller: describeElement(activeScroller),
+      isActiveScroller: activeScroller === scroller,
+    });
+  } catch {}
 }
 
-function resolveSeekTarget(blockIdx: number): { scroller: HTMLElement; top: number } | null {
+function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrollTop'): void {
+  const rawFrom = scroller.scrollTop;
+  const from = Number.isFinite(rawFrom) ? rawFrom : 0;
+  if (!Number.isFinite(rawFrom)) {
+    logNonFiniteGuard('writeScrollTop:from', rawFrom, {
+      scroller: describeElement(scroller),
+      reason,
+    });
+  }
+  const rawTop = Number(top);
+  if (!Number.isFinite(rawTop)) {
+    logNonFiniteGuard('writeScrollTop:target', top, {
+      scroller: describeElement(scroller),
+      reason,
+    });
+    return;
+  }
+  const maxTop = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const target = Math.max(0, Math.min(rawTop, maxTop));
+  const delta = target - from;
+  withWriteEnabled(reason, delta, () => {
+    if (typeof scroller.scrollTo === 'function') {
+      scroller.scrollTo({ top: target, behavior: 'auto' });
+    } else {
+      scroller.scrollTop = target;
+    }
+  });
+  const after = readScrollTop(scroller);
+  logWriteMismatch(scroller, target, from, after, reason);
+}
+
+function resolveSeekTarget(blockIdx: number): {
+  blockEl: HTMLElement;
+  scroller: HTMLElement;
+  top: number;
+  blockTopPx: number;
+  lineIdx: number | null;
+} | null {
   const blocks = getAsrBlockElements();
   const el = blocks[blockIdx];
   if (!el) return null;
   const scroller = findScroller(el);
-  const baseOffset = markerOffsetPx(scroller);
   const mode = getScrollMode();
-  const bias = mode === 'asr' ? asrLandingBiasPx(scroller) : 0;
-  const top = elementTopRelativeTo(el, scroller) - (baseOffset + bias);
-  return { scroller, top };
+  const blockTopPx = elementTopRelativeTo(el, scroller);
+  if (!Number.isFinite(blockTopPx)) {
+    logNonFiniteGuard('resolveSeekTarget:blockTopPx', blockTopPx, { blockIdx });
+    return null;
+  }
+  const top = mode === 'asr'
+    ? blockTopPx
+    : blockTopPx - markerOffsetPx(scroller);
+  if (!Number.isFinite(top)) {
+    logNonFiniteGuard('resolveSeekTarget:top', top, { blockIdx, mode });
+    return null;
+  }
+  let lineIdx: number | null = null;
+  try {
+    const firstLine = el.querySelector<HTMLElement>('.line[data-line], .line[data-line-idx], .line');
+    const rawIdx = firstLine?.dataset?.line ?? firstLine?.dataset?.lineIdx;
+    const parsed = Number(rawIdx);
+    if (Number.isFinite(parsed)) lineIdx = Math.max(0, Math.floor(parsed));
+  } catch {
+    lineIdx = null;
+  }
+  return { blockEl: el, scroller, top, blockTopPx, lineIdx };
+}
+
+function resolveSeekLineHeightPx(target: { blockEl: HTMLElement; scroller: HTMLElement }): number {
+  const lineEl = target.blockEl.querySelector<HTMLElement>('.line[data-line], .line[data-line-idx], .line');
+  const lineRectH = lineEl?.getBoundingClientRect?.().height ?? 0;
+  if (Number.isFinite(lineRectH) && lineRectH > 4) return lineRectH;
+  const lineOffsetH = lineEl?.offsetHeight ?? 0;
+  if (Number.isFinite(lineOffsetH) && lineOffsetH > 4) return lineOffsetH;
+  try {
+    const computed = lineEl ? Number.parseFloat(getComputedStyle(lineEl).lineHeight) : Number.NaN;
+    if (Number.isFinite(computed) && computed > 4) return computed;
+  } catch {
+    // ignore
+  }
+  const scrollerRectH = target.scroller.getBoundingClientRect?.().height ?? 0;
+  if (Number.isFinite(scrollerRectH) && scrollerRectH > 0) {
+    return Math.max(24, Math.min(96, scrollerRectH * 0.09));
+  }
+  return 56;
 }
 
 export function getScrollWriter(): ScrollWriter {
@@ -205,11 +315,10 @@ export function getScrollWriter(): ScrollWriter {
     if (typeof maybe === 'function') {
       const fn = maybe as (_top: number) => void;
       const getScroller = () =>
-        (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-        (document.getElementById('viewer') as HTMLElement | null) ||
-        (document.scrollingElement as HTMLElement | null) ||
-        (document.documentElement as HTMLElement | null) ||
-        (document.body as HTMLElement | null);
+        getRuntimeScroller(resolveViewerRole()) ||
+        getScrollerEl('main') ||
+        getScrollerEl('display') ||
+        getDisplayViewerElement();
       cached = {
         scrollTo(top: number) {
           try {
@@ -280,9 +389,23 @@ export function seekToBlock(blockIdx: number, reason: string) {
   cancelSeekAnimation();
   const target = resolveSeekTarget(blockIdx);
   if (!target) return;
-  const { scroller, top } = target;
+  const { scroller, top, blockTopPx, lineIdx } = target;
 
   try {
+    if (shouldVerboseWrites()) {
+      const currentScrollTop = readScrollTop(scroller);
+      try {
+        console.log('[scroll-writer] seek target', {
+          blockIdx,
+          lineIdx,
+          blockTopPx: Math.round(blockTopPx),
+          currentScrollTop: Math.round(currentScrollTop),
+          targetTop: Math.round(top),
+          deltaPx: Math.round(top - currentScrollTop),
+          reason: reason || 'seekToBlock',
+        });
+      } catch {}
+    }
     writeScrollTop(scroller, top, reason || 'seekToBlock');
     try {
       if (reason && typeof console !== 'undefined') {
@@ -294,22 +417,74 @@ export function seekToBlock(blockIdx: number, reason: string) {
   }
 }
 
-export function seekToBlockAnimated(blockIdx: number, reason: string) {
+export function seekToBlockAnimated(blockIdx: number, reason: string, opts: SeekAnimationOptions = {}) {
   cancelSeekAnimation();
+  const runId = activeSeekAnimRunId;
   const mode = getScrollMode();
-  if (mode !== 'asr' || prefersReducedMotion()) {
+  const forceAnimated = opts.forceAnimated === true;
+  if ((!forceAnimated && mode !== 'asr') || (!forceAnimated && prefersReducedMotion())) {
     seekToBlock(blockIdx, reason);
     return;
   }
   const target = resolveSeekTarget(blockIdx);
   if (!target) return;
-  const { scroller, top: targetTop } = target;
+  const { scroller, top: blockTargetTop, blockTopPx, lineIdx } = target;
   const startTop = readScrollTop(scroller);
-  if (!Number.isFinite(targetTop) || Math.abs(targetTop - startTop) < 0.5) {
+  const maxTop = Math.max(0, (scroller.scrollHeight || 0) - (scroller.clientHeight || 0));
+  const requestedTopRaw = Number(opts.targetTop);
+  const hasRequestedTop = Number.isFinite(requestedTopRaw);
+  const targetTop = hasRequestedTop
+    ? Math.max(0, Math.min(requestedTopRaw, maxTop))
+    : blockTargetTop;
+  const lineHeightPx = resolveSeekLineHeightPx(target);
+  const configuredMaxPxPerSecond = Number(opts.maxPxPerSecond);
+  const baseMaxPxPerSecond =
+    Number.isFinite(configuredMaxPxPerSecond) && configuredMaxPxPerSecond > 0
+      ? configuredMaxPxPerSecond
+      : lineHeightPx * ASR_SEEK_DEFAULT_LINES_PER_SEC;
+  const viewportMaxPxPerSecond = Math.max(
+    ASR_SEEK_MIN_PX_PER_SEC,
+    (scroller.clientHeight || 0) * ASR_SEEK_MAX_VIEWPORTS_PER_SEC,
+  );
+  const maxPxPerSecond = Math.max(
+    ASR_SEEK_MIN_PX_PER_SEC,
+    Math.min(baseMaxPxPerSecond, ASR_SEEK_MAX_PX_PER_SEC, viewportMaxPxPerSecond),
+  );
+  const minDurationMsRaw = Number(opts.minDurationMs);
+  const maxDurationMsRaw = Number(opts.maxDurationMs);
+  const minDurationMs =
+    Number.isFinite(minDurationMsRaw) && minDurationMsRaw > 0
+      ? minDurationMsRaw
+      : ASR_SEEK_MIN_DURATION_MS;
+  const maxDurationMs =
+    Number.isFinite(maxDurationMsRaw) && maxDurationMsRaw > minDurationMs
+      ? maxDurationMsRaw
+      : Math.max(minDurationMs, ASR_SEEK_MAX_DURATION_MS);
+  const deltaPx = targetTop - startTop;
+  if (shouldVerboseWrites()) {
+    try {
+      console.log('[scroll-writer] seek target', {
+        blockIdx,
+        lineIdx,
+        blockTopPx: Math.round(blockTopPx),
+        lineHeightPx: Math.round(lineHeightPx),
+        currentScrollTop: Math.round(startTop),
+        targetTop: Math.round(targetTop),
+        requestedTop: hasRequestedTop ? Math.round(requestedTopRaw) : null,
+        maxPxPerSecond: Math.round(maxPxPerSecond),
+        deltaPx: Math.round(deltaPx),
+        reason: reason || 'seekToBlockAnimated',
+      });
+    } catch {}
+  }
+  if (!Number.isFinite(targetTop) || Math.abs(deltaPx) < ASR_SEEK_EPSILON_PX) {
     writeScrollTop(scroller, targetTop, reason || 'seekToBlockAnimated');
     return;
   }
-  const durationMs = 200;
+  const durationMs = Math.max(
+    minDurationMs,
+    Math.min(maxDurationMs, (Math.abs(deltaPx) / maxPxPerSecond) * 1000),
+  );
   const start = typeof performance !== 'undefined' ? performance.now() : Date.now();
   let cancelled = false;
   activeSeekAnim = {
@@ -319,7 +494,7 @@ export function seekToBlockAnimated(blockIdx: number, reason: string) {
     },
   };
   const tick = (now: number) => {
-    if (cancelled) return;
+    if (cancelled || runId !== activeSeekAnimRunId) return;
     const elapsed = now - start;
     const t = Math.max(0, Math.min(1, elapsed / durationMs));
     const eased = 1 - Math.pow(1 - t, 3);
@@ -328,7 +503,9 @@ export function seekToBlockAnimated(blockIdx: number, reason: string) {
     if (t < 1) {
       requestAnimationFrame(tick);
     } else {
-      activeSeekAnim = null;
+      if (runId === activeSeekAnimRunId) {
+        activeSeekAnim = null;
+      }
     }
   };
   requestAnimationFrame(tick);

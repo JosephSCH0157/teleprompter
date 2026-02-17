@@ -1,5 +1,6 @@
 import { appStore } from '../state/app-store';
 import { getSession, type SessionPhase } from '../state/session';
+import { shouldLogLevel } from '../env/dev-log';
 import {
   normalizeScrollMode,
   shouldAutoStartForMode,
@@ -15,13 +16,16 @@ import {
   getScriptRoot,
   resolveActiveScroller,
 } from '../scroll/scroller';
+import { bootTrace } from '../boot/boot-trace';
 
 try {
-  (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v3-2025-12-19-a';
+  (window as any).__TP_SCROLL_SESSION_FINGERPRINT = 'scroll-session-v4-2026-02-10-a';
   console.log('SCROLL_SESSION_FINGERPRINT', (window as any).__TP_SCROLL_SESSION_FINGERPRINT);
 } catch {}
 
 let asrOffLogged = false;
+let prerollDoneForSession = false;
+let didAutoStartThisSession = false;
 const lastPhaseInit = (() => {
   try {
     const session = getSession();
@@ -40,13 +44,64 @@ type StopAutoScrollContext = {
   shouldRun: boolean;
 };
 
-function dispatchAutoIntent(enabled: boolean): void {
+function buildScriptEndProbe(): Record<string, unknown> {
+  const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
+  const session = getSession();
+  const scroller = resolveActiveScroller(
+    getPrimaryScroller(),
+    getScriptRoot() || getFallbackScroller(),
+  );
+  const scrollTop = Number(scroller?.scrollTop || 0);
+  const scrollHeight = Number(scroller?.scrollHeight || 0);
+  const clientHeight = Number(scroller?.clientHeight || 0);
+  const remainingPx = Math.max(0, scrollHeight - (scrollTop + clientHeight));
+  const remainingRatio = scrollHeight > 0
+    ? Number((remainingPx / scrollHeight).toFixed(4))
+    : null;
+  const probeEndThresholdPx = 24;
+  return {
+    mode,
+    sessionPhase: session.phase,
+    asrArmed: !!session.asrArmed,
+    scroller: describeElement(scroller),
+    scrollTop: Math.round(scrollTop),
+    scrollHeight: Math.round(scrollHeight),
+    clientHeight: Math.round(clientHeight),
+    remainingPx: Math.round(remainingPx),
+    remainingRatio,
+    probeEndThresholdPx,
+    atEndByProbe: remainingPx <= probeEndThresholdPx,
+  };
+}
+
+function dispatchAutoIntent(enabled: boolean, reason: string): void {
+  const safeReason = String(reason || 'scriptEnd');
+  const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
+  const session = getSession();
   try {
-    console.trace('[probe] dispatch tp:auto:intent', { enabled });
+    if (shouldLogLevel(3)) {
+      console.trace('[probe] dispatch tp:auto:intent', {
+        enabled,
+        reason: safeReason,
+        mode,
+        phase: session.phase,
+      });
+    }
   } catch {}
+  if (safeReason.toLowerCase() === 'scriptend' && shouldLogLevel(2)) {
+    try {
+      console.warn('[scroll-session] scriptEnd intent probe', buildScriptEndProbe());
+    } catch {}
+  }
   try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {
-      detail: { enabled, reason: 'scriptEnd' },
+      detail: {
+        enabled,
+        reason: safeReason,
+        mode,
+        phase: session.phase,
+        source: 'scroll-session',
+      },
     }));
   } catch {
     // ignore
@@ -54,27 +109,81 @@ function dispatchAutoIntent(enabled: boolean): void {
 }
 
 function startAutoScroll(mode: string): void {
-  if (mode !== 'timed') {
+  if (!shouldAutoStartForMode(mode)) {
     try {
-      console.debug('[scroll-session] auto-scroll start ignored (mode not timed)', { mode });
+      console.debug('[scroll-session] auto-scroll start ignored (mode not auto-capable)', { mode });
     } catch {}
     return;
   }
   try {
     console.debug('[scroll-session] dispatching tp:auto:intent (start)');
   } catch {}
-  dispatchAutoIntent(true);
+  dispatchAutoIntent(true, 'session-live-start');
 }
 
 function stopAutoScroll(ctx: StopAutoScrollContext): void {
   try {
     console.info('[scroll-session] STOP requested', ctx);
   } catch {}
-  dispatchAutoIntent(false);
+  if (normalizeScrollMode(ctx.mode) === 'asr') {
+    try {
+      console.debug('[scroll-session] STOP auto-intent suppressed for ASR mode', {
+        reason: ctx.reason,
+        phase: ctx.phase,
+      });
+    } catch {}
+    return;
+  }
+  dispatchAutoIntent(false, ctx.reason || 'phase-change');
 }
 
 function shouldStopAutoForPhase(phase: SessionPhase): boolean {
   return phase !== 'preroll';
+}
+
+function resetSessionStartLatches(reason: string): void {
+  prerollDoneForSession = false;
+  didAutoStartThisSession = false;
+  try {
+    console.debug('[scroll-session] reset start latches', { reason });
+  } catch {}
+}
+
+function maybeStartAutoWhenReady(trigger: string): void {
+  const session = getSession();
+  if (session.phase !== 'live') {
+    try { console.debug('[scroll-session] start blocked: phase not live', { trigger, phase: session.phase }); } catch {}
+    return;
+  }
+  const rawMode = appStore.get('scrollMode') as string | undefined;
+  const canonicalMode = normalizeScrollMode(rawMode);
+  if (canonicalMode === 'asr') {
+    try {
+      console.debug('[scroll-session] auto-start bypass (mode=asr)', {
+        trigger,
+        note: 'ASR live pipeline is gated by session.asrArmed, not scrollAutoOnLive',
+      });
+    } catch {}
+    return;
+  }
+  if (!prerollDoneForSession) {
+    try { console.debug('[scroll-session] start blocked: preroll not done', { trigger }); } catch {}
+    return;
+  }
+  if (!session.scrollAutoOnLive) {
+    try { console.debug('[scroll-session] start blocked: scrollAutoOnLive=false', { trigger }); } catch {}
+    return;
+  }
+  if (didAutoStartThisSession) {
+    try { console.debug('[scroll-session] start blocked: already started this session', { trigger }); } catch {}
+    return;
+  }
+  if (!shouldAutoStartForMode(canonicalMode)) {
+    try { console.debug('[scroll-session] start blocked: mode not auto-capable', { trigger, mode: canonicalMode }); } catch {}
+    return;
+  }
+  didAutoStartThisSession = true;
+  startAutoScroll(String(canonicalMode));
 }
 
 function maybeStartOnLive(phase: SessionPhase): void {
@@ -84,8 +193,14 @@ function maybeStartOnLive(phase: SessionPhase): void {
   const rawMode = appStore.get('scrollMode') as string | undefined;
   const canonicalMode = normalizeScrollMode(rawMode);
   const canonicalModeStr = String(canonicalMode);
-  const shouldRun = session.scrollAutoOnLive && shouldAutoStartForMode(canonicalMode);
+  const effectiveScrollAutoOnLive = canonicalMode === 'asr' ? true : session.scrollAutoOnLive;
+  const shouldRun = effectiveScrollAutoOnLive && shouldAutoStartForMode(canonicalMode);
   if (phase !== 'live') {
+    if (phase === 'preroll') {
+      resetSessionStartLatches('phase-preroll');
+    } else if (phase === 'idle' || phase === 'wrap') {
+      resetSessionStartLatches(`phase-${phase}`);
+    }
     if (prevPhase === 'live' && shouldStopAutoForPhase(phase)) {
       stopAutoScroll({
         reason: 'phase-change',
@@ -104,6 +219,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     console.debug('[ASR] live entered', {
       mode: canonicalMode,
       scrollAutoOnLive: session.scrollAutoOnLive,
+      effectiveScrollAutoOnLive,
       brain: appStore.get('scrollBrain'),
       asrDesired: session.asrDesired,
       asrArmed: session.asrArmed,
@@ -116,7 +232,14 @@ function maybeStartOnLive(phase: SessionPhase): void {
     (session.asrArmed && (canonicalMode === 'asr' || brain === 'asr'));
   if (shouldStartSpeech) {
     try { console.debug('[ASR] about to call startSpeech/startBackend', { mode: canonicalMode, reason: 'live-enter' }); } catch {}
-    void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode });
+    bootTrace('scroll-session:live-speech:start', { mode: canonicalMode, reason: 'live-enter' });
+    void startSpeechBackendForSession({ reason: 'live-enter', mode: canonicalMode })
+      .then((ok) => {
+        bootTrace('scroll-session:live-speech:done', { mode: canonicalMode, ok });
+      })
+      .catch((error) => {
+        bootTrace('scroll-session:live-speech:error', { mode: canonicalMode, error: String(error) });
+      });
   } else if (!asrOffLogged) {
     asrOffLogged = true;
     const reason = !session.asrDesired
@@ -142,7 +265,7 @@ function maybeStartOnLive(phase: SessionPhase): void {
     } catch {}
   }
 
-  if (!session.scrollAutoOnLive) {
+  if (!effectiveScrollAutoOnLive) {
     try { console.debug('[scroll-session] auto-scroll not starting on live (scrollAutoOnLive=false)'); } catch {}
     return;
   }
@@ -150,8 +273,13 @@ function maybeStartOnLive(phase: SessionPhase): void {
     try { console.debug('[scroll-session] auto-scroll not allowed for mode', canonicalMode); } catch {}
     return;
   }
-  try { console.debug('[scroll-session] live phase with auto-on-live; starting auto-scroll', { mode: canonicalMode }); } catch {}
-  startAutoScroll(canonicalModeStr);
+  try {
+    console.debug('[scroll-session] live phase entered; waiting for preroll completion before auto-start', {
+      mode: canonicalMode,
+      prerollDoneForSession,
+    });
+  } catch {}
+  maybeStartAutoWhenReady('phase-live');
 }
 
 export function initScrollSessionRouter(): void {
@@ -165,8 +293,8 @@ export function initScrollSessionRouter(): void {
 
   try {
     window.addEventListener('tp:preroll:done', (ev) => {
-    const session = getSession();
-    const detail = (ev as CustomEvent)?.detail || {};
+      const session = getSession();
+      const detail = (ev as CustomEvent)?.detail || {};
 
       try {
         console.debug('[scroll-session] preroll done', {
@@ -179,18 +307,24 @@ export function initScrollSessionRouter(): void {
         // ignore
       }
 
-      if (session.phase !== 'live') return;
-      if (!session.scrollAutoOnLive) {
-        try { console.debug('[scroll-session] auto-scroll disabled for this mode'); } catch {}
-        return;
-      }
-      const rawMode = appStore.get('scrollMode') as string | undefined;
-      const canonicalMode = normalizeScrollMode(rawMode);
-      if (!shouldAutoStartForMode(canonicalMode)) {
-        try { console.debug('[scroll-session] auto-scroll disabled for this mode (manual block)', { mode: canonicalMode }); } catch {}
-        return;
-      }
-      startAutoScroll(String(canonicalMode));
+      prerollDoneForSession = true;
+      maybeStartAutoWhenReady('preroll-done');
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    window.addEventListener('tp:session:start', () => {
+      resetSessionStartLatches('session-start');
+    });
+  } catch {
+    // ignore
+  }
+
+  try {
+    window.addEventListener('tp:session:stop', () => {
+      resetSessionStartLatches('session-stop');
     });
   } catch {
     // ignore

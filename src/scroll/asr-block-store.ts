@@ -18,11 +18,20 @@ function isDevMode(): boolean {
 export function setAsrBlocks(nextEls: HTMLElement[], meta: AsrBlockMetaV1): void {
   blockEls = Array.isArray(nextEls) ? nextEls : [];
   blockMeta = meta || null;
+  const payload = {
+    ready: true,
+    blockCount: blockEls.length,
+    schemaVersion: Number((meta as any)?.schemaVersion || 1),
+    source: (meta as any)?.source || 'render',
+  };
+  try {
+    (window as any).__tpAsrBlocksReady = true;
+    (window as any).__tpAsrBlockCount = blockEls.length;
+  } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:blocks-ready', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:blocks-ready', { detail: payload })); } catch {}
   if (isDevMode()) {
-    try {
-      (window as any).__tpAsrBlocksReady = true;
-      (window as any).__tpAsrBlockCount = blockEls.length;
-    } catch {}
+    try { console.debug('[asr-block-store] blocks ready', payload); } catch {}
   }
 }
 

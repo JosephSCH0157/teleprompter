@@ -5,6 +5,7 @@ import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-wri
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
 import { getAsrBlockElements } from '../../../scroll/asr-block-store';
+import { applyCanonicalScrollTop, getScrollerEl } from '../../../scroll/scroller';
 import {
   DEFAULT_COMPLETION_POLICY,
   decideBlockCompletion,
@@ -1010,6 +1011,58 @@ function getLastWriterSource() {
   return null;
 }
 
+function classifyProgrammaticWriterKind(source: string | null | undefined, modeHint: string | null = null): ProgrammaticWriterKind {
+  const raw = String(source || '').toLowerCase();
+  const mode = String(modeHint || '').toLowerCase();
+  if (raw.includes('asr') || mode === 'asr') return 'asr';
+  if (
+    raw.includes('writer') ||
+    raw.includes('programmatic') ||
+    raw.includes('scrollwrite')
+  ) {
+    return 'writer';
+  }
+  return 'other';
+}
+
+function noteProgrammaticWriterStamp(source: string, kind: ProgrammaticWriterKind, at: number = nowMs()) {
+  if (kind === 'other') return;
+  lastProgrammaticWriterStamp = {
+    at,
+    source: String(source || 'programmatic'),
+    kind,
+  };
+}
+
+function getRecentProgrammaticWriterStamp(
+  scroller: HTMLElement | null,
+  now: number = nowMs(),
+): ProgrammaticWriterStamp | null {
+  try {
+    const w = window as any;
+    const source = String(scroller?.dataset?.tpLastWriter || '');
+    const globalWriter = w?.__tpLastWriter;
+    const globalFrom = typeof globalWriter?.from === 'string' ? globalWriter.from : '';
+    const globalAt = Number(globalWriter?.at);
+    if (Number.isFinite(globalAt) && now - globalAt <= PROGRAMMATIC_WRITER_GRACE_MS) {
+      const kind = classifyProgrammaticWriterKind(globalFrom || source, getScrollMode());
+      noteProgrammaticWriterStamp(globalFrom || source || 'writer', kind, globalAt);
+    } else if (w?.__tpScrollWriteActive === true) {
+      const activeSource = source || globalFrom || 'writer-active';
+      const kind = classifyProgrammaticWriterKind(activeSource, getScrollMode());
+      noteProgrammaticWriterStamp(activeSource, kind, now);
+    } else if (state2.mode === 'asr' && source) {
+      const kind = classifyProgrammaticWriterKind(source, 'asr');
+      noteProgrammaticWriterStamp(source, kind, now);
+    }
+  } catch {
+    // ignore
+  }
+  if (!lastProgrammaticWriterStamp) return null;
+  if (now - lastProgrammaticWriterStamp.at > PROGRAMMATIC_WRITER_GRACE_MS) return null;
+  return lastProgrammaticWriterStamp;
+}
+
 function getLinePx() {
   try {
     const metrics = getViewportMetrics(() => scrollerEl);
@@ -1127,6 +1180,21 @@ function clearHybridSilenceTimer() {
 }
 
 let tpLastWriter: { from: string; at: number; y: number } | null = null;
+function describeEl(el: Element | null | undefined) {
+  if (!el) {
+    return {
+      tag: 'null',
+      id: null,
+      cls: null,
+    };
+  }
+  const e = el as HTMLElement;
+  return {
+    tag: (e.tagName || 'unknown').toLowerCase(),
+    id: e.id || null,
+    cls: (e.className && String(e.className)) || null,
+  };
+}
 function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   if (!isMainViewer()) {
     try {
@@ -1136,7 +1204,9 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
   }
   const target =
     viewer ?? scrollerEl ?? (typeof document !== 'undefined' ? document.getElementById('viewer') : null);
-  const before = target?.scrollTop ?? null;
+  const targetInfo = describeEl(target);
+  const beforeTop = target?.scrollTop ?? null;
+  const requestedTop = y;
   let ok = false;
   try {
     const writeFn = (window as any).__tpScrollWrite;
@@ -1144,7 +1214,11 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
       writeFn(y);
       ok = true;
     } else if (target) {
-      target.scrollTop = y;
+      applyCanonicalScrollTop(y, {
+        scroller: target,
+        reason: meta.reason ?? 'router-scroll-write-fallback',
+        source: meta.from || 'router-scroll-write-fallback',
+      });
       ok = true;
     }
   } catch (err) {
@@ -1152,21 +1226,50 @@ function scrollWrite(y: number, meta: { from: string; reason?: string }) {
       console.error('[SCROLL_WRITE] exception', { y, meta, err });
     } catch {}
   }
-  const after = target?.scrollTop ?? null;
-  tpLastWriter = { from: meta.from, at: nowMs(), y };
+  const afterTop = target?.scrollTop ?? null;
+  const writeAt = nowMs();
+  tpLastWriter = { from: meta.from, at: writeAt, y };
   try {
     ((window as any).__tpLastWriter = tpLastWriter);
   } catch {}
+  const stampSource = meta.reason || meta.from || 'writer';
+  const stampKind = classifyProgrammaticWriterKind(stampSource, getScrollMode());
+  noteProgrammaticWriterStamp(stampSource, stampKind, writeAt);
   try {
     console.info('[SCROLL_WRITE]', {
       ok,
       from: meta.from,
       reason: meta.reason ?? null,
-      before,
+      before: beforeTop,
       y,
-      after,
+      after: afterTop,
     });
   } catch {}
+  const debugStack = isDevMode() ? (new Error().stack || null) : null;
+  if (target && typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    const targetEl = target as HTMLElement;
+    window.requestAnimationFrame(() => {
+      const afterTopRaf = targetEl.scrollTop ?? null;
+      const changedNow =
+        beforeTop != null && afterTop != null ? afterTop !== beforeTop : null;
+      const snappedBack =
+        afterTop != null && afterTopRaf != null ? afterTopRaf !== afterTop : null;
+      try {
+        console.warn('[SCROLL_WRITE_TRUTH]', {
+          from: meta.from,
+          reason: meta.reason ?? null,
+          target: targetInfo,
+          beforeTop,
+          requestedTop,
+          afterTop,
+          afterTopRaf,
+          changedNow,
+          snappedBack,
+          stack: debugStack,
+        });
+      } catch {}
+    });
+  }
   return ok;
 }
 
@@ -1479,7 +1582,11 @@ function createAutoMotor() {
     const dtSec = lastTs ? Math.max(0, (now - lastTs) / 1000) : 0;
     lastTs = now;
     const pxPerSec = currentSpeed;
-    const el = scrollerEl;
+    const canonicalViewer = ensureViewerElement();
+    if (canonicalViewer && scrollerEl !== canonicalViewer) {
+      scrollerEl = canonicalViewer;
+    }
+    const el = canonicalViewer || scrollerEl;
     if (!el) {
       logAutoTick('tick', el, pxPerSec, dtSec, 'no-element');
       scheduleTick();
@@ -1539,7 +1646,15 @@ function createAutoMotor() {
   }
 
   function start() {
-    if (enabled) return;
+    if (enabled) {
+      if (rafId == null) {
+        autoTickDebugStart = 0;
+        lastAutoTickLogAt = 0;
+        logAutoTick('start', viewer ?? scrollerEl, currentSpeed, 0, 'already-enabled-resume');
+        scheduleTick();
+      }
+      return;
+    }
     setEnabled(true);
     lastTickMoved = false;
     carry = 0;
@@ -2112,6 +2227,8 @@ const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
 const MANUAL_SCROLL_LOG_THROTTLE_MS = 1500;
+const PROGRAMMATIC_WRITER_GRACE_MS = 250;
+const PROGRAMMATIC_WRITER_LOG_THROTTLE_MS = 1000;
 const HYBRID_CTRL_LOG_THROTTLE_MS = 500;
 const HYBRID_CTRL_CONF_MIN = 0.25;
 const HYBRID_CTRL_ANCHOR_RECENCY_MS = 2500;
@@ -2312,6 +2429,10 @@ let hybridLastGoodTargetTop: number | null = null;
 let hybridWantedRunning = false;
 let liveGraceWindowEndsAt: number | null = null;
 let lastManualScrollBrakeLogAt = 0;
+type ProgrammaticWriterKind = 'asr' | 'writer' | 'other';
+type ProgrammaticWriterStamp = { at: number; source: string; kind: ProgrammaticWriterKind };
+let lastProgrammaticWriterStamp: ProgrammaticWriterStamp | null = null;
+let lastProgrammaticWriterLogAt = 0;
 let lastHybridCtrlLogAt = 0;
 const hybridCtrl = {
   mult: 1,
@@ -2516,7 +2637,8 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     }
     if (shouldLogBrake) {
       try {
-        console.info('[HYBRID_BRAKE] set', {
+        const brakeTag = state2.mode === 'asr' ? 'ASR_BRAKE' : 'HYBRID_BRAKE';
+        console.info(`[${brakeTag}] set`, {
           factor: safeFactor,
           ttl,
           expiresAt: hybridBrakeState.expiresAt,
@@ -2924,20 +3046,27 @@ function applyMode(m) {
 function installScrollRouter(opts) {
   const { auto: autoMotor, viewer: viewerInstallFlag = false, hostEl = null } = opts;
   auto = autoMotor || auto || null;
-  if (!viewer && hostEl) {
-    viewer = hostEl;
+  const canonicalScroller = getScrollerEl(viewerRole) || getScrollerEl('main');
+  const docViewer = document.getElementById('viewer') as HTMLElement | null;
+  if (!viewer) {
+    if (docViewer) {
+      viewer = docViewer;
+    } else if (hostEl instanceof HTMLElement && hostEl.id === 'viewer') {
+      viewer = hostEl;
+    }
   }
   if (hostEl instanceof HTMLElement) {
-    scrollerEl = hostEl;
+    scrollerEl = canonicalScroller || docViewer || viewer || hostEl;
   }
   if (!scrollerEl) {
-    scrollerEl = document.querySelector<HTMLElement>('#viewer') || document.querySelector<HTMLElement>('#script');
+    scrollerEl =
+      canonicalScroller ||
+      docViewer ||
+      document.querySelector<HTMLElement>('main#viewer.viewer, #viewer') ||
+      document.querySelector<HTMLElement>('#script') ||
+      (viewerRole === 'display' ? (document.getElementById('wrap') as HTMLElement | null) : null);
   }
-  if (!scrollerEl) {
-    const fallback = (document.scrollingElement as HTMLElement | null) || document.documentElement;
-    scrollerEl = fallback;
-  }
-    if (!hybridScrollGraceListenerInstalled) {
+  if (!hybridScrollGraceListenerInstalled) {
     try {
       const scrollHandler = (event: Event) => {
         if (!event.isTrusted) return;
@@ -2948,6 +3077,24 @@ function installScrollRouter(opts) {
         const scroller = scrollerEl;
         if (!scroller || !target) return;
         if (scroller === target || scroller.contains(target)) {
+          const now = nowMs();
+          const writerStamp = getRecentProgrammaticWriterStamp(scroller, now);
+          if (writerStamp && (writerStamp.kind === 'asr' || writerStamp.kind === 'writer')) {
+            if (isDevMode() && now - lastProgrammaticWriterLogAt >= PROGRAMMATIC_WRITER_LOG_THROTTLE_MS) {
+              lastProgrammaticWriterLogAt = now;
+              try {
+                const brakeTag = state2.mode === 'asr' ? 'ASR_BRAKE' : 'HYBRID_BRAKE';
+                console.info(`[${brakeTag}] skip`, {
+                  reason: 'programmatic-writer',
+                  source: writerStamp.source,
+                  kind: writerStamp.kind,
+                  ageMs: Math.max(0, Math.round(now - writerStamp.at)),
+                  mode: state2.mode,
+                });
+              } catch {}
+            }
+            return;
+          }
           setHybridBrake(1, 0, 'manual-scroll');
         }
       };
@@ -3006,6 +3153,15 @@ function installScrollRouter(opts) {
       const normalized = normalizeScrollModeValue(next);
       if (!normalized || normalized === state2.mode) return;
       applyMode(normalized);
+      if (normalized === 'asr') {
+        // Safety belt: entering ASR must always leave timed/wpm/hybrid motors fully off.
+        try { stopAllMotors('mode switch to asr (safety)'); } catch {}
+        try {
+          window.dispatchEvent(new CustomEvent('tp:auto:intent', {
+            detail: { enabled: false, reason: 'mode-enter-asr' },
+          }));
+        } catch {}
+      }
       emitScrollModeSnapshot("store-change");
     });
   } catch {}
@@ -3442,11 +3598,43 @@ function installScrollRouter(opts) {
     try { console.info('[scroll-router] tp:scroll:intent listener installed'); } catch {}
   }
   type AutoIntentDecision = 'motor-start-request' | 'motor-stop-request';
+  type RequestedMotorKind = 'auto' | 'hybrid';
+  interface AutoIntentMotorRequest {
+    kind: RequestedMotorKind;
+    source: string;
+  }
   interface AutoIntentPayload {
     enabled: boolean;
     decision: AutoIntentDecision;
     pxs: number;
     reason?: string;
+    motorKind: RequestedMotorKind;
+    motorSource: string;
+  }
+  let lastAutoIntentMotorRequest: AutoIntentMotorRequest = { kind: 'auto', source: 'unknown' };
+  function normalizeRequestedMotorKind(raw: unknown): RequestedMotorKind | null {
+    const value = String(raw || '').toLowerCase();
+    if (value === 'auto' || value === 'hybrid') return value;
+    return null;
+  }
+  function resolveAutoIntentMotorRequest(
+    detail: any,
+    mode: string,
+    reasonRaw?: string,
+  ): AutoIntentMotorRequest {
+    const source = typeof detail?.source === 'string'
+      ? detail.source
+      : (reasonRaw || 'unknown');
+    // ASR mode is motorless: auto-intents may still arrive, but must never
+    // resolve to a motor-specific request in this mode.
+    if (mode === 'asr') return { kind: 'auto', source };
+    const explicit =
+      normalizeRequestedMotorKind(detail?.motorKind) ||
+      normalizeRequestedMotorKind(detail?.kind) ||
+      normalizeRequestedMotorKind(detail?.intent?.kind);
+    if (explicit) return { kind: explicit, source };
+    if (mode === 'hybrid') return { kind: 'hybrid', source };
+    return { kind: 'auto', source };
   }
   function resolveAutoIntentEnabled(detail: any): boolean | undefined {
     if (typeof detail.enabled === 'boolean') return detail.enabled;
@@ -3483,28 +3671,56 @@ function installScrollRouter(opts) {
       const enabled = resolveAutoIntentEnabled(detail);
       if (typeof enabled !== 'boolean') return null;
       const reasonRaw = resolveAutoIntentReason(detail);
+      const mode = getScrollMode();
+      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
+      const asrArmed = !!appStore.get('session.asrArmed');
+      const reasonNormalized = String(reasonRaw || '').trim().toLowerCase();
+      const reasonCompact = reasonNormalized.replace(/[^a-z]/g, '');
+      const isScriptEndReason = reasonCompact === 'scriptend';
+      const ignoreAsrScriptEnd =
+        !enabled &&
+        isScriptEndReason &&
+        mode === 'asr' &&
+        currentPhase === 'live' &&
+        asrArmed;
+      if (ignoreAsrScriptEnd) {
+        if (isDevMode()) {
+          try {
+            console.warn('[AUTO_INTENT] scriptEnd ignored in live armed ASR', {
+              enabled,
+              reason: reasonRaw ?? null,
+              mode,
+              phase: currentPhase,
+              asrArmed,
+            });
+          } catch {}
+        }
+        return null;
+      }
       if (shouldIgnoreHybridStop(reasonRaw, enabled)) {
         try {
           console.info('[AUTO_INTENT] hybrid stop ignored (live, non-fatal reason)', { reason: reasonRaw });
         } catch {}
         return null;
       }
+      const motorRequest = resolveAutoIntentMotorRequest(detail, mode, reasonRaw);
+      lastAutoIntentMotorRequest = motorRequest;
       setAutoIntentState(enabled, reasonRaw);
-      const mode = getScrollMode();
       const allowAutoMotor = mode !== 'asr';
       const brain = String(appStore.get('scrollBrain') || 'auto');
       const baseDecision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
       const decision: AutoIntentDecision = allowAutoMotor ? baseDecision : 'motor-stop-request';
       const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
-      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       try {
         console.info(
-          `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled}`,
+          `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled} motorKind=${motorRequest.kind} source=${motorRequest.source}`,
         );
         console.warn(
           '[AUTO_INTENT]',
           'mode=', state2.mode,
           'enabled=', enabled,
+          'motorKind=', motorRequest.kind,
+          'source=', motorRequest.source,
           'pxPerSec=', pxPerSec,
           'sessionPhase=', currentPhase,
           'userEnabled=', userEnabled,
@@ -3517,22 +3733,42 @@ function installScrollRouter(opts) {
       }
       try { emitMotorState('auto', enabledNow); } catch {}
       try { emitAutoState(); } catch {}
-      return { enabled, decision, pxs, reason: reasonRaw };
+      return {
+        enabled,
+        decision,
+        pxs,
+        reason: reasonRaw,
+        motorKind: motorRequest.kind,
+        motorSource: motorRequest.source,
+      };
     } catch {}
     return null;
   }
-
+	
   function processAutoIntent(detail: any) {
     const payload = handleAutoIntent(detail);
     if (!payload) return;
-    const { enabled, decision, pxs, reason } = payload;
+    const { enabled, decision, pxs, reason, motorKind, motorSource } = payload;
     const mode = getScrollMode();
+      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
+      if (enabled && currentPhase !== 'live') {
+        try {
+          console.info('[AUTO_INTENT] start ignored: session not live', {
+            mode,
+            phase: currentPhase,
+            reason: reason ?? 'unknown',
+          });
+        } catch {}
+        return;
+      }
       const pxps = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
       const chosenMotor = mode === 'hybrid' ? 'hybrid' : 'auto';
       try {
         console.warn('[AUTO_INTENT] processor RUN', {
           enabled,
           mode,
+          motorKind,
+          source: motorSource,
           pxps,
           chosenMotor,
           viewerRole,
@@ -3819,7 +4055,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
   }
   function startHybridMotorFromSpeedChange() {
-    if (getScrollMode() !== "hybrid") {
+    const modeNow = getScrollMode();
+    if (modeNow !== "hybrid") {
       logHybridModeMismatch('startHybridMotorFromSpeedChange');
       return;
     }
@@ -5068,6 +5305,26 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     });
   } catch {}
   let applyGateRaf: number | null = null;
+  const MOTOR_IGNORED_LOG_THROTTLE_MS = 2000;
+  let lastMotorIgnoredLogAt = 0;
+  let lastMotorIgnoredLogKey = '';
+  function logAutoGateAction(action: string, mode: string, line: string, blockedReason = '') {
+    if (mode === 'asr' && blockedReason === 'blocked:mode-asr-motorless') {
+      return;
+    }
+    if (action !== 'MOTOR_IGNORED_OFF') {
+      try { console.info(line); } catch {}
+      return;
+    }
+    const now = Date.now();
+    const dedupeKey = `${mode}|${blockedReason}`;
+    if (dedupeKey === lastMotorIgnoredLogKey && now - lastMotorIgnoredLogAt < MOTOR_IGNORED_LOG_THROTTLE_MS) {
+      return;
+    }
+    lastMotorIgnoredLogKey = dedupeKey;
+    lastMotorIgnoredLogAt = now;
+    try { console.debug(line); } catch {}
+  }
   function scheduleApplyGate() {
     if (applyGateRaf != null) return;
     if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
@@ -5114,10 +5371,18 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         } catch {}
       }
       const viewerReady = hasScrollableTarget();
+      const requestedMotorKind = lastAutoIntentMotorRequest.kind;
+      const requestedMotorSource = lastAutoIntentMotorRequest.source;
+      const livePhase = sessionPhase === 'live';
       const sessionBlocked = !sessionIntentOn && !userEnabled;
       let autoBlocked = "blocked:sessionOff";
-      if (mode === "asr" || mode === "step" || mode === "rehearsal") {
+      if (mode === "step" || mode === "rehearsal") {
         autoBlocked = `blocked:mode-${mode}`;
+      } else if (mode === "asr") {
+        // ASR mode is motorless by design. ASR driver commits are the only mover.
+        autoBlocked = "blocked:mode-asr-motorless";
+      } else if (!livePhase) {
+        autoBlocked = "blocked:livePhase";
       } else if (sessionBlocked) {
         autoBlocked = "blocked:sessionOff";
       } else if (!userEnabled) {
@@ -5130,22 +5395,26 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         autoBlocked = "none";
       }
       const want = autoBlocked === "none";
-      const prevEnabled = enabledNow && activeMotorBrain === 'auto';
+      const prevEnabled = ((enabledNow || !!auto?.getState?.().enabled) && activeMotorBrain === 'auto');
+      const prevRunning = !!auto?.isRunning?.();
       const action = want
-        ? prevEnabled
+        ? prevRunning
           ? "MOTOR_ALREADY_RUNNING"
           : "MOTOR_START"
         : prevEnabled
           ? "MOTOR_STOP"
           : "MOTOR_IGNORED_OFF";
-      try {
-        console.info(
-          `[scroll-router] ${action} mode=${mode} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
-        );
-      } catch {}
+      logAutoGateAction(
+        action,
+        mode,
+        `[scroll-router] ${action} mode=${mode} reqKind=${requestedMotorKind} reqSource=${requestedMotorSource} sessionPhase=${sessionPhase} sessionIntent=${sessionIntentOn} pxPerSec=${autoPxPerSec} blocked=${autoBlocked}`,
+        autoBlocked,
+      );
       let emittedAutoStop = false;
       if (want) {
-        if (typeof auto.setEnabled === "function") auto.setEnabled(true);
+        try { auto.setSpeed?.(autoPxPerSec); } catch {}
+        try { auto.start?.(); } catch {}
+        try { auto.setEnabled?.(true); } catch {}
         enabledNow = true;
         setActiveMotor('auto', mode);
       } else {
@@ -5418,10 +5687,32 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       appStore.subscribe("session.scrollAutoOnLive", () => {
         applyGate();
       });
+      appStore.subscribe("scrollMode", (modeRaw) => {
+        const normalized = normalizeScrollModeValue(modeRaw);
+        if (normalized !== 'asr') return;
+        stopAllMotors("mode-enter-asr");
+        userEnabled = false;
+        userIntentOn = false;
+        sessionIntentOn = false;
+        hybridWantedRunning = false;
+        hybridSilence.pausedBySilence = false;
+        clearHybridSilenceTimer();
+        enabledNow = false;
+        asrIntentLiveSince = 0;
+        try { auto?.setEnabled?.(false); } catch {}
+        persistStoredAutoEnabled(false);
+        try { emitMotorState("auto", false); } catch {}
+        try { emitMotorState("hybridWpm", false); } catch {}
+        try { emitAutoState(); } catch {}
+      });
     }
   } catch {}
   function syncSliderWpmBeforeLiveStart() {
     if (typeof document === "undefined") {
+      liveSessionWpmLocked = false;
+      return;
+    }
+    if (getScrollMode() === "asr") {
       liveSessionWpmLocked = false;
       return;
     }
@@ -5471,6 +5762,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
   function applyWpmBaselinePx(pxs: number, source: string, wpmValue?: number) {
     if (!Number.isFinite(pxs) || pxs <= 0) return;
+    if (getScrollMode() === "asr") return;
     const storeWpm = (() => {
       try {
         const raw = localStorage.getItem('tp_baseline_wpm');

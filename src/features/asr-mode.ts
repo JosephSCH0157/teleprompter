@@ -8,6 +8,7 @@ import { normalizeText, stripFillers } from '../speech/asr-engine';
 import { WebSpeechEngine } from '../speech/engines/webspeech';
 import { getSpeechStore, type SpeechState } from './speech/speech-store';
 import { emitScrollIntent } from '../scroll/scroll-intent-bus';
+import { applyCanonicalScrollTop, getScrollerEl } from '../scroll/scroller';
 
 // How many lines the viewport is allowed to jump per ASR advance
 const ASR_MAX_VISUAL_LEAP = 3;
@@ -153,9 +154,19 @@ export class AsrMode {
 
     this.setState('ready');
     const endpointingMs = Math.max(1400, s.endpointingMs);
+    // Keep transport responsive in live ASR: capture interim hypotheses even when
+    // the UI setting is off. Commit gating still controls actual movement.
+    const effectiveInterim = true;
+    if (effectiveInterim !== s.interim) {
+      logAsrDebug('[ASR interim override]', {
+        configured: s.interim,
+        effective: effectiveInterim,
+        reason: 'live-responsiveness',
+      });
+    }
     await this.engine.start({
       lang: s.lang,
-      interim: s.interim,
+      interim: effectiveInterim,
       endpointingMs,
       profanityFilter: false,
     });
@@ -291,7 +302,7 @@ export class AsrMode {
       const score = coverage * confidence;
       if (score > bestScore) { bestScore = score; bestIdx = i; }
     }
-    logAsrDebug('[ASR threshold]', {
+    logAsrDebug('[ASR threshold] (mode-side diagnostic; not driver scorer)', {
       threshold,
       bestScore,
       bestIdx,
@@ -397,11 +408,13 @@ export class AsrMode {
 
     const top = elementTopRelativeTo(target, scroller) - marker;
     requestAnimationFrame(() => {
-      if (scroller === document.scrollingElement || scroller === document.body) {
-        window.scrollTo({ top, behavior: 'auto' });
-      } else {
-        (scroller as HTMLElement).scrollTo({ top, behavior: 'auto' });
-      }
+      if (!scroller) return;
+      applyCanonicalScrollTop(top, {
+        scroller,
+        reason: 'asr-mode-scroll',
+        source: 'asr-mode',
+      });
+      markProgrammaticScroll(scroller);
     });
   }
 
@@ -492,23 +505,22 @@ function coverageScore(line: string, hyp: string): number {
   return inter / A.size;
 }
 
-function findScroller(el: HTMLElement): Element | null {
-  let node: any = el.parentElement;
-  while (node) {
-    const style = getComputedStyle(node);
-    if (/(auto|scroll)/.test(style.overflowY || '')) return node;
-    node = node.parentElement;
-  }
-  return document.scrollingElement || document.body;
+function findScroller(_el: HTMLElement): HTMLElement | null {
+  return getScrollerEl('main') || getScrollerEl('display');
 }
 
-function elementTopRelativeTo(el: HTMLElement, scroller: any): number {
+function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement | null): number {
+  if (!scroller) return el.offsetTop || 0;
   const r1 = el.getBoundingClientRect();
-  const r2 = (scroller === document.scrollingElement || scroller === document.body)
-    ? { top: 0 } as DOMRect
-    : (scroller as HTMLElement).getBoundingClientRect();
-  const scrollTop = (scroller === document.scrollingElement || scroller === document.body)
-    ? window.pageYOffset
-    : (scroller as HTMLElement).scrollTop;
+  const r2 = scroller.getBoundingClientRect();
+  const scrollTop = scroller.scrollTop;
   return r1.top - r2.top + scrollTop;
+}
+
+function markProgrammaticScroll(scroller: HTMLElement | null): void {
+  if (!scroller) return;
+  const at = Date.now();
+  const y = Number(scroller.scrollTop || 0);
+  try { scroller.dataset.tpLastWriter = 'asr-mode'; } catch {}
+  try { (window as any).__tpLastWriter = { from: 'asr-mode', at, y }; } catch {}
 }

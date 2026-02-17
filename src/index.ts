@@ -1,8 +1,12 @@
 import { hasSupabaseConfig, supabase } from './forge/supabaseClient';
 import './scroll/adapter';
 import './features/scroll/scroll-router';
+import { bootTrace } from './boot/boot-trace';
 
 const IRON_MINE_URL = 'https://discord.com/channels/1457026850407841834/1457026850407841837';
+
+bootTrace('index.ts:module-eval:start');
+bootTrace('index.ts:static-imports:done', { scrollAdapter: true, scrollRouter: true });
 
 try {
   window.addEventListener('tp:autoIntent', (ev: any) => {
@@ -100,13 +104,31 @@ async function maybeHandleIronMineRoute(): Promise<boolean> {
 }
 
 (async () => {
+  bootTrace('index.ts:preflight:start');
   ensureDisplayMode();
-  if (isDisplayContext()) return;
+  if (isDisplayContext()) {
+    bootTrace('index.ts:preflight:display-context:return');
+    return;
+  }
   const handledIronMine = await maybeHandleIronMineRoute();
+  bootTrace('index.ts:preflight:iron-mine', { handled: handledIronMine });
   if (handledIronMine) return;
+  bootTrace('index.ts:import:index-app:start');
   await import('./index-app');
+  bootTrace('index.ts:import:index-app:resolved');
 })().catch((err) => {
+  bootTrace('index.ts:preflight:error', { error: String(err) });
   try { console.error('[TP-BOOT] preflight failed', err); } catch {}
-  if (isDisplayContext()) return;
-  void import('./index-app');
+  if (isDisplayContext()) {
+    bootTrace('index.ts:fallback-import:skipped-display-context');
+    return;
+  }
+  bootTrace('index.ts:fallback-import:index-app:start');
+  void import('./index-app')
+    .then(() => {
+      bootTrace('index.ts:fallback-import:index-app:resolved');
+    })
+    .catch((importErr) => {
+      bootTrace('index.ts:fallback-import:index-app:rejected', { error: String(importErr) });
+    });
 });

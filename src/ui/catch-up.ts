@@ -17,16 +17,6 @@ export type CatchUpDeps = {
 
 function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
   try {
-    const isWin =
-      scroller === document.scrollingElement ||
-      scroller === document.documentElement ||
-      scroller === document.body;
-    if (isWin) {
-      const rect = el.getBoundingClientRect();
-      const scrollTop =
-        window.scrollY || window.pageYOffset || scroller.scrollTop || 0;
-      return rect.top + scrollTop;
-    }
     const rect = el.getBoundingClientRect();
     const scRect = scroller.getBoundingClientRect();
     return rect.top - scRect.top + scroller.scrollTop;

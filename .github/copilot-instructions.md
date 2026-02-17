@@ -1,5 +1,16 @@
 # Teleprompter Pro - AI Coding Instructions
 
+## SSOT Enforcement (Must Follow)
+
+- This repo uses `MANIFEST.md` as architecture SSOT. Any scroll-behavior change must update `MANIFEST.md` first or in the same PR.
+- In `scrollMode='asr'`, no motors or auto-intent flows may drive scroll. ASR movement is commit-driven only.
+- ASR commit path must be writer-first: `ScrollWriter.seekToBlockAnimated(...)`; pixel drive is fallback only when writer/block mapping is unavailable.
+- Hydration must not silently flip runtime mode into ASR unless ASR is already engaged or the user selected ASR in the current session.
+- Hydration writes that touch scroll mode must be attributable (`withScrollModeWriter` metadata) for scroll-audit.
+- Only `src/index-app.ts` may publish scroll globals (`window.setScrollMode`, `window.getScrollMode`, `window.__tpScrollMode`).
+- Do not create new ScrollMode unions. Import canonical mode types and adapt dialects through translation helpers.
+- Kick is manual-only: no motor dependency, no auto-intent dependency, role-aware scroller resolution.
+
 ## Architecture Overview
 
 This is a browser-based teleprompter application built as a **modular monolith** with sophisticated scroll control and external integrations. The core is a single HTML page (`teleprompter_pro.html`) with ES6 modules for major subsystems.

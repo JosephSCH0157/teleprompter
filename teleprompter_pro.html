@@ -54,10 +54,39 @@
   <script type="module" src="./adapters/obsBridge.js"></script>
   <script type="module">
     (async () => {
+      const pushBootTrace = (tag, detail) => {
+        try {
+          const q = new URLSearchParams(window.location.search || '');
+          if (q.get('boottrace') === '0') return;
+          const hash = String(window.location.hash || '').toLowerCase();
+          const enabled =
+            q.get('boottrace') === '1' ||
+            q.get('dev') === '1' ||
+            q.has('dev') ||
+            hash.includes('boottrace=1') ||
+            hash.includes('dev') ||
+            localStorage.getItem('tp_dev_mode') === '1' ||
+            !!window.__TP_DEV ||
+            !!window.__TP_DEV1;
+          if (!enabled) return;
+          window.__tpBootTraceEnabled = true;
+          const list = (window.__tpBootTrace = window.__tpBootTrace || []);
+          const prevSeq = Number(window.__tpBootTraceSeq);
+          const seq = Number.isFinite(prevSeq) ? prevSeq + 1 : 1;
+          window.__tpBootTraceSeq = seq;
+          const t = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+            ? performance.now()
+            : Date.now();
+          list.push({ seq, t, tag, detail });
+        } catch {}
+      };
+
+      pushBootTrace('shell:module-loader:start');
       let lastErr = null;
       const manifestCandidates = ["./dist/manifest.json", "./manifest.json"];
       for (const manifestPath of manifestCandidates) {
         try {
+          pushBootTrace('shell:manifest:fetch:start', { manifestPath });
           const r = await fetch(manifestPath, { cache: "no-store" });
           if (!r.ok) throw new Error(`Missing manifest at ${manifestPath} (HTTP ${r.status})`);
           const manifest = await r.json();
@@ -66,9 +95,12 @@
             throw new Error(`manifest missing entry at ${manifestPath}`);
           }
           const entryUrl = new URL(manifest.entry, manifestUrl).toString();
+          pushBootTrace('shell:manifest:import:start', { manifestPath, entryUrl });
           await import(entryUrl);
+          pushBootTrace('shell:manifest:import:done', { manifestPath, entryUrl });
           return;
         } catch (err) {
+          pushBootTrace('shell:manifest:attempt:error', { manifestPath, error: String(err) });
           lastErr = err;
         }
       }
@@ -76,15 +108,33 @@
       const directEntryCandidates = ["./dist/index.js", "./index.js"];
       for (const entryPath of directEntryCandidates) {
         try {
+          pushBootTrace('shell:direct-import:start', { entryPath });
           await import(entryPath);
+          pushBootTrace('shell:direct-import:done', { entryPath });
           return;
         } catch (err) {
+          pushBootTrace('shell:direct-import:error', { entryPath, error: String(err) });
           lastErr = err;
         }
       }
 
       throw (lastErr || new Error("No app entry could be loaded"));
     })().catch((err) => {
+      try {
+        if (window.__tpBootTraceEnabled !== true) {
+          const q = new URLSearchParams(window.location.search || '');
+          if (q.get('boottrace') !== '1') return;
+          window.__tpBootTraceEnabled = true;
+        }
+        const list = (window.__tpBootTrace = window.__tpBootTrace || []);
+        const prevSeq = Number(window.__tpBootTraceSeq);
+        const seq = Number.isFinite(prevSeq) ? prevSeq + 1 : 1;
+        window.__tpBootTraceSeq = seq;
+        const t = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+          ? performance.now()
+          : Date.now();
+        list.push({ seq, t, tag: 'shell:module-loader:fatal', detail: String(err) });
+      } catch {}
       console.error("[TP-BOOT] failed to load entry from manifest", err);
     });
   </script>

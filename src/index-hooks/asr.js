@@ -1,17 +1,471 @@
+// src/boot/scheduler.ts
+var writeQueue = [];
+var readQueue = [];
+var rafId = 0;
+function flush() {
+  rafId = 0;
+  const writes = writeQueue;
+  const reads = readQueue;
+  writeQueue = [];
+  readQueue = [];
+  for (const fn of writes) {
+    try {
+      fn();
+    } catch (e) {
+      try {
+        console.error("[scheduler] write error", e);
+      } catch {
+      }
+    }
+  }
+  for (const fn of reads) {
+    try {
+      fn();
+    } catch (e) {
+      try {
+        console.error("[scheduler] read error", e);
+      } catch {
+      }
+    }
+  }
+}
+function ensureRaf() {
+  if (rafId) return;
+  rafId = requestAnimationFrame(flush);
+}
+function requestWrite(fn) {
+  writeQueue.push(fn);
+  ensureRaf();
+}
+function requestRead(fn) {
+  readQueue.push(fn);
+  ensureRaf();
+}
+try {
+  const maybe = window.__tpScrollWrite;
+  if (typeof maybe === "function") {
+    window.__tpScrollWrite = {
+      scrollTo(y) {
+        try {
+          maybe(y);
+        } catch {
+        }
+      },
+      scrollBy(dy) {
+        try {
+          maybe((Number(dy) || 0) + 0);
+        } catch {
+        }
+      }
+    };
+  }
+} catch {
+}
+try {
+  if (typeof window !== "undefined") {
+    window.__tpRequestWrite = requestWrite;
+    window.__tpRequestRead = requestRead;
+  }
+} catch {
+}
+
+// src/scroll/scroll-helpers.ts
+var defaultViewer = () => document.getElementById("viewer") || document.querySelector('[data-role="viewer"]');
+function shouldLogScrollWrite() {
+  try {
+    const w = window;
+    if (w.__tpScrollDebug === true) return true;
+    if (w.__tpScrollWriteDebug === true) return true;
+    const qs = new URLSearchParams(window.location.search || "");
+    if (qs.has("scrollDebug") || qs.has("scrollWriteDebug")) return true;
+  } catch {
+  }
+  return false;
+}
+function readLineIndex(el) {
+  if (!el) return null;
+  const line = el.closest ? el.closest(".line") : null;
+  if (!line) return null;
+  const raw = line.dataset.i || line.dataset.index || line.dataset.lineIdx || line.dataset.line || line.getAttribute("data-line") || line.getAttribute("data-line-idx");
+  if (raw != null && raw !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  const id = line.id || "";
+  const m = /^tp-line-(\d+)$/.exec(id);
+  if (m) return Math.max(0, Number(m[1]));
+  return null;
+}
+function computeAnchorLineIndex(scroller = defaultViewer()) {
+  if (!scroller) return null;
+  const rect = scroller.getBoundingClientRect();
+  if (!rect.height || !rect.width) return null;
+  const markerPct = typeof window.__TP_MARKER_PCT === "number" ? window.__TP_MARKER_PCT : 0.4;
+  const markerY = rect.top + rect.height * markerPct;
+  const markerX = rect.left + rect.width * 0.5;
+  const hit = document.elementFromPoint(markerX, markerY);
+  const hitIdx = readLineIndex(hit);
+  if (hitIdx != null) return hitIdx;
+  const lines = Array.from(scroller.querySelectorAll(".line"));
+  if (!lines.length) return null;
+  let bestIdx = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < lines.length; i++) {
+    const el = lines[i];
+    const r = el.getBoundingClientRect();
+    const y = r.top + r.height * 0.5;
+    const d = Math.abs(y - markerY);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = readLineIndex(el) ?? i;
+    }
+  }
+  return bestIdx != null ? Math.max(0, Math.floor(bestIdx)) : null;
+}
+
+// src/scroll/scroller.ts
+var displayScrollChannel = null;
+var scrollEventTrackerInstalled = false;
+function isElementLike(node) {
+  return !!node && typeof node === "object" && node.nodeType === 1;
+}
+function getDisplayViewerElement() {
+  if (typeof window === "undefined") return null;
+  try {
+    const w = window;
+    const direct = w.__tpDisplayViewerEl;
+    if (isElementLike(direct)) return direct;
+    const opener = w.opener;
+    const viaOpener = opener && !opener.closed ? opener.__tpDisplayViewerEl : null;
+    if (isElementLike(viaOpener)) return viaOpener;
+  } catch {
+  }
+  return null;
+}
+function getScrollerEl(role = "main") {
+  if (typeof document === "undefined") return null;
+  if (role === "display") {
+    return getDisplayViewerElement() || document.getElementById("wrap");
+  }
+  try {
+    return document.querySelector("main#viewer.viewer, #viewer") || document.getElementById("viewer");
+  } catch {
+    return document.getElementById("viewer");
+  }
+}
+function getScriptRoot() {
+  try {
+    return document.getElementById("script");
+  } catch {
+    return null;
+  }
+}
+function getFallbackScroller() {
+  try {
+    return getScrollerEl("main") || getScrollerEl("display") || getScriptRoot() || document.getElementById("wrap");
+  } catch {
+    return null;
+  }
+}
+function isScrollable(el) {
+  if (!el) return false;
+  if (el.scrollHeight - el.clientHeight > 2) return true;
+  try {
+    const st = getComputedStyle(el);
+    return /(auto|scroll)/.test(st.overflowY || "");
+  } catch {
+    return false;
+  }
+}
+function resolveActiveScroller(primary, fallback) {
+  if (isScrollable(primary)) return primary;
+  if (isScrollable(fallback)) return fallback;
+  return primary || fallback;
+}
+function describeElement(el) {
+  if (!el) return "none";
+  const id = el.id ? `#${el.id}` : "";
+  const cls = el.className ? `.${String(el.className).trim().split(/\s+/).join(".")}` : "";
+  return `${el.tagName.toLowerCase()}${id}${cls}` || el.tagName.toLowerCase();
+}
+function getPrimaryScroller() {
+  return getScrollerEl("main") || getScrollerEl("display");
+}
+function resolveViewerRole() {
+  if (typeof window === "undefined") return "main";
+  try {
+    const explicit = String(window.__TP_VIEWER_ROLE || "").toLowerCase();
+    if (explicit === "display") return "display";
+    if (explicit === "main") return "main";
+    const bodyRole = String(window.document?.body?.dataset?.viewerRole || "").toLowerCase();
+    if (bodyRole === "display") return "display";
+    if (bodyRole === "main") return "main";
+    if (window.__TP_FORCE_DISPLAY) return "display";
+    const path = String(window.location?.pathname || "").toLowerCase();
+    if (path.includes("display")) return "display";
+  } catch {
+  }
+  return "main";
+}
+function getRuntimeScroller(role = resolveViewerRole()) {
+  if (typeof document === "undefined") return null;
+  const root = getScriptRoot();
+  if (role === "display") {
+    const primary2 = getScrollerEl("display");
+    const fallback2 = document.getElementById("wrap") || root;
+    return resolveActiveScroller(primary2, fallback2);
+  }
+  const primary = getScrollerEl("main") || root;
+  const fallback = root || getScrollerEl("display");
+  return resolveActiveScroller(primary, fallback);
+}
+function isDisplayWindow() {
+  if (typeof window === "undefined") return false;
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    if (params.get("display") === "1") return true;
+    const path = (window.location.pathname || "").toLowerCase();
+    if (path.includes("display")) return true;
+    if (window.__TP_FORCE_DISPLAY) return true;
+  } catch {
+  }
+  return false;
+}
+function isDevScrollSync() {
+  if (typeof window === "undefined") return false;
+  try {
+    const w = window;
+    if (w.__tpScrollDebug || w.__tpScrollSyncDebug) return true;
+    if (w.__TP_DEV || w.__TP_DEV1 || w.__tpDevMode) return true;
+    if (w.localStorage?.getItem("tp_dev_mode") === "1") return true;
+    const params = new URLSearchParams(window.location.search || "");
+    if (params.has("scrollDebug") || params.has("dev") || params.has("debug")) return true;
+  } catch {
+  }
+  return false;
+}
+function applyCanonicalScrollTop(topPx, opts = {}) {
+  const scroller = opts.scroller || resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
+  if (!scroller) return 0;
+  const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+  const target = Math.max(0, Math.min(Number(topPx) || 0, max));
+  const before = scroller.scrollTop || 0;
+  try {
+    scroller.scrollTop = target;
+  } catch {
+  }
+  const after = scroller.scrollTop || target;
+  const writerSource = opts.source ?? opts.reason ?? "programmatic";
+  try {
+    scroller.dataset.tpLastWriter = writerSource;
+  } catch {
+  }
+  if (shouldLogScrollWrite()) {
+    try {
+      console.info("[SCROLL_WRITE_DETAIL]", {
+        source: writerSource,
+        reason: opts.reason,
+        target: Math.round(target),
+        before: Math.round(before),
+        after: Math.round(after),
+        scroller: describeElement(scroller)
+      });
+    } catch {
+    }
+  }
+  try {
+    let actualTop = target;
+    try {
+      actualTop = scroller.scrollTop || target;
+    } catch {
+    }
+    const ratio = max > 0 ? actualTop / max : 0;
+    const cursorLine = computeAnchorLineIndex(scroller);
+    const payload = {
+      type: "scroll",
+      top: actualTop,
+      ratio,
+      anchorRatio: ratio,
+      cursorLine: cursorLine ?? void 0
+    };
+    const send = window.sendToDisplay || window.__tpSendToDisplay || window.__tpDisplay?.sendToDisplay;
+    if (typeof send === "function") {
+      send(payload);
+    } else {
+      const displayWin = window.__tpDisplayWindow;
+      if (displayWin && !displayWin.closed && typeof displayWin.postMessage === "function") {
+        displayWin.postMessage(payload, "*");
+      } else if (typeof BroadcastChannel !== "undefined") {
+        if (!displayScrollChannel) {
+          try {
+            displayScrollChannel = new BroadcastChannel("tp_display");
+          } catch {
+          }
+        }
+        try {
+          displayScrollChannel?.postMessage(payload);
+        } catch {
+        }
+      }
+    }
+  } catch {
+  }
+  if (isDevScrollSync()) {
+    try {
+      console.debug("[SCROLL_SYNC]", {
+        top: Math.round(target),
+        scroller: describeElement(scroller),
+        reason: opts.reason
+      });
+    } catch {
+    }
+  }
+  return target;
+}
+if (typeof window !== "undefined") {
+  try {
+    const w = window;
+    if (!isDisplayWindow()) {
+      w.__tpScrollWrite = {
+        scrollTo(top) {
+          applyCanonicalScrollTop(top, { reason: "writer:scrollTo", source: "scroll-writer" });
+        },
+        scrollBy(delta) {
+          const sc = resolveActiveScroller(getPrimaryScroller(), getScriptRoot() || getFallbackScroller());
+          const cur = sc ? sc.scrollTop || 0 : 0;
+          applyCanonicalScrollTop(cur + (Number(delta) || 0), { reason: "writer:scrollBy", source: "scroll-writer" });
+        }
+      };
+    }
+  } catch {
+  }
+}
+if (typeof window !== "undefined") {
+  try {
+    if (!scrollEventTrackerInstalled) {
+      const handler = (event) => {
+        if (!shouldLogScrollWrite()) return;
+        const target = event.target;
+        if (!target) return;
+        try {
+          console.info("[SCROLL_EVENT]", {
+            scrollTop: Math.round(target.scrollTop || 0),
+            tpLastWriter: target.dataset.tpLastWriter ?? null,
+            isTrusted: event.isTrusted,
+            scroller: describeElement(target)
+          });
+        } catch {
+        }
+      };
+      window.addEventListener("scroll", handler, { capture: true, passive: true });
+      scrollEventTrackerInstalled = true;
+    }
+  } catch {
+  }
+}
+
+// src/env/dev-log.ts
+var MIN_LOG_LEVEL = 0;
+var MAX_LOG_LEVEL = 3;
+var DEFAULT_DEV_LOG_LEVEL = 1;
+function clampLogLevel(value) {
+  if (!Number.isFinite(value)) return MIN_LOG_LEVEL;
+  return Math.max(MIN_LOG_LEVEL, Math.min(MAX_LOG_LEVEL, Math.floor(value)));
+}
+function parseLogLevelRaw(value) {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return clampLogLevel(parsed);
+}
+function isDevContext() {
+  if (typeof window === "undefined") return false;
+  try {
+    const w = window;
+    if (w.__TP_DEV || w.__TP_DEV1 || w.__tpDevMode) return true;
+    const params = new URLSearchParams(window.location.search || "");
+    if (params.has("dev") || params.has("debug") || params.has("dev1")) return true;
+    if (window.localStorage?.getItem("tp_dev_mode") === "1") return true;
+  } catch {
+  }
+  return false;
+}
+function getTpLogLevel() {
+  if (typeof window === "undefined") return MIN_LOG_LEVEL;
+  try {
+    const w = window;
+    const runtimeLevel = parseLogLevelRaw(w.__tpLogLevel);
+    if (runtimeLevel != null) return runtimeLevel;
+  } catch {
+  }
+  try {
+    const stored = parseLogLevelRaw(window.localStorage?.getItem("tp_log_level"));
+    if (stored != null) return stored;
+  } catch {
+  }
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const fromQuery = parseLogLevelRaw(params.get("tp_log_level")) ?? parseLogLevelRaw(params.get("logLevel")) ?? parseLogLevelRaw(params.get("log"));
+    if (fromQuery != null) return fromQuery;
+  } catch {
+  }
+  return isDevContext() ? DEFAULT_DEV_LOG_LEVEL : MIN_LOG_LEVEL;
+}
+function shouldLogLevel(minLevel) {
+  return getTpLogLevel() >= clampLogLevel(minLevel);
+}
+
 // src/scroll/scroll-writer.ts
 var cached = null;
 var warned = false;
+function shouldTraceWrites() {
+  return shouldLogLevel(3);
+}
+function withWriteEnabled(reason, delta, fn) {
+  const w = window;
+  const prev = w.__tpScrollWriteActive;
+  w.__tpScrollWriteActive = true;
+  if (shouldTraceWrites()) {
+    try {
+      console.trace("[scroll-write]", reason, delta);
+    } catch {
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    w.__tpScrollWriteActive = prev;
+  }
+}
+function readScrollTop(scroller) {
+  return scroller.scrollTop || 0;
+}
+function getDeltaScroller() {
+  return getRuntimeScroller(resolveViewerRole()) || getScrollerEl("main") || getScrollerEl("display") || getDisplayViewerElement() || document.getElementById("wrap");
+}
+function estimateDelta(targetTop) {
+  try {
+    const sc = getDeltaScroller();
+    const cur = sc ? readScrollTop(sc) : 0;
+    return (Number(targetTop) || 0) - (Number(cur) || 0);
+  } catch {
+    return Number(targetTop) || 0;
+  }
+}
 function getScrollWriter() {
   if (cached) return cached;
   if (typeof window !== "undefined") {
     const maybe = window.__tpScrollWrite;
     if (typeof maybe === "function") {
       const fn = maybe;
-      const getScroller = () => document.getElementById("scriptScrollContainer") || document.getElementById("viewer") || document.scrollingElement || document.documentElement || document.body;
+      const getScroller = () => getRuntimeScroller(resolveViewerRole()) || getScrollerEl("main") || getScrollerEl("display") || getDisplayViewerElement();
       cached = {
         scrollTo(top) {
           try {
-            fn(top);
+            const sc = getScroller();
+            const cur = sc ? sc.scrollTop || 0 : 0;
+            const next = Number(top) || 0;
+            withWriteEnabled("scrollTo", next - cur, () => fn(next));
           } catch {
           }
         },
@@ -19,7 +473,8 @@ function getScrollWriter() {
           try {
             const sc = getScroller();
             const cur = sc ? sc.scrollTop || 0 : 0;
-            fn(cur + (Number(delta) || 0));
+            const d = Number(delta) || 0;
+            withWriteEnabled("scrollBy", d, () => fn(cur + d));
           } catch {
           }
         },
@@ -35,22 +490,23 @@ function getScrollWriter() {
         cached = {
           scrollTo(top, opts) {
             try {
-              writerImpl.scrollTo(top, opts);
+              withWriteEnabled("scrollTo", estimateDelta(top), () => writerImpl.scrollTo(top, opts));
             } catch {
             }
           },
           scrollBy(delta, opts) {
             try {
-              writerImpl.scrollBy(delta, opts);
+              withWriteEnabled("scrollBy", Number(delta) || 0, () => writerImpl.scrollBy(delta, opts));
             } catch {
             }
           },
           ensureVisible(top, paddingPx = 80) {
             try {
               if (typeof writerImpl.ensureVisible === "function") {
-                writerImpl.ensureVisible(top, paddingPx);
+                withWriteEnabled("ensureVisible", estimateDelta(top), () => writerImpl.ensureVisible(top, paddingPx));
               } else {
-                writerImpl.scrollTo(Math.max(0, top - paddingPx), { behavior: "auto" });
+                const next = Math.max(0, top - paddingPx);
+                withWriteEnabled("ensureVisible", estimateDelta(next), () => writerImpl.scrollTo(next, { behavior: "auto" }));
               }
             } catch {
             }
@@ -78,6 +534,88 @@ function getScrollWriter() {
     }
   };
   return cached;
+}
+
+// src/scroll/audit.ts
+var EXPECTED_WRITERS = /* @__PURE__ */ new Set([
+  "ui/applyUiScrollMode",
+  "features/scroll/mode-router",
+  "scroll/mode-router",
+  "state/app-store"
+]);
+var CONTINUOUS_MODES = /* @__PURE__ */ new Set(["timed", "wpm", "hybrid", "asr"]);
+var FORBIDDEN_PHASES = /* @__PURE__ */ new Set(["idle", "preroll"]);
+var RACE_WINDOW_MS = 150;
+var writerStack = [];
+var lastWriteAt = 0;
+var lastWriter = "";
+var lastMode = "";
+var lastPhase = "";
+function auditEnabled() {
+  try {
+    const w = window;
+    if (w?.__TP_DEV || w?.__TP_DEV1 || w?.__tpDevMode) return true;
+    if (w?.localStorage?.getItem?.("tp_dev_mode") === "1") return true;
+    if (typeof location !== "undefined" && location.search.includes("dev=1")) return true;
+  } catch {
+  }
+  return false;
+}
+function getScrollModeAuditContext() {
+  if (!auditEnabled()) return null;
+  return writerStack.length ? writerStack[writerStack.length - 1] : null;
+}
+function isContinuousMode(mode) {
+  return CONTINUOUS_MODES.has(mode);
+}
+function normalize(value) {
+  return String(value || "").trim().toLowerCase();
+}
+function emitUnexpected(label, payload) {
+  try {
+    console.warn(`[scroll-audit] UNEXPECTED ${label}`, payload);
+  } catch {
+  }
+}
+function recordScrollModeWrite(event) {
+  if (!auditEnabled()) return;
+  const now = Date.now();
+  const writer = event.writer || "unknown";
+  const from = normalize(event.from);
+  const to = normalize(event.to);
+  if (!to || to === from) return;
+  const phase = normalize(event.phase);
+  const reasons = [];
+  if (!EXPECTED_WRITERS.has(writer)) reasons.push("unexpected-writer");
+  if (FORBIDDEN_PHASES.has(phase) && isContinuousMode(to)) reasons.push("forbidden-phase");
+  const deltaMs = lastWriteAt ? now - lastWriteAt : 0;
+  if (lastWriteAt && deltaMs < RACE_WINDOW_MS) reasons.push("rapid-write");
+  if (reasons.length > 0) {
+    const payload = {
+      reasons,
+      writer,
+      from,
+      to,
+      phase: phase || "unknown",
+      deltaMs: lastWriteAt ? deltaMs : null,
+      lastWriter: lastWriter || null,
+      lastMode: lastMode || null,
+      lastPhase: lastPhase || null
+    };
+    if (event.source) payload.source = event.source;
+    if (event.via) payload.via = event.via;
+    if (event.stack) {
+      try {
+        payload.stack = new Error().stack;
+      } catch {
+      }
+    }
+    emitUnexpected("scrollMode-write", payload);
+  }
+  lastWriteAt = now;
+  lastWriter = writer;
+  lastMode = to;
+  lastPhase = phase;
 }
 
 // src/features/scroll/scroll-prefs.ts
@@ -181,6 +719,10 @@ var ASR_THRESHOLD_KEY = "tp_asr_threshold_v1";
 var ASR_ENDPOINT_KEY = "tp_asr_endpoint_v1";
 var ASR_PROFILES_KEY = "tp_asr_profiles_v1";
 var ASR_ACTIVE_PROFILE_KEY = "tp_asr_active_profile_v1";
+var SINGLE_MONITOR_READ_KEY = "tp_single_monitor_read_v1";
+var ASR_CALM_MODE_KEY = "tp_asr_calm_mode_v1";
+var ASR_TUNING_PROFILES_KEY = "tp_asr_tuning_profiles_v1";
+var ASR_TUNING_ACTIVE_PROFILE_KEY = "tp_asr_tuning_active_profile_v1";
 var SCROLL_MODE_KEY = "scrollMode";
 var TIMED_SPEED_KEY = "tp_scroll_timed_speed_v1";
 var WPM_TARGET_KEY = "tp_scroll_wpm_target_v1";
@@ -215,6 +757,7 @@ var persistMap = {
   hudSpeechNotesEnabledByUser: HUD_SPEECH_NOTES_KEY,
   overlay: OVERLAY_KEY,
   cameraEnabled: CAMERA_KEY,
+  singleMonitorReadEnabled: SINGLE_MONITOR_READ_KEY,
   // Scroll router persistence
   scrollMode: SCROLL_MODE_KEY,
   timedSpeed: TIMED_SPEED_KEY,
@@ -235,8 +778,11 @@ var persistMap = {
   "asr.threshold": ASR_THRESHOLD_KEY,
   "asr.endpointMs": ASR_ENDPOINT_KEY,
   "asr.filterFillers": ASR_FILTER_KEY,
+  asrCalmModeEnabled: ASR_CALM_MODE_KEY,
   asrProfiles: ASR_PROFILES_KEY,
-  asrActiveProfileId: ASR_ACTIVE_PROFILE_KEY
+  asrActiveProfileId: ASR_ACTIVE_PROFILE_KEY,
+  asrTuningProfiles: ASR_TUNING_PROFILES_KEY,
+  asrTuningActiveProfileId: ASR_TUNING_ACTIVE_PROFILE_KEY
 };
 function parseJson(value) {
   if (!value) return null;
@@ -291,6 +837,20 @@ function readAndMigrateScrollMode() {
     const canonical = localStorage.getItem(SCROLL_MODE_KEY);
     if (canonical) {
       const norm = normalizeScrollMode(canonical);
+      if (norm === "asr") {
+        localStorage.setItem(SCROLL_MODE_KEY, "hybrid");
+        try {
+          localStorage.setItem("tp_asr_boot_fallback", "1");
+        } catch {
+        }
+        legacyKeys.forEach((k) => {
+          try {
+            localStorage.removeItem(k);
+          } catch {
+          }
+        });
+        return "hybrid";
+      }
       if (norm !== canonical) localStorage.setItem(SCROLL_MODE_KEY, norm);
       legacyKeys.forEach((k) => {
         try {
@@ -304,6 +864,18 @@ function readAndMigrateScrollMode() {
       const legacy = localStorage.getItem(k);
       if (legacy) {
         const norm = normalizeScrollMode(legacy);
+        if (norm === "asr") {
+          localStorage.setItem(SCROLL_MODE_KEY, "hybrid");
+          try {
+            localStorage.setItem("tp_asr_boot_fallback", "1");
+          } catch {
+          }
+          try {
+            localStorage.removeItem(k);
+          } catch {
+          }
+          return "hybrid";
+        }
         localStorage.setItem(SCROLL_MODE_KEY, norm);
         try {
           localStorage.removeItem(k);
@@ -403,6 +975,13 @@ function buildInitialState() {
         return false;
       }
     })(),
+    singleMonitorReadEnabled: (() => {
+      try {
+        return localStorage.getItem(SINGLE_MONITOR_READ_KEY) === "1";
+      } catch {
+        return false;
+      }
+    })(),
     asrLive: false,
     "asr.engine": (() => {
       try {
@@ -464,6 +1043,14 @@ function buildInitialState() {
       }
       return 700;
     })(),
+    asrCalmModeEnabled: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_CALM_MODE_KEY);
+        if (raw !== null) return raw === "1";
+      } catch {
+      }
+      return false;
+    })(),
     asrProfiles: (() => {
       try {
         const raw = localStorage.getItem(ASR_PROFILES_KEY);
@@ -476,6 +1063,23 @@ function buildInitialState() {
     asrActiveProfileId: (() => {
       try {
         const raw = localStorage.getItem(ASR_ACTIVE_PROFILE_KEY);
+        if (raw) return raw;
+      } catch {
+      }
+      return null;
+    })(),
+    asrTuningProfiles: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_TUNING_PROFILES_KEY);
+        const parsed = parseJson(raw);
+        if (parsed && typeof parsed === "object") return parsed;
+      } catch {
+      }
+      return {};
+    })(),
+    asrTuningActiveProfileId: (() => {
+      try {
+        const raw = localStorage.getItem(ASR_TUNING_ACTIVE_PROFILE_KEY);
         if (raw) return raw;
       } catch {
       }
@@ -535,8 +1139,14 @@ function buildInitialState() {
         }
         return null;
       })();
+      if (fromPrefs === "asr") {
+        try {
+          localStorage.setItem("tp_asr_boot_fallback", "1");
+        } catch {
+        }
+      }
       const migrated = readAndMigrateScrollMode();
-      const chosen = normalizeScrollMode(fromPrefs || migrated);
+      const chosen = normalizeScrollMode((fromPrefs === "asr" ? null : fromPrefs) || migrated);
       try {
         localStorage.setItem(SCROLL_MODE_KEY, chosen);
       } catch {
@@ -682,6 +1292,12 @@ function sanitizeState(state) {
   if (state.asrActiveProfileId && typeof state.asrActiveProfileId !== "string") {
     state.asrActiveProfileId = null;
   }
+  if (!state.asrTuningProfiles || typeof state.asrTuningProfiles !== "object") {
+    state.asrTuningProfiles = {};
+  }
+  if (state.asrTuningActiveProfileId && typeof state.asrTuningActiveProfileId !== "string") {
+    state.asrTuningActiveProfileId = null;
+  }
   if (typeof state.asrLastAppliedAt !== "number") {
     state.asrLastAppliedAt = 0;
   }
@@ -738,6 +1354,21 @@ function createAppStore(initial) {
       const prev = state[key];
       if (prev === value) return value;
       state[key] = value;
+      if (key === "scrollMode") {
+        try {
+          const ctx = getScrollModeAuditContext();
+          recordScrollModeWrite({
+            writer: ctx?.writer || "unknown",
+            from: prev,
+            to: value,
+            phase: state["session.phase"],
+            source: ctx?.meta?.source,
+            via: ctx?.meta?.via,
+            stack: !!ctx?.meta?.stack
+          });
+        } catch {
+        }
+      }
       try {
         const storageKey = persistMap[key];
         if (storageKey) {
@@ -876,7 +1507,7 @@ function initAsrFeature() {
     }
   } catch {
   }
-  const normalize = (s) => {
+  const normalize2 = (s) => {
     try {
       return String(s || "").toLowerCase().replace(/[^a-z0-9\s']/g, " ").replace(/\s+/g, " ").trim();
     } catch {
@@ -1387,7 +2018,7 @@ function initAsrFeature() {
       if (e.type === "listening") this.setState("listening");
       if (e.type === "partial" || e.type === "final") {
         if (this.state !== "running") this.setState("running");
-        const text = normalize(e.text);
+        const text = normalize2(e.text);
         if (e.type === "partial") {
           try {
             this._lastPartialAt = performance.now();
@@ -1427,7 +2058,7 @@ function initAsrFeature() {
       const els = this.getAllLineEls();
       const start2 = Math.max(0, Math.min(this.currentIdx, Math.max(0, els.length - 1)));
       const end = Math.max(start2, Math.min(els.length, start2 + this.opts.windowSize));
-      const texts = els.slice(start2, end).map((el) => normalize(el.textContent || ""));
+      const texts = els.slice(start2, end).map((el) => normalize2(el.textContent || ""));
       return { lines: texts, idx0: start2 };
     }
     shouldCommit(idx, score) {

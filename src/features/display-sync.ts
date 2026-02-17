@@ -1,4 +1,5 @@
 import { publishToNetworkDisplays } from '../net/display-ws-client';
+import { shouldLogLevel } from '../env/dev-log';
 
 // Single source of truth: BroadcastChannel transport for raw script text only
 let displayCh: BroadcastChannel | null = null;
@@ -48,7 +49,9 @@ export function publishDisplayScript(rawText: string, opts?: { force?: boolean; 
     latestRaw = text;
     rev += 1;
     try {
-      console.log('[publishDisplayScript]', { rev, len: text.length });
+      if (shouldLogLevel(2)) {
+        console.log('[publishDisplayScript]', { rev, len: text.length });
+      }
     } catch {}
 
     const payload: DisplayScriptPayload = {
@@ -108,8 +111,12 @@ export function installDisplaySync(opts: DisplaySyncOpts): () => void {
     const w = window as any;
     w.__TP_INSTALL_DISPLAY_SYNC = (w.__TP_INSTALL_DISPLAY_SYNC || 0) + 1;
     if (w.__TP_INSTALL_DISPLAY_SYNC > 1 && (w.__TP_DEV || w.__TP_DEV1)) {
-      console.warn('[display-sync] installDisplaySync called multiple times', w.__TP_INSTALL_DISPLAY_SYNC);
-      try { console.trace('[display-sync] install stack'); } catch {}
+      if (shouldLogLevel(1)) {
+        console.warn('[display-sync] installDisplaySync called multiple times', w.__TP_INSTALL_DISPLAY_SYNC);
+      }
+      if (shouldLogLevel(3)) {
+        try { console.trace('[display-sync] install stack'); } catch {}
+      }
     }
   } catch {}
 

@@ -16,6 +16,32 @@ try {
 } catch {}
 try { console.log('[TP-BOOT] TS index.ts booted'); } catch {}
 try { (window as any).__TP_TS_OVERLAYS = true; } catch {}
+try {
+  const q = new URLSearchParams(window.location.search || '');
+  const hash = String(window.location.hash || '').toLowerCase();
+  const enabled =
+    q.get('boottrace') === '1' ||
+    q.get('dev') === '1' ||
+    q.has('dev') ||
+    hash.includes('boottrace=1') ||
+    hash.includes('dev') ||
+    (() => {
+      try { return localStorage.getItem('tp_dev_mode') === '1'; } catch { return false; }
+    })() ||
+    !!(window as any).__TP_DEV ||
+    !!(window as any).__TP_DEV1;
+  if (enabled) {
+    (window as any).__tpBootTraceEnabled = true;
+    const list = ((window as any).__tpBootTrace = (window as any).__tpBootTrace || []);
+    const prevSeq = Number((window as any).__tpBootTraceSeq);
+    const seq = Number.isFinite(prevSeq) ? prevSeq + 1 : 1;
+    (window as any).__tpBootTraceSeq = seq;
+    const t = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+      ? performance.now()
+      : Date.now();
+    list.push({ seq, t, tag: 'index-app.ts:module-eval:enter' });
+  }
+} catch {}
 
 // Thin conductor: this file only orchestrates boot. Feature logic lives in their modules.
 // Signal TS is primary so legacy preloaders can stand down
@@ -29,6 +55,8 @@ try {
 // Compatibility helpers (ID aliases and tolerant $id()) must be installed very early
 import './boot/compat-ids';
 import './features/speech/speech-store';
+import { bootTrace, bootTraceDumpToConsole } from './boot/boot-trace';
+import { shouldLogLevel } from './env/dev-log';
 // Global app store (single initializer for __tpStore)
 import { appStore } from './state/app-store';
 import { speechStore, type SpeechState } from './state/speech-store';
@@ -97,6 +125,8 @@ import { ensureMicAccess } from './asr/mic-gate';
 import { initMappedFolder, listScripts } from './fs/mapped-folder';
 import { ScriptStore } from './features/scripts-store';
 import { initAuthUnlock } from './features/auth-unlock';
+
+bootTrace('index-app.ts:module-eval:imports-ready');
 
 function showFatalFallback(): void {
   try {
@@ -177,6 +207,7 @@ function installFatalGuards(): void {
 }
 
 installFatalGuards();
+bootTrace('index-app.ts:early:fatal-guards:done');
 import { bootstrap } from './boot/boot';
 
 try { console.warn('[ROUTER_STAMP] index-app', ROUTER_STAMP); } catch {}
@@ -233,12 +264,27 @@ function attachScrollWriterOnce(): void {
 }
 
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
-try { initAsrScrollBridge(appStore); } catch {}
-try { initObsBridge(appStore); } catch {}
+try {
+	initAsrScrollBridge(appStore);
+	bootTrace('index-app.ts:early:asr-bridge:init');
+} catch (error) {
+	bootTrace('index-app.ts:early:asr-bridge:error', { error: String(error) });
+}
+try {
+	initObsBridge(appStore);
+	bootTrace('index-app.ts:early:obs-bridge:init');
+} catch (error) {
+	bootTrace('index-app.ts:early:obs-bridge:error', { error: String(error) });
+}
 // Early-safe OBS UI/status wiring: binders are idempotent and will wait for DOM
 try { bindObsSettingsUI(); } catch {}
 try { bindObsStatusPills(); } catch {}
-try { initObsConnection(); } catch {}
+try {
+	initObsConnection();
+	bootTrace('index-app.ts:early:obs-connection:init');
+} catch (error) {
+	bootTrace('index-app.ts:early:obs-connection:error', { error: String(error) });
+}
 // Keep recorder SSOT in sync with appStore.obsEnabled (legacy flag that can auto-arm the bridge)
 try {
 	const seed = appStore.get?.('obsEnabled');
@@ -254,13 +300,22 @@ try { ensurePageTabs(appStore); } catch {}
 // Run bootstrap (best-effort, non-blocking). The legacy monolith still calls
 // window._initCore/_initCoreRunner paths; this ensures the modular runtime
 // sets up the same early hooks when the module entry is used.
-bootstrap().catch(() => {
-	// HUD/debug paths are optional; never block boot
-});
+bootTrace('index-app.ts:early:scheduler:bootstrap:start');
+void bootstrap()
+	.then(() => {
+		bootTrace('index-app.ts:early:scheduler:bootstrap:done');
+	})
+	.catch((error) => {
+		bootTrace('index-app.ts:early:scheduler:bootstrap:fail', { error: String(error) });
+		// HUD/debug paths are optional; never block boot
+	});
 
 try {
 	initRecorderBackends();
-} catch {}
+	bootTrace('index-app.ts:early:recorders:registered');
+} catch (error) {
+	bootTrace('index-app.ts:early:recorders:error', { error: String(error) });
+}
 
 // Install vendor shims (mammoth) so legacy code can use window.ensureMammoth
 import './vendor/mammoth';
@@ -270,6 +325,7 @@ import './ui/settings/asr-wizard';
 // Feature initializers (legacy JS modules)
 // If/when these are migrated to TS, drop the .js extension and types will flow.
 import { initHotkeys } from './features/hotkeys';
+import { kick } from './features/kick/kick';
 import { initPersistence } from './features/persistence';
 import { initTelemetry } from './features/telemetry';
 import { initToasts } from './features/toasts';
@@ -380,6 +436,19 @@ function isDevMode(): boolean {
 	}
 }
 
+function attachKickDevGlobalOnce(): void {
+  if (!isDevMode()) return;
+  try {
+    const w = window as any;
+    if (typeof w.__tpKick === 'function') return;
+    const invoke = (options?: Parameters<typeof kick>[0]) => kick(options);
+    w.__tpKick = invoke;
+    // Dev-only compatibility alias for existing console snippets.
+    w.__tpKickScroll = invoke;
+    try { console.info('[DEV] __tpKick attached'); } catch {}
+  } catch {}
+}
+
 function devLog(...args: any[]) {
 	if (!isDevMode()) return;
 	try { console.debug('[settings]', ...args); } catch {}
@@ -482,13 +551,27 @@ function applySettingsToStore(settings: UserSettings, store: typeof appStore) {
 		SETTINGS_KEYS.forEach((k) => {
 			if (!Object.prototype.hasOwnProperty.call(app, k)) return;
 			if (k === 'scrollMode') {
+				let raw = '';
+				let current = '';
 				try {
-					const raw = String((app as any)[k] ?? '').trim().toLowerCase();
-					if (raw !== 'asr' && isAsrOverlayActive()) {
+					raw = normalizeUiScrollMode(String((app as any)[k] ?? '').trim().toLowerCase());
+					current = normalizeUiScrollMode(store.get?.('scrollMode') as string | undefined);
+					const engaged = isAsrOverlayActive();
+					if (raw === 'asr' && current !== 'asr' && !engaged) {
+						devLog('[ASR] hydrate skipped scrollMode override to asr', { raw, current, engaged });
+						return;
+					}
+					if (raw !== 'asr' && engaged) {
 						devLog('[ASR] hydrate skipped scrollMode override while engaged', { raw });
 						return;
 					}
 				} catch {}
+				try {
+					withScrollModeWriter('state/app-store', () => {
+						store.set?.('scrollMode' as any, raw as any);
+					}, { source: 'hydrate', via: 'profile' });
+				} catch {}
+				return;
 			}
 			try { store.set?.(k as any, (app as any)[k]); } catch {}
 		});
@@ -838,7 +921,9 @@ function applyUiScrollMode(
   };
   const dispatchAutoIntentEvent = (on: boolean) => {
     try {
-      console.trace('[probe] dispatch tp:auto:intent', { on });
+      if (shouldLogLevel(3)) {
+        console.trace('[probe] dispatch tp:auto:intent', { on });
+      }
     } catch {}
     try {
       document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));
@@ -1114,9 +1199,14 @@ function initScrollModeUiSync(): void {
         : `${defaultAsrLabel || 'ASR'} (enable mic to use)`;
     }
     if (help) {
-      help.textContent = ready
-        ? defaultHelpText
-        : `${baseHelpText} - ${reasonLabel || 'enable mic to use ASR'}.`;
+      if (ready) {
+        const current = normalizeUiScrollMode(appStore.get?.('scrollMode') as string | undefined);
+        try { applyScrollModeUI(current as any); } catch {
+          help.textContent = defaultHelpText;
+        }
+      } else {
+        help.textContent = `${baseHelpText} - ${reasonLabel || 'enable mic to use ASR'}.`;
+      }
     }
     if (hint) {
       if (ready) {
@@ -1216,7 +1306,9 @@ function initScrollModeUiSync(): void {
   }
 }
 
+bootTrace('index-app.ts:early:mode-ui-sync:start');
 initScrollModeUiSync();
+bootTrace('index-app.ts:early:mode-ui-sync:installed');
 
 // Expose this function as the global router for existing JS
 try { (window as any).__tpAppStore = appStore; } catch {}
@@ -1518,6 +1610,7 @@ import { bindMappedFolderUI, bindPermissionButton, handleChooseFolder } from './
 import { triggerSettingsDownload } from './features/settings/exportSettings';
 import { triggerSettingsImport } from './features/settings/importSettings';
 import { installScrollWriteGuard } from './dev/scroll-write-guard';
+import { getScrollerEl } from './scroll/scroller';
 // ensure this file is executed in smoke runs
 import './smoke/settings-mapped-folder.smoke.js';
 
@@ -1530,8 +1623,9 @@ function onDomReady(fn: () => void): void {
 }
 
   // Simple DOM-ready hook used by diagnostics to ensure the scheduler and legacy auto-scroll UI remain operational.
+  bootTrace('index-app.ts:dom-ready-hook:install:start');
   try {
-			onDomReady(() => {
+				onDomReady(() => {
         // Display window is a passive mirror; skip main UI wiring to avoid duplicate observers
         if (isDisplayContext()) return;
         try { bindStaticDom(); } catch (e) { try { console.warn('[index] bindStaticDom failed', e); } catch {} }
@@ -1574,19 +1668,19 @@ function onDomReady(fn: () => void): void {
 		// Dev-only guard: log direct scroll writes on the main scroller.
 		try {
 			const scroller =
+				getScrollerEl('main') ||
+				getScrollerEl('display') ||
 				(document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-				(document.getElementById('viewer') as HTMLElement | null) ||
-				(document.scrollingElement as HTMLElement | null) ||
-				(document.documentElement as HTMLElement | null) ||
-				(document.body as HTMLElement | null);
+				(document.getElementById('viewer') as HTMLElement | null);
 			installScrollWriteGuard(scroller);
 		} catch {}
 
 		// LEGACY AUTO-SPEED HOOK – intentionally disabled.
 		// Autoscroll now owns #autoSpeed via src/features/autoscroll.ts.
 
-	});
-} catch {}
+		});
+    bootTrace('index-app.ts:dom-ready-hook:installed');
+	} catch {}
 
 // Install emergency binder only in dev/CI/headless harness contexts (to reduce double-binding risk in prod)
 try {
@@ -1825,9 +1919,10 @@ function __maybePopulateMockFolder() {
 
 // Unified TS boot function — consolidates prior scattered DOMContentLoaded wiring
 export async function boot() {
-		try {
+		bootTrace('boot():enter');
 			try {
-				if ((window as any).__tpBooted) {
+				try {
+					if ((window as any).__tpBooted) {
 					throw new Error('Anvil booted twice — aborting');
 				}
 				(window as any).__tpBooted = true;
@@ -1865,15 +1960,17 @@ export async function boot() {
 				try { initDevDrawer(); } catch {}
 			}
 
-			// Session slice + preroll-driven orchestration
-			try { initSession(); } catch {}
-			try { initPrerollSession(); } catch {}
-			try { initScrollSessionRouter(); } catch {}
-			try { initRecordingSession(); } catch {}
+				// Session slice + preroll-driven orchestration
+				try { initSession(); } catch {}
+				try { initPrerollSession(); } catch {}
+				try { initScrollSessionRouter(); } catch {}
+				try { initRecordingSession(); } catch {}
+				bootTrace('boot():session-init:done');
 
-			// Profile/settings hydration (Supabase) before UI wiring
-			let profileUserId: string | null = null;
-			if (shouldGateAuth()) {
+				// Profile/settings hydration (Supabase) before UI wiring
+				bootTrace('boot():auth-hydrate:start');
+				let profileUserId: string | null = null;
+				if (shouldGateAuth()) {
 				try {
 					const { data, error } = await supabase.auth.getUser();
 					const hasUser = !error && !!data?.user;
@@ -1891,7 +1988,7 @@ export async function boot() {
 				}
 			}
 
-			if (profileUserId) {
+				if (profileUserId) {
 				if (!IS_CI_MODE) {
 					try {
 						const { settings, rev } = await loadProfileSettings(profileUserId);
@@ -1918,21 +2015,34 @@ export async function boot() {
 					currentSettings = snapshotAppSettings(appStore);
 					profileHydrated = true;
 					devLog('hydrate:ci-skip');
+					}
 				}
-			}
+				bootTrace('boot():auth-hydrate:done', { profileUserId: profileUserId || null });
 
-			// Early: folder card injection + async watcher (before any user opens Settings)
+				// Early: folder card injection + async watcher (before any user opens Settings)
           try { ensureSettingsFolderControls(); } catch {}
           try { ensureSettingsFolderControlsAsync(6000); } catch {}
           // Mock population for CI (after initial injection attempt)
           __maybePopulateMockFolder();
 
-			// Attempt OBS bridge claim early (non-blocking)
-			try { initObsBridgeClaim(); } catch {}
-			// ASR feature (hotkeys & UI)
-			try { initAsrFeature(); } catch {}
-			// OBS Settings wiring (Test connect button)
-			try { initObsUI(); } catch {}
+				// Attempt OBS bridge claim early (non-blocking)
+			bootTrace('boot():initObsBridgeClaim:start');
+			try {
+				initObsBridgeClaim();
+				bootTrace('boot():initObsBridgeClaim:done');
+			} catch (error) {
+				bootTrace('boot():initObsBridgeClaim:error', { error: String(error) });
+			}
+				// ASR feature (hotkeys & UI)
+			bootTrace('boot():initAsrFeature:start');
+			try {
+				initAsrFeature();
+				bootTrace('boot():initAsrFeature:done');
+			} catch (error) {
+				bootTrace('boot():initAsrFeature:error', { error: String(error) });
+			}
+				// OBS Settings wiring (Test connect button)
+				try { initObsUI(); } catch {}
 
 					// Load adapters via ESM imports (TS-controlled). Enable DEV hotkeys.
 					try {
@@ -1944,13 +2054,20 @@ export async function boot() {
 					} catch {}
 
           // ASR bridge: mirror legacy asr-bridge-speech.js (start/stop on speech events)
-          try { initSpeechBridge(); } catch {}
+          bootTrace('boot():initSpeechBridge:start');
+          try {
+            initSpeechBridge();
+            bootTrace('boot():initSpeechBridge:done');
+          } catch (error) {
+            bootTrace('boot():initSpeechBridge:error', { error: String(error) });
+          }
 
-			// The following block previously lived inside a DOMContentLoaded listener.
-			// We still gate some UI-dependent wiring on DOM readiness for robustness.
+				// The following block previously lived inside a DOMContentLoaded listener.
+				// We still gate some UI-dependent wiring on DOM readiness for robustness.
           const onReady = () => {
+            bootTrace('onReady:enter');
             try {
-							try { initAuthUnlock(); } catch {}
+								try { initAuthUnlock(); } catch {}
 							// Prime scroll-router init once the viewer exists (before mode wiring)
 							try {
 								const initScrollRouter = initOnce('scroll-router', () => {
@@ -2020,12 +2137,18 @@ export async function boot() {
                 if (isCiSmoke()) {
                   try { injectSettingsFolderForSmoke(); } catch {}
                 }
-								// Wire OBS UI once DOM nodes exist; idempotent if earlier init already ran
-								try { initObsUI(); } catch {}
-                // Enable Speech Sync UI
-                try { installSpeech(); } catch {}
-								// Wire single mic toggle button if present
-								try { wireMicToggle(); } catch {}
+									// Wire OBS UI once DOM nodes exist; idempotent if earlier init already ran
+									try { initObsUI(); } catch {}
+	                // Enable Speech Sync UI
+	                bootTrace('onReady:installSpeech:start');
+	                try {
+	                  installSpeech();
+	                  bootTrace('onReady:installSpeech:done');
+	                } catch (error) {
+	                  bootTrace('onReady:installSpeech:error', { error: String(error) });
+	                }
+									// Wire single mic toggle button if present
+									try { wireMicToggle(); } catch {}
 								// Emergency binder only in harness/dev contexts (installed earlier if flagged)
 								// Do not install unconditionally to avoid hijacking clicks in prod.
 								// (Emergency binder removed; canonical binder is idempotent)
@@ -2091,13 +2214,18 @@ try { initScrollPrefsPersistence(appStore as any); } catch {}
 						}
 					} catch {}
 
-					// Step / Rehearsal / Scroll Mode router wiring
-try {
-  const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
-  const rehearsal = installRehearsal();
-  void step;
-  void rehearsal;
-  try { resolveInitialRehearsal(); } catch {}
+						// Step / Rehearsal / Scroll Mode router wiring
+	bootTrace('onReady:mode-router:init:start');
+	try {
+	  bootTrace('onReady:step-install:start');
+	  const step = installStepScroll({ stepLines: 1, pageLines: 4, enableFKeys: true });
+	  bootTrace('onReady:step-install:done');
+	  bootTrace('onReady:rehearsal-install:start');
+	  const rehearsal = installRehearsal();
+	  bootTrace('onReady:rehearsal-install:done');
+	  void step;
+	  void rehearsal;
+	  try { resolveInitialRehearsal(); } catch {}
 
   const store = (window as any).__tpStore || null;
   const auto = getAutoScrollApi();
@@ -2150,11 +2278,14 @@ try {
     getMode: () => scrollModeSource.get(),
   };
 
-  // Ensure UI/store reflect initial mode
-  try { applyUiScrollMode(scrollModeSource.get() as any, { skipStore: true, source: 'router' }); } catch {}
-  try { initWpmBindings(); } catch {}
+	  // Ensure UI/store reflect initial mode
+	  try { applyUiScrollMode(scrollModeSource.get() as any, { skipStore: true, source: 'router' }); } catch {}
+	  try { initWpmBindings(); } catch {}
+	  bootTrace('onReady:mode-router:init:done');
 
-} catch {}
+	} catch (error) {
+	  bootTrace('onReady:mode-router:init:error', { error: String(error) });
+	}
 
 // Display Sync
 					try {
@@ -2307,35 +2438,46 @@ try {
 					// Attach scroll writer only once after auth + router + UI are live
 					try {
 						attachScrollWriterOnce();
+						attachKickDevGlobalOnce();
 						if (import.meta.env.DEV && !(window as any).__tpScrollWriter) {
 							console.error('[BOOT] Scroll writer missing');
 						}
 					} catch {}
 
 					// Signal init completion so harness/tests can proceed
-					try {
-						if (typeof (window as any).tpMarkInitDone === 'function') {
-							(window as any).tpMarkInitDone('ts:index:onReady');
+						try {
+							if (typeof (window as any).tpMarkInitDone === 'function') {
+								(window as any).tpMarkInitDone('ts:index:onReady');
 						} else {
 							(window as any).__tp_init_done = true;
 							try { window.dispatchEvent(new CustomEvent('tp:init:done', { detail: { reason: 'ts:index:onReady' } })); } catch {}
 						}
-					} catch {}
+						} catch {}
 
-				} catch {}
-			};
+					} catch (error) {
+            bootTrace('onReady:error', { error: String(error) });
+          } finally {
+            bootTrace('onReady:exit');
+            bootTrace('onReady:dump');
+            bootTraceDumpToConsole();
+          }
+				};
 
-			if (document.readyState === 'loading') {
-				document.addEventListener('DOMContentLoaded', onReady, { once: true });
-			} else {
-				onReady();
-			}
+				if (document.readyState === 'loading') {
+					bootTrace('boot():onReady:listener-installed');
+					document.addEventListener('DOMContentLoaded', onReady, { once: true });
+				} else {
+					bootTrace('boot():onReady:run-now');
+					onReady();
+				}
 
-			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:done:ts' });
-		} catch (e) {
-			try { console.warn('[ts-boot] failed', e); } catch {}
-			(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:fail:ts' });
-      try { showFatalFallback(); } catch {}
+				bootTrace('boot():exit');
+				(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:done:ts' });
+			} catch (e) {
+				bootTrace('boot():error', { error: String(e) });
+				try { console.warn('[ts-boot] failed', e); } catch {}
+				(window as any).__TP_BOOT_TRACE.push({ t: Date.now(), m: 'boot:fail:ts' });
+	      try { showFatalFallback(); } catch {}
 		}
 }
 

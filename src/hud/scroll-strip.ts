@@ -8,12 +8,42 @@ interface ScrollStatusDetail {
   lineCount?: number;
 }
 
+interface ScrollModeDetail {
+  mode?: ScrollMode | string;
+  phase?: string;
+  autoRunning?: boolean;
+  hybridRunning?: boolean;
+  userEnabled?: boolean;
+  sessionIntentOn?: boolean;
+}
+
 interface ScrollCommitDetail {
   mode?: ScrollMode;
   delta: number;
   targetTop: number;
   currentTop: number;
   maxScrollTop: number;
+}
+
+type AsrStallClass = 'speech_stall' | 'matcher_stall' | 'unknown';
+
+interface AsrStallDetail {
+  ts: number;
+  stallClass: AsrStallClass;
+  sinceOnResultMs: number | null;
+  sinceCommitMs: number | null;
+  speechRunningActual: boolean;
+  recognizerAttached: boolean;
+  commitCount: number;
+}
+
+interface AsrHeartbeatDetail {
+  ts: number;
+  sinceOnResultMs: number | null;
+  sinceCommitMs: number | null;
+  speechRunningActual: boolean;
+  recognizerAttached: boolean;
+  commitCount: number;
 }
 
 export interface ScrollStripHudOptions {
@@ -54,7 +84,12 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   let lastMode: ScrollMode | null = null;
   let offsetX = 0;
   let offsetY = 0;
-  let stallText = '';
+  let guardStallText = '';
+  let lastStall: AsrStallDetail | null = null;
+  let lastHeartbeat: AsrHeartbeatDetail | null = null;
+  let stallOkVisibleUntil = 0;
+  let stallOkHideTimer: number | null = null;
+  const STALL_OK_LINGER_MS = 1200;
 
   const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -199,9 +234,7 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
       const pct = Math.round((idx / detail.lineCount) * 100);
       posEl.textContent = `Line: ${idx} / ${detail.lineCount} (${pct}%)`;
     }
-    if (detail.mode !== 'asr') {
-      clearStall();
-    }
+    renderStall();
   }
 
   function updateFromCommit(detail: ScrollCommitDetail) {
@@ -212,19 +245,159 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
     }
   }
 
-  function showStall(text: string) {
-    stallText = text;
+  function cancelStallOkHideTimer() {
+    if (stallOkHideTimer != null) {
+      window.clearTimeout(stallOkHideTimer);
+      stallOkHideTimer = null;
+    }
+  }
+
+  function hideStallUi() {
     if (stallEl) {
-      stallEl.textContent = stallText;
+      stallEl.style.display = 'none';
+      stallEl.title = '';
+    }
+    if (resyncBtn) resyncBtn.style.display = 'none';
+  }
+
+  function getAsrArmed(): boolean {
+    try {
+      const store: any = (window as any).__tpStore;
+      return store?.get?.('session.asrArmed') === true;
+    } catch {
+      return false;
+    }
+  }
+
+  function getScrollMode(): string {
+    try {
+      const store: any = (window as any).__tpStore;
+      const mode = store?.get?.('scrollMode') ?? store?.get?.('mode');
+      if (mode) return String(mode).toLowerCase();
+      const router: any = (window as any).__tpScrollMode;
+      if (router && typeof router.getMode === 'function') {
+        const m = router.getMode();
+        if (m) return String(m).toLowerCase();
+      }
+      if (typeof router === 'string') return router.toLowerCase();
+    } catch {
+      // ignore
+    }
+    return '';
+  }
+
+  function isAsrContext(): boolean {
+    if (lastMode === 'asr') return true;
+    if (getScrollMode() === 'asr') return true;
+    return getAsrArmed();
+  }
+
+  function fmtAgeMs(value: number | null | undefined): string {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+    return `${Math.max(0, Math.round(value))}ms`;
+  }
+
+  function buildStallTitle(stallDetail: AsrStallDetail | null, heartbeatDetail: AsrHeartbeatDetail | null): string {
+    const detail = heartbeatDetail ?? stallDetail;
+    if (!detail) return '';
+    const commitCount = Number.isFinite(detail.commitCount) ? Math.max(0, Math.floor(detail.commitCount)) : 0;
+    return [
+      `sinceOnResultMs=${fmtAgeMs(detail.sinceOnResultMs)}`,
+      `sinceCommitMs=${fmtAgeMs(detail.sinceCommitMs)}`,
+      `speechRunningActual=${detail.speechRunningActual ? 'true' : 'false'}`,
+      `recognizerAttached=${detail.recognizerAttached ? 'true' : 'false'}`,
+      `commitCount=${commitCount}`,
+    ].join(' | ');
+  }
+
+  function renderStall() {
+    if (!isAsrContext()) {
+      hideStallUi();
+      return;
+    }
+
+    const stallClass = lastStall?.stallClass ?? 'unknown';
+    const now = Date.now();
+    const keepOkVisible = stallOkVisibleUntil > now;
+    const verdictText =
+      stallClass === 'speech_stall'
+        ? '🛑 Speech stall'
+        : stallClass === 'matcher_stall'
+          ? '🟠 Matcher stall'
+          : keepOkVisible
+            ? '✅ OK'
+            : '';
+    const text = verdictText || guardStallText;
+    if (!text) {
+      hideStallUi();
+      return;
+    }
+
+    if (stallEl) {
+      stallEl.textContent = text;
+      stallEl.title = buildStallTitle(lastStall, lastHeartbeat);
       stallEl.style.display = '';
     }
-    if (resyncBtn) resyncBtn.style.display = '';
+
+    const isHardStall = stallClass === 'speech_stall' || stallClass === 'matcher_stall';
+    if (resyncBtn) resyncBtn.style.display = isHardStall || !!guardStallText ? '' : 'none';
+  }
+
+  function applyStall(detail: AsrStallDetail) {
+    const prevClass = lastStall?.stallClass ?? 'unknown';
+    lastStall = detail;
+
+    if (detail.stallClass === 'unknown') {
+      if (prevClass === 'speech_stall' || prevClass === 'matcher_stall') {
+        stallOkVisibleUntil = Date.now() + STALL_OK_LINGER_MS;
+        cancelStallOkHideTimer();
+        stallOkHideTimer = window.setTimeout(() => {
+          stallOkVisibleUntil = 0;
+          renderStall();
+        }, STALL_OK_LINGER_MS);
+      } else {
+        stallOkVisibleUntil = 0;
+        cancelStallOkHideTimer();
+      }
+    } else {
+      stallOkVisibleUntil = 0;
+      cancelStallOkHideTimer();
+    }
+
+    renderStall();
+  }
+
+  function readWindowStall(): AsrStallDetail | null {
+    try {
+      const detail = (window as any).__tpAsrStallLast;
+      if (!detail || typeof detail !== 'object') return null;
+      const stallClass = String((detail as any).stallClass || '').toLowerCase();
+      if (stallClass !== 'speech_stall' && stallClass !== 'matcher_stall' && stallClass !== 'unknown') return null;
+      return detail as AsrStallDetail;
+    } catch {
+      return null;
+    }
+  }
+
+  function readWindowHeartbeat(): AsrHeartbeatDetail | null {
+    try {
+      const detail = (window as any).__tpAsrHeartbeatLast;
+      if (!detail || typeof detail !== 'object') return null;
+      if (typeof (detail as any).ts !== 'number' || !Number.isFinite((detail as any).ts)) return null;
+      return detail as AsrHeartbeatDetail;
+    } catch {
+      return null;
+    }
+  }
+
+  function showStall(text: string) {
+    guardStallText = text;
+    renderStall();
   }
 
   function clearStall() {
-    stallText = '';
-    if (stallEl) stallEl.style.display = 'none';
-    if (resyncBtn) resyncBtn.style.display = 'none';
+    guardStallText = '';
+    renderStall();
   }
 
   function triggerResync(source: string) {
@@ -257,28 +430,51 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
     if ((el as HTMLElement).isContentEditable) return true;
     return false;
   };
-  const getScrollMode = (): string => {
-    try {
-      const store: any = (window as any).__tpStore;
-      const mode = store?.get?.('scrollMode') ?? store?.get?.('mode');
-      if (mode) return String(mode).toLowerCase();
-      const router: any = (window as any).__tpScrollMode;
-      if (router && typeof router.getMode === 'function') {
-        const m = router.getMode();
-        if (m) return String(m).toLowerCase();
-      }
-      if (typeof router === 'string') return router.toLowerCase();
-    } catch {
-      // ignore
-    }
-    return '';
-  };
-
   function handleStatus(ev: Event) {
     const detail = (ev as CustomEvent<ScrollStatusDetail>).detail;
     if (!detail) return;
     lastMode = detail.mode;
     updateFromStatus(detail);
+  }
+
+  function normalizeMode(raw: unknown): ScrollMode {
+    const mode = String(raw || '').toLowerCase();
+    switch (mode) {
+      case 'timed':
+      case 'wpm':
+      case 'hybrid':
+      case 'asr':
+      case 'step':
+      case 'rehearsal':
+        return mode;
+      default:
+        return 'hybrid';
+    }
+  }
+
+  function deriveRunningFromMode(detail: ScrollModeDetail): boolean {
+    const mode = normalizeMode(detail.mode);
+    if (mode === 'asr') {
+      // ASR lane movement is commit-driven and considered active while in live phase.
+      return String(detail.phase || '').toLowerCase() === 'live';
+    }
+    if (mode === 'hybrid') {
+      return !!detail.hybridRunning;
+    }
+    return !!detail.autoRunning && !!detail.userEnabled && !!detail.sessionIntentOn;
+  }
+
+  function handleModeSnapshot(ev: Event) {
+    const detail = (ev as CustomEvent<ScrollModeDetail>).detail;
+    if (!detail) return;
+    const mode = normalizeMode(detail.mode);
+    const status: ScrollStatusDetail = {
+      mode,
+      strategy: mode,
+      running: deriveRunningFromMode(detail),
+    };
+    lastMode = mode;
+    updateFromStatus(status);
   }
 
   function handleCommit(ev: Event) {
@@ -287,10 +483,35 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
     updateFromCommit(detail);
   }
 
+  function handleAsrStall(ev: Event) {
+    const detail = (ev as CustomEvent<AsrStallDetail>)?.detail;
+    if (!detail || typeof detail !== 'object') return;
+    const stallClass = String((detail as any).stallClass || '').toLowerCase();
+    if (stallClass !== 'speech_stall' && stallClass !== 'matcher_stall' && stallClass !== 'unknown') return;
+    applyStall(detail);
+  }
+
+  function handleAsrHeartbeat() {
+    const snapshot = readWindowHeartbeat();
+    if (snapshot) lastHeartbeat = snapshot;
+    renderStall();
+  }
+
   window.addEventListener('tp:scroll:status', handleStatus);
+  window.addEventListener('tp:scroll:mode', handleModeSnapshot as EventListener);
   window.addEventListener('tp:scroll:commit', handleCommit);
   window.addEventListener('tp:asr:guard', handleGuard as EventListener);
+  window.addEventListener('tp:asr:stall', handleAsrStall as EventListener);
+  window.addEventListener('tp:asr:heartbeat', handleAsrHeartbeat as EventListener);
   window.addEventListener('asr:advance', handleAdvance as EventListener);
+
+  const initialStall = readWindowStall();
+  if (initialStall) applyStall(initialStall);
+  const initialHeartbeat = readWindowHeartbeat();
+  if (initialHeartbeat) {
+    lastHeartbeat = initialHeartbeat;
+    renderStall();
+  }
 
   if (resyncBtn) {
     resyncBtn.addEventListener('click', () => triggerResync('hud'));
@@ -307,9 +528,13 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   window.addEventListener('keydown', onKeyDown);
 
   function destroy() {
+    cancelStallOkHideTimer();
     window.removeEventListener('tp:scroll:status', handleStatus);
+    window.removeEventListener('tp:scroll:mode', handleModeSnapshot as EventListener);
     window.removeEventListener('tp:scroll:commit', handleCommit);
     window.removeEventListener('tp:asr:guard', handleGuard as EventListener);
+    window.removeEventListener('tp:asr:stall', handleAsrStall as EventListener);
+    window.removeEventListener('tp:asr:heartbeat', handleAsrHeartbeat as EventListener);
     window.removeEventListener('asr:advance', handleAdvance as EventListener);
     window.removeEventListener('keydown', onKeyDown);
     container.remove();

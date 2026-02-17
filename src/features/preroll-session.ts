@@ -10,15 +10,16 @@ import { listRecorders } from '../recording/recorderRegistry';
 import { getRecordingEngine, getRecordingMode } from '../recording/recording-settings';
 import {
   normalizeScrollMode,
-  shouldAutoStartForMode,
 } from './scroll/scroll-mode-utils';
 
 function computeScrollAutoOnLive(rawMode?: string | undefined): boolean {
   try {
-    const mode = rawMode ?? (appStore.get('scrollMode') as string | undefined);
-    return shouldAutoStartForMode(mode);
+    const mode = normalizeScrollMode(rawMode ?? (appStore.get('scrollMode') as string | undefined));
+    // ASR live flow is commit-driven (not motor-driven), but this session flag
+    // must not disable ASR startup/gating during live.
+    return mode === 'timed' || mode === 'wpm' || mode === 'hybrid' || mode === 'asr';
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -106,6 +107,13 @@ function computeAsrDesired(): boolean {
 function computeAsrArmed(desired: boolean): boolean {
   if (!desired) return false;
   try {
+    if (appStore.get('session.asrArmed') === true) {
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  try {
     const readiness = computeAsrReadiness();
     return !!readiness.ready;
   } catch {
@@ -142,15 +150,6 @@ function snapshotPreroll(): void {
       scrollAutoOnLive,
     });
   } catch {}
-  if (scrollAutoOnLive) {
-    try {
-      window.dispatchEvent(
-        new CustomEvent('tp:auto:intent', {
-          detail: { enabled: true, source: 'preroll', reason: 'live-start' },
-        }),
-      );
-    } catch {}
-  }
 
   try {
     console.debug(

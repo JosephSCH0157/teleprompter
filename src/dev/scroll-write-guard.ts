@@ -1,3 +1,5 @@
+import { getTpLogLevel, shouldLogLevel } from '../env/dev-log';
+
 type GuardState = {
   scroller: HTMLElement;
   protoScrollTo?: (this: Element, ...args: any[]) => any;
@@ -7,6 +9,7 @@ type GuardState = {
 };
 
 function isDevMode(): boolean {
+  if (shouldLogLevel(1)) return true;
   try {
     const qs = new URLSearchParams(String(location.search || ''));
     if (qs.has('dev') || qs.get('dev') === '1') return true;
@@ -65,6 +68,8 @@ function shouldLogForTarget(target: Element, scroller: HTMLElement): boolean {
 
 function logWrite(action: string, target: Element, value?: unknown) {
   if (!shouldLog()) return;
+  const logLevel = getTpLogLevel();
+  if (logLevel < 1) return;
   const ctx = getScrollContext();
   const payload = {
     action,
@@ -74,7 +79,9 @@ function logWrite(action: string, target: Element, value?: unknown) {
     phase: ctx.phase || 'unknown',
   };
   try { console.warn('[scroll-guard] direct scroll write', payload); } catch {}
-  try { console.trace('[scroll-guard] stack'); } catch {}
+  if (logLevel >= 3) {
+    try { console.trace('[scroll-guard] stack'); } catch {}
+  }
 }
 
 function findScrollTopDescriptor(el: HTMLElement): PropertyDescriptor | undefined {

@@ -3,6 +3,8 @@ import { computeAnchorLineIndex, shouldLogScrollWrite } from './scroll-helpers';
 let displayScrollChannel: BroadcastChannel | null = null;
 let scrollEventTrackerInstalled = false;
 
+export type ScrollerRole = 'main' | 'display';
+
 function isElementLike(node: unknown): node is HTMLElement {
   return !!node && typeof node === 'object' && (node as any).nodeType === 1;
 }
@@ -22,21 +24,32 @@ export function getDisplayViewerElement(): HTMLElement | null {
   return null;
 }
 
-export function getScrollContainer(): HTMLElement | null {
-  try {
+export function getScrollerEl(role: ScrollerRole = 'main'): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  if (role === 'display') {
     return (
-      (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
+      getDisplayViewerElement() ||
       (document.getElementById('wrap') as HTMLElement | null)
     );
-  } catch {
-    return null;
   }
+  try {
+    return (
+      (document.querySelector('main#viewer.viewer, #viewer') as HTMLElement | null) ||
+      (document.getElementById('viewer') as HTMLElement | null)
+    );
+  } catch {
+    return document.getElementById('viewer') as HTMLElement | null;
+  }
+}
+
+export function getScrollContainer(): HTMLElement | null {
+  return getScrollerEl('main');
 }
 
 export function getViewerElement(): HTMLElement | null {
   try {
     return (
-      (document.getElementById('viewer') as HTMLElement | null) ||
+      getScrollerEl('main') ||
       (document.querySelector('[data-role="viewer"]') as HTMLElement | null) ||
       (document.getElementById('wrap') as HTMLElement | null) ||
       getDisplayViewerElement()
@@ -57,9 +70,10 @@ export function getScriptRoot(): HTMLElement | null {
 export function getFallbackScroller(): HTMLElement | null {
   try {
     return (
-      (document.scrollingElement as HTMLElement | null) ||
-      (document.documentElement as HTMLElement | null) ||
-      (document.body as HTMLElement | null)
+      getScrollerEl('main') ||
+      getScrollerEl('display') ||
+      getScriptRoot() ||
+      (document.getElementById('wrap') as HTMLElement | null)
     );
   } catch {
     return null;
@@ -95,7 +109,38 @@ export function describeElement(el: HTMLElement | null): string {
 }
 
 export function getPrimaryScroller(): HTMLElement | null {
-  return getScrollContainer() || getViewerElement() || getDisplayViewerElement();
+  return getScrollerEl('main') || getScrollerEl('display');
+}
+
+export function resolveViewerRole(): ScrollerRole {
+  if (typeof window === 'undefined') return 'main';
+  try {
+    const explicit = String((window as any).__TP_VIEWER_ROLE || '').toLowerCase();
+    if (explicit === 'display') return 'display';
+    if (explicit === 'main') return 'main';
+    const bodyRole = String(window.document?.body?.dataset?.viewerRole || '').toLowerCase();
+    if (bodyRole === 'display') return 'display';
+    if (bodyRole === 'main') return 'main';
+    if ((window as any).__TP_FORCE_DISPLAY) return 'display';
+    const path = String(window.location?.pathname || '').toLowerCase();
+    if (path.includes('display')) return 'display';
+  } catch {
+    // ignore
+  }
+  return 'main';
+}
+
+export function getRuntimeScroller(role: ScrollerRole = resolveViewerRole()): HTMLElement | null {
+  if (typeof document === 'undefined') return null;
+  const root = getScriptRoot();
+  if (role === 'display') {
+    const primary = getScrollerEl('display');
+    const fallback = (document.getElementById('wrap') as HTMLElement | null) || root;
+    return resolveActiveScroller(primary, fallback);
+  }
+  const primary = getScrollerEl('main') || root;
+  const fallback = root || getScrollerEl('display');
+  return resolveActiveScroller(primary, fallback);
 }
 
 function isDisplayWindow(): boolean {

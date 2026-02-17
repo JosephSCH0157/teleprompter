@@ -4,6 +4,7 @@ import {
   getDevZen,
   setDevZen,
 } from './dev-state';
+import { kick } from '../features/kick/kick';
 
 const ROOT_ID = 'tp-dev-root';
 const DRAWER_ID = 'tp-dev-drawer';
@@ -39,84 +40,6 @@ function isDevActive(): boolean {
     // ignore
   }
   return false;
-}
-
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  const tag = (el.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
-  return !!(el as any).isContentEditable;
-}
-
-function describeElement(el: Element | null | undefined): string {
-  if (!el) return 'unknown';
-  const id = (el as HTMLElement).id ? `#${(el as HTMLElement).id}` : '';
-  const clsRaw = (el as HTMLElement).className;
-  const cls = typeof clsRaw === 'string' && clsRaw.trim()
-    ? `.${clsRaw.trim().split(/\s+/).slice(0, 3).join('.')}`
-    : '';
-  return `${el.tagName.toLowerCase()}${id}${cls}`;
-}
-
-function isElementLike(node: unknown): node is HTMLElement {
-  return !!node && typeof node === 'object' && (node as any).nodeType === 1;
-}
-
-function getDisplayViewerEl(): HTMLElement | null {
-  if (!isBrowser()) return null;
-  try {
-    const w = window as any;
-    const direct = w.__tpDisplayViewerEl;
-    if (isElementLike(direct)) return direct as HTMLElement;
-    const opener = w.opener as any;
-    const viaOpener = opener && !opener.closed ? opener.__tpDisplayViewerEl : null;
-    if (isElementLike(viaOpener)) return viaOpener as HTMLElement;
-  } catch {
-    // ignore
-  }
-  return null;
-}
-
-function getKickScroller(): HTMLElement | null {
-  if (!isBrowser()) return null;
-  return (
-    (document.getElementById('scriptScrollContainer') as HTMLElement | null) ||
-    (document.getElementById('viewer') as HTMLElement | null) ||
-    (document.getElementById('wrap') as HTMLElement | null) ||
-    getDisplayViewerEl() ||
-    (document.scrollingElement as HTMLElement | null) ||
-    (document.documentElement as HTMLElement | null) ||
-    (document.body as HTMLElement | null)
-  );
-}
-
-function installKickScroll(): void {
-  if (!isDevActive()) return;
-  const w = window as any;
-  if (w.__tpKickScroll) return;
-  w.__tpKickScroll = () => {
-    const scroller = getKickScroller();
-    if (!scroller) {
-      try { console.warn('[DEV] __tpKickScroll missing scroller'); } catch {}
-      return;
-    }
-    const from = scroller.scrollTop || 0;
-    const target = from + 120;
-    try {
-      scroller.scrollTop = target;
-    } catch {
-      try { (scroller as any).scrollTo?.({ top: target, behavior: 'auto' }); } catch {}
-    }
-    const to = scroller.scrollTop || 0;
-    try {
-      console.info('[DEV] __tpKickScroll', {
-        scroller: describeElement(scroller),
-        from,
-        to,
-      });
-    } catch {}
-  };
 }
 
 function computeDock(): Dock {
@@ -188,12 +111,6 @@ function attachListeners(): void {
 }
 
 function handleKeydown(event: KeyboardEvent): void {
-  if (event.code === 'KeyK' && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-    if (isTypingTarget(event.target)) return;
-    event.preventDefault();
-    try { (window as any).__tpKickScroll?.(); } catch {}
-    return;
-  }
   if (!event.ctrlKey || !event.shiftKey) return;
   if (event.altKey || event.metaKey) return;
   if (event.code === 'KeyD') {
@@ -272,7 +189,7 @@ function buildDrawerStructure(): void {
   kickBtn.textContent = 'Kick Scroll (+120px)';
   kickBtn.style.cssText = 'border-radius:8px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:inherit;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:600;';
   kickBtn.addEventListener('click', () => {
-    try { (window as any).__tpKickScroll?.(); } catch {}
+    kick({ reason: 'dev-drawer:button' });
   });
   const kickHint = document.createElement('div');
   kickHint.textContent = 'Shortcut: K';
@@ -291,7 +208,6 @@ export function initDevDrawer(): void {
   rootEl = ensureRoot();
   if (!rootEl) return;
   buildDrawerStructure();
-  installKickScroll();
   drawerOpen = getDevDrawerOpen();
   setDrawerOpen(drawerOpen);
   zenMode = getDevZen();
