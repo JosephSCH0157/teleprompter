@@ -5509,6 +5509,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               lastLineIndex,
               DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
             );
+            const bridgeUsed = cueBridge.skippedReasons.length > 0;
             if (cueBridge.nextLine == null) {
               warnGuard('cue_commit_blocked', [
                 `current=${lastLineIndex}`,
@@ -5522,16 +5523,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               emitHudStatus('cue_commit_blocked', 'Blocked: cue-only commit target');
               return;
             }
-            const nextLine = cueBridge.nextLine;
-            logCueBridgeUse(lastLineIndex, nextLine, cueBridge.skippedReasons, 'same-line-confirm');
-            const nextTop = resolveTargetTop(scroller, nextLine);
-            if (nextTop != null) {
-              const nextDeltaPx = nextTop - currentTop;
-              if (nextDeltaPx > 0 && nextDeltaPx <= jumpCap) {
-                targetLine = nextLine;
-                targetTop = nextTop;
-                deltaPx = nextDeltaPx;
-                logDev('same-line advance', { line: targetLine, px: Math.round(nextDeltaPx), conf });
+            if (bridgeUsed) {
+              const nextLine = cueBridge.nextLine;
+              logCueBridgeUse(lastLineIndex, nextLine, cueBridge.skippedReasons, 'same-line-confirm');
+              const nextTop = resolveTargetTop(scroller, nextLine);
+              if (nextTop != null) {
+                const nextDeltaPx = nextTop - currentTop;
+                if (nextDeltaPx > 0 && nextDeltaPx <= jumpCap) {
+                  targetLine = nextLine;
+                  targetTop = nextTop;
+                  deltaPx = nextDeltaPx;
+                  logDev('same-line advance', { line: targetLine, px: Math.round(nextDeltaPx), conf });
+                }
               }
             }
           }
@@ -8582,12 +8585,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (finalMatchNudgeEligible || stableInterimNudgeEligible) {
       const nudgeDeltaCap = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
       const cueBridge = findNextSpeakableWithinBridge(cursorLine, nudgeDeltaCap);
-      if (cueBridge.nextLine != null && cueBridge.nextLine > cursorLine) {
+      const bridgeUsed = cueBridge.skippedReasons.length > 0;
+      if (cueBridge.nextLine != null && cueBridge.nextLine > cursorLine && bridgeUsed) {
         const before = rawIdx;
         rawIdx = Math.max(cursorLine + 1, Math.floor(cueBridge.nextLine));
-        if (cueBridge.skippedReasons.length) {
-          cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
-        }
+        cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
         logCueBridgeUse(
           cursorLine,
           rawIdx,

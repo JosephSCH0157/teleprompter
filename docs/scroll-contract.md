@@ -47,6 +47,7 @@ When `scrollMode='asr'`:
 - If watchdog selects a forward recovery candidate while interim buffer is still growing, treat that as forward-progress evidence: do not reject it as `interim_unstable`, and preserve watchdog floor through low-sim gating for that recovery attempt.
 - Commit-time clamp: before ASR commit finalization (writer/pixel), cap forward delta for all commits to a small window (default `+1` line) unless confidence is strong (default `sim>=0.82`); emit `ASR_CLAMP` dev log when the clamp is applied.
 - Cue-bridge low-sim bypass must be bridge-only: intermediate skipped lines must be skippable cue/meta/blank lines, capped to a small bridge (`<=2` skipped lines), and target must be speakable.
+- Cue-bridge progression requires an actual bridge (`>=1` skipped skippable line). Same-line nudge/confirmation must not plain-advance to an adjacent speakable content line when no cue/meta line was skipped.
 - Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.
 - Cue-bridge nudge/confirm into content must require strong evidence (`strongSim`, or large sim-gap, or multi-event stability); low-sim nudges may not bridge into regular content lines.
 - Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.
