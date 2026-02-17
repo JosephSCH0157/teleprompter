@@ -127,6 +127,29 @@ type AsrHeartbeatPayload = {
   lifecycleEventTs: number | null;
 };
 
+type AsrStallClass = 'speech_stall' | 'matcher_stall' | 'unknown';
+
+type AsrStallPayload = {
+  reason: string;
+  ts: number;
+  stallClass: AsrStallClass;
+  scrollMode: string;
+  sessionPhase: string;
+  asrArmed: boolean;
+  speechRunning: boolean;
+  speechRunningActual: boolean;
+  recognizerAttached: boolean;
+  lastOnResultTs: number | null;
+  lastIngestTs: number | null;
+  lastCommitTs: number | null;
+  sinceOnResultMs: number | null;
+  sinceIngestMs: number | null;
+  sinceCommitMs: number | null;
+  commitCount: number;
+  lifecycleEvent: string;
+  lifecycleEventTs: number | null;
+};
+
 declare global {
   interface Window {
     __tpBus?: { emit?: AnyFn };
@@ -177,6 +200,7 @@ declare global {
     enumerateDevices?: () => Promise<MediaDeviceInfo[]>;
     __tpAsrHeartbeatLast?: AsrHeartbeatPayload;
     __tpAsrLifecycleLast?: Record<string, unknown>;
+    __tpAsrStallLast?: AsrStallPayload;
   }
 }
 
@@ -212,6 +236,7 @@ let lastAsrCommitTs = 0;
 let lastAsrCommitCount = 0;
 let lastRecognizerLifecycleEvent = '';
 let lastRecognizerLifecycleAt = 0;
+let lastAsrStallClass: AsrStallClass | '' = '';
 let speechWatchdogTimer: number | null = null;
 let asrHeartbeatTimer: number | null = null;
 let activeRecognizer: RecognizerLike | null = null;
@@ -226,6 +251,8 @@ const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
 const ASR_WATCHDOG_THRESHOLD_MS = 4000;
 const ASR_HEARTBEAT_INTERVAL_MS = 1000;
+const ASR_STALL_SPEECH_THRESHOLD_MS = 2500;
+const ASR_STALL_MATCHER_THRESHOLD_MS = 4500;
 const LIFECYCLE_RESTART_DELAY_MS = 120;
 const LIFECYCLE_RESTART_COOLDOWN_MS = 350;
 const HUD_SNAPSHOT_THROTTLE_MS = 120;
@@ -482,6 +509,59 @@ function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
   };
 }
 
+function classifyAsrStall(payload: AsrHeartbeatPayload): AsrStallClass {
+  const sinceOnResultMs = payload.sinceOnResultMs;
+  const sinceCommitMs = payload.sinceCommitMs;
+  const speechLaneStalled =
+    sinceOnResultMs != null &&
+    sinceOnResultMs > ASR_STALL_SPEECH_THRESHOLD_MS &&
+    (!payload.speechRunningActual || !payload.recognizerAttached);
+  if (speechLaneStalled) return 'speech_stall';
+  const matcherLaneStalled =
+    sinceOnResultMs != null &&
+    sinceOnResultMs <= ASR_STALL_SPEECH_THRESHOLD_MS &&
+    sinceCommitMs != null &&
+    sinceCommitMs > ASR_STALL_MATCHER_THRESHOLD_MS &&
+    payload.speechRunningActual &&
+    payload.recognizerAttached;
+  if (matcherLaneStalled) return 'matcher_stall';
+  return 'unknown';
+}
+
+function emitAsrStallIfChanged(payload: AsrHeartbeatPayload, opts?: { force?: boolean }): void {
+  if (typeof window === 'undefined') return;
+  const stallClass = classifyAsrStall(payload);
+  if (!opts?.force && stallClass === lastAsrStallClass) return;
+  lastAsrStallClass = stallClass;
+  const stallPayload: AsrStallPayload = {
+    reason: payload.reason,
+    ts: payload.ts,
+    stallClass,
+    scrollMode: payload.scrollMode,
+    sessionPhase: payload.sessionPhase,
+    asrArmed: payload.asrArmed,
+    speechRunning: payload.speechRunning,
+    speechRunningActual: payload.speechRunningActual,
+    recognizerAttached: payload.recognizerAttached,
+    lastOnResultTs: payload.lastOnResultTs,
+    lastIngestTs: payload.lastIngestTs,
+    lastCommitTs: payload.lastCommitTs,
+    sinceOnResultMs: payload.sinceOnResultMs,
+    sinceIngestMs: payload.sinceIngestMs,
+    sinceCommitMs: payload.sinceCommitMs,
+    commitCount: payload.commitCount,
+    lifecycleEvent: payload.lifecycleEvent,
+    lifecycleEventTs: payload.lifecycleEventTs,
+  };
+  try { window.__tpAsrStallLast = stallPayload; } catch {}
+  try { window.__tpBus?.emit?.('tp:asr:stall', stallPayload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:stall', { detail: stallPayload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:stall', { detail: stallPayload })); } catch {}
+  if (isDevMode()) {
+    try { console.warn('[ASR_STALL_VERDICT]', stallPayload); } catch {}
+  }
+}
+
 function emitAsrHeartbeat(reason: string, opts?: { force?: boolean }): void {
   if (typeof window === 'undefined') return;
   if (!opts?.force && !shouldEmitAsrHeartbeatPayload()) return;
@@ -490,6 +570,7 @@ function emitAsrHeartbeat(reason: string, opts?: { force?: boolean }): void {
   try { window.__tpBus?.emit?.('tp:asr:heartbeat', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:asr:heartbeat', { detail: payload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:asr:heartbeat', { detail: payload })); } catch {}
+  emitAsrStallIfChanged(payload, opts);
   if (isDevMode() && shouldLogTag('ASR_HEARTBEAT', 2, ASR_HEARTBEAT_INTERVAL_MS)) {
     try { console.info('[ASR_HEARTBEAT]', payload); } catch {}
   }
@@ -767,6 +848,7 @@ function hardResetSpeechEngine(reason?: string): void {
   lastAsrCommitTs = 0;
   lastAsrCommitCount = 0;
   pendingManualRestartCount = 0;
+  lastAsrStallClass = '';
   clearAsrRunKey(`hard-reset:${why}`);
   clearLifecycleRestartTimer();
   stopSpeechWatchdog();
@@ -2873,6 +2955,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     lastAsrCommitCount = 0;
     lastRecognizerLifecycleEvent = '';
     lastRecognizerLifecycleAt = 0;
+    lastAsrStallClass = '';
     setSpeechRunningActual(false, 'session-start');
     clearLifecycleRestartTimer();
     startAsrHeartbeat();
