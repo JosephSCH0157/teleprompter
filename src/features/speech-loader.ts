@@ -2,7 +2,11 @@ import { getSession, setSessionPhase } from '../state/session';
 import { completePrerollSession } from './preroll-session';
 import type { AppStore } from '../state/app-store';
 import { stopAsrRuntime } from '../speech/runtime-control';
-import { createAsrScrollDriver, type AsrScrollDriver } from '../features/asr/asr-scroll-driver';
+import {
+  createAsrScrollDriver,
+  type AsrScrollDriver,
+  type AsrScrollDriverStats,
+} from '../features/asr/asr-scroll-driver';
 import { getAsrBlockElements, getAsrBlockIndex } from '../scroll/asr-block-store';
 import {
   describeElement,
@@ -43,6 +47,10 @@ type RecognizerLike = {
   abort?: AnyFn;
   on?: AnyFn;
   onstart?: ((ev: Event) => void) | null;
+  onaudiostart?: ((ev: Event) => void) | null;
+  onaudioend?: ((ev: Event) => void) | null;
+  onspeechstart?: ((ev: Event) => void) | null;
+  onspeechend?: ((ev: Event) => void) | null;
   onend?: ((ev: Event) => void) | null;
   onerror?: ((ev: Event) => void) | null;
   onresult?: AnyFn;
@@ -55,6 +63,11 @@ type SpeechRecognition = {
   continuous?: boolean;
   interimResults?: boolean;
   lang?: string;
+  onstart?: ((ev: Event) => void) | null;
+  onaudiostart?: ((ev: Event) => void) | null;
+  onaudioend?: ((ev: Event) => void) | null;
+  onspeechstart?: ((ev: Event) => void) | null;
+  onspeechend?: ((ev: Event) => void) | null;
   onend?: ((ev: Event) => void) | null;
   onerror?: ((ev: Event) => void) | null;
   onresult?: AnyFn;
@@ -83,11 +96,35 @@ type HudSnapshotPayload = {
   scrollMode: string;
   sessionPhase: string;
   speechRunning: boolean;
+  speechRunningActual: boolean;
   asrDesired: boolean;
   asrArmed: boolean;
   driver: boolean;
   driverId: string | null;
   lastLineIndex: number | null;
+  lastOnResultTs: number | null;
+  lastIngestTs: number | null;
+  lastCommitTs: number | null;
+};
+
+type AsrHeartbeatPayload = {
+  reason: string;
+  ts: number;
+  scrollMode: string;
+  sessionPhase: string;
+  asrArmed: boolean;
+  speechRunning: boolean;
+  speechRunningActual: boolean;
+  recognizerAttached: boolean;
+  lastOnResultTs: number | null;
+  lastIngestTs: number | null;
+  lastCommitTs: number | null;
+  sinceOnResultMs: number | null;
+  sinceIngestMs: number | null;
+  sinceCommitMs: number | null;
+  commitCount: number;
+  lifecycleEvent: string;
+  lifecycleEventTs: number | null;
 };
 
 declare global {
@@ -138,6 +175,8 @@ declare global {
     recAutoRestart?: unknown;
     speechOn?: boolean;
     enumerateDevices?: () => Promise<MediaDeviceInfo[]>;
+    __tpAsrHeartbeatLast?: AsrHeartbeatPayload;
+    __tpAsrLifecycleLast?: Record<string, unknown>;
   }
 }
 
@@ -166,15 +205,29 @@ let running = false;
 let rec: RecognizerLike | null = null; // SR instance or orchestrator handle
 let lastScrollMode = '';
 let lastResultTs = 0;
+let speechRunningActual = false;
+let lastRecognizerOnResultTs = 0;
+let lastAsrIngestTs = 0;
+let lastAsrCommitTs = 0;
+let lastAsrCommitCount = 0;
+let lastRecognizerLifecycleEvent = '';
+let lastRecognizerLifecycleAt = 0;
 let speechWatchdogTimer: number | null = null;
+let asrHeartbeatTimer: number | null = null;
 let activeRecognizer: RecognizerLike | null = null;
 let pendingManualRestartCount = 0;
+let lifecycleRestartTimer: number | null = null;
+let lastLifecycleRestartAt = 0;
+let suppressRecognizerAutoRestart = false;
 let lastHudSnapshotFingerprint = '';
 let lastHudSnapshotAt = 0;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
 const ASR_WATCHDOG_THRESHOLD_MS = 4000;
+const ASR_HEARTBEAT_INTERVAL_MS = 1000;
+const LIFECYCLE_RESTART_DELAY_MS = 120;
+const LIFECYCLE_RESTART_COOLDOWN_MS = 350;
 const HUD_SNAPSHOT_THROTTLE_MS = 120;
 
 function inRehearsal(): boolean {
@@ -283,10 +336,54 @@ function resolveAsrDriverRef(): any {
   return asrScrollDriver || w.__tpAsrScrollDriver || w.__tpAsrDriver || null;
 }
 
+function normalizeTimestamp(value: unknown): number {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return 0;
+  return Math.max(0, Math.floor(raw));
+}
+
+function readAsrDriverStats(driverRef: any): AsrScrollDriverStats | null {
+  if (!driverRef || typeof driverRef !== 'object') return null;
+  try {
+    const stats = driverRef.getStats?.();
+    if (stats && typeof stats === 'object') {
+      const snapshot = stats as AsrScrollDriverStats;
+      return {
+        lastIngestAt: normalizeTimestamp(snapshot.lastIngestAt),
+        lastCommitAt: normalizeTimestamp(snapshot.lastCommitAt),
+        commitCount: Math.max(0, Math.floor(Number(snapshot.commitCount) || 0)),
+        eventsSinceCommit: Math.max(0, Math.floor(Number(snapshot.eventsSinceCommit) || 0)),
+        finalsSinceCommit: Math.max(0, Math.floor(Number(snapshot.finalsSinceCommit) || 0)),
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function syncAsrDriverStats(driverRef?: any): void {
+  const stats = readAsrDriverStats(driverRef ?? resolveAsrDriverRef());
+  if (!stats) return;
+  lastAsrIngestTs = Math.max(lastAsrIngestTs, stats.lastIngestAt);
+  lastAsrCommitTs = Math.max(lastAsrCommitTs, stats.lastCommitAt);
+  lastAsrCommitCount = Math.max(lastAsrCommitCount, stats.commitCount);
+}
+
+function toMaybeTimestamp(ts: number): number | null {
+  return ts > 0 ? ts : null;
+}
+
+function elapsedSince(ts: number, now: number): number | null {
+  if (ts <= 0) return null;
+  return Math.max(0, now - ts);
+}
+
 function buildHudSnapshot(reason: string): HudSnapshotPayload {
   const session = getSession();
   const driverRef = resolveAsrDriverRef();
   const mode = String(getScrollMode() || '').toLowerCase() || 'unknown';
+  syncAsrDriverStats(driverRef);
   let lastLineIndex: number | null = null;
   let driverId: string | null = null;
   try {
@@ -307,11 +404,15 @@ function buildHudSnapshot(reason: string): HudSnapshotPayload {
     scrollMode: mode,
     sessionPhase: String(session.phase || 'idle').toLowerCase() || 'idle',
     speechRunning: !!running,
+    speechRunningActual: !!speechRunningActual,
     asrDesired: !!session.asrDesired,
     asrArmed: !!session.asrArmed,
     driver: !!driverRef,
     driverId,
     lastLineIndex,
+    lastOnResultTs: toMaybeTimestamp(lastRecognizerOnResultTs || lastResultTs),
+    lastIngestTs: toMaybeTimestamp(lastAsrIngestTs),
+    lastCommitTs: toMaybeTimestamp(lastAsrCommitTs),
   };
 }
 
@@ -322,11 +423,15 @@ function emitHudSnapshot(reason: string, opts?: { force?: boolean }): void {
     payload.scrollMode,
     payload.sessionPhase,
     payload.speechRunning ? 1 : 0,
+    payload.speechRunningActual ? 1 : 0,
     payload.asrDesired ? 1 : 0,
     payload.asrArmed ? 1 : 0,
     payload.driver ? 1 : 0,
     payload.driverId || '',
     payload.lastLineIndex ?? -1,
+    payload.lastOnResultTs ?? -1,
+    payload.lastIngestTs ?? -1,
+    payload.lastCommitTs ?? -1,
   ].join('|');
   const now = Date.now();
   if (!opts?.force) {
@@ -340,6 +445,68 @@ function emitHudSnapshot(reason: string, opts?: { force?: boolean }): void {
   try { window.__tpBus?.emit?.('tp:hud:snapshot', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:hud:snapshot', { detail: payload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:hud:snapshot', { detail: payload })); } catch {}
+}
+
+function shouldEmitAsrHeartbeatPayload(): boolean {
+  const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase();
+  if (mode !== 'asr') return false;
+  const session = getSession();
+  return !!session.asrArmed;
+}
+
+function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
+  const now = Date.now();
+  const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase() || 'unknown';
+  const session = getSession();
+  const driverRef = resolveAsrDriverRef();
+  syncAsrDriverStats(driverRef);
+  const lastOnResult = Math.max(lastRecognizerOnResultTs, lastResultTs);
+  return {
+    reason: String(reason || 'tick'),
+    ts: now,
+    scrollMode: mode,
+    sessionPhase: String(session.phase || 'idle').toLowerCase() || 'idle',
+    asrArmed: !!session.asrArmed,
+    speechRunning: !!running,
+    speechRunningActual: !!speechRunningActual,
+    recognizerAttached: !!activeRecognizer,
+    lastOnResultTs: toMaybeTimestamp(lastOnResult),
+    lastIngestTs: toMaybeTimestamp(lastAsrIngestTs),
+    lastCommitTs: toMaybeTimestamp(lastAsrCommitTs),
+    sinceOnResultMs: elapsedSince(lastOnResult, now),
+    sinceIngestMs: elapsedSince(lastAsrIngestTs, now),
+    sinceCommitMs: elapsedSince(lastAsrCommitTs, now),
+    commitCount: Math.max(0, Math.floor(lastAsrCommitCount || 0)),
+    lifecycleEvent: lastRecognizerLifecycleEvent || '',
+    lifecycleEventTs: toMaybeTimestamp(lastRecognizerLifecycleAt),
+  };
+}
+
+function emitAsrHeartbeat(reason: string, opts?: { force?: boolean }): void {
+  if (typeof window === 'undefined') return;
+  if (!opts?.force && !shouldEmitAsrHeartbeatPayload()) return;
+  const payload = buildAsrHeartbeat(reason);
+  try { window.__tpAsrHeartbeatLast = payload; } catch {}
+  try { window.__tpBus?.emit?.('tp:asr:heartbeat', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:heartbeat', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:heartbeat', { detail: payload })); } catch {}
+  if (isDevMode() && shouldLogTag('ASR_HEARTBEAT', 2, ASR_HEARTBEAT_INTERVAL_MS)) {
+    try { console.info('[ASR_HEARTBEAT]', payload); } catch {}
+  }
+}
+
+function _stopAsrHeartbeat(): void {
+  if (asrHeartbeatTimer != null) {
+    window.clearInterval(asrHeartbeatTimer);
+    asrHeartbeatTimer = null;
+  }
+}
+
+function startAsrHeartbeat(): void {
+  if (asrHeartbeatTimer != null) return;
+  asrHeartbeatTimer = window.setInterval(() => {
+    emitAsrHeartbeat('tick');
+  }, ASR_HEARTBEAT_INTERVAL_MS);
 }
 
 function dispatchSessionIntent(active: boolean, detail?: { source?: string; reason?: string; mode?: string; phase?: string }): void {
@@ -431,6 +598,94 @@ function markResultTimestamp(): void {
   lastResultTs = Date.now();
 }
 
+function setSpeechRunningActual(next: boolean, reason: string): void {
+  const normalized = !!next;
+  if (speechRunningActual === normalized) return;
+  speechRunningActual = normalized;
+  emitHudSnapshot(`speech-running-actual:${reason}`, { force: true });
+}
+
+function clearLifecycleRestartTimer(): void {
+  if (lifecycleRestartTimer != null) {
+    try { window.clearTimeout(lifecycleRestartTimer); } catch {}
+    lifecycleRestartTimer = null;
+  }
+}
+
+function markWebSpeechLifecycle(
+  eventName: string,
+  event: Event,
+  detail?: Record<string, unknown>,
+): void {
+  const now = Date.now();
+  lastRecognizerLifecycleEvent = eventName;
+  lastRecognizerLifecycleAt = now;
+  if (eventName === 'onresult') {
+    lastRecognizerOnResultTs = now;
+    markResultTimestamp();
+  }
+  const session = getSession();
+  const payload: Record<string, unknown> = {
+    event: eventName,
+    ts: now,
+    mode: String(lastScrollMode || getScrollMode() || '').toLowerCase(),
+    phase: String(session.phase || 'idle').toLowerCase(),
+    asrArmed: !!session.asrArmed,
+    speechRunning: !!running,
+    speechRunningActual: !!speechRunningActual,
+    recognizerAttached: !!activeRecognizer,
+    ...detail,
+  };
+  try { window.__tpAsrLifecycleLast = payload; } catch {}
+  try { window.__tpBus?.emit?.('tp:asr:lifecycle', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:lifecycle', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:lifecycle', { detail: payload })); } catch {}
+  if (isDevMode()) {
+    try { console.info('[ASR_LIFECYCLE]', payload); } catch {}
+  }
+  if (eventName !== 'onresult') {
+    emitAsrHeartbeat(`lifecycle:${eventName}`, { force: true });
+  }
+}
+
+function isRestartableWebSpeechError(event: Event): boolean {
+  const code = String((event as any)?.error || '').toLowerCase();
+  if (!code) return true;
+  if (code === 'not-allowed' || code === 'service-not-allowed') return false;
+  return true;
+}
+
+function scheduleRecognizerLifecycleRestart(
+  trigger: 'onend' | 'onaudioend' | 'onerror',
+  opts?: { abortFirst?: boolean },
+): void {
+  if (!shouldAutoRestartSpeech()) return;
+  if (lifecycleRestartTimer != null) return;
+  const now = Date.now();
+  const elapsed = now - lastLifecycleRestartAt;
+  const delay = elapsed >= LIFECYCLE_RESTART_COOLDOWN_MS
+    ? LIFECYCLE_RESTART_DELAY_MS
+    : Math.max(LIFECYCLE_RESTART_DELAY_MS, LIFECYCLE_RESTART_COOLDOWN_MS - elapsed);
+  lifecycleRestartTimer = window.setTimeout(() => {
+    lifecycleRestartTimer = null;
+    if (!shouldAutoRestartSpeech()) return;
+    const abortFirst = opts?.abortFirst === true;
+    const restarted = requestRecognizerRestart(`lifecycle:${trigger}`, {
+      abortFirst,
+    });
+    if (restarted) {
+      lastLifecycleRestartAt = Date.now();
+      emitHudSnapshot(`recognition-restart:${trigger}`, { force: true });
+      emitAsrHeartbeat(`restart:${trigger}`, { force: true });
+      return;
+    }
+    emitAsrState('idle', `recognition-restart-failed:${trigger}`);
+    running = false;
+    setActiveRecognizer(null);
+    emitHudSnapshot(`recognition-restart-failed:${trigger}`, { force: true });
+  }, delay);
+}
+
 function stopSpeechWatchdog(): void {
   if (speechWatchdogTimer != null) {
     window.clearInterval(speechWatchdogTimer);
@@ -464,11 +719,13 @@ function startSpeechWatchdog(): void {
 function setActiveRecognizer(instance: RecognizerLike | null): void {
   activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
   pendingManualRestartCount = 0;
+  clearLifecycleRestartTimer();
   if (activeRecognizer) {
     markResultTimestamp();
     startSpeechWatchdog();
   } else {
     stopSpeechWatchdog();
+    setSpeechRunningActual(false, 'detach');
   }
 }
 
@@ -496,12 +753,18 @@ function stopAndAbortRecognizer(instance: any): void {
 
 function hardResetSpeechEngine(reason?: string): void {
   const why = String(reason || 'script-reset');
+  suppressRecognizerAutoRestart = true;
   asrSessionIntentActive = false;
   resetAsrInterimStabilizer();
   fallbackTranscriptMatchSeq = 0;
   lastResultTs = 0;
+  lastRecognizerOnResultTs = 0;
+  lastAsrIngestTs = 0;
+  lastAsrCommitTs = 0;
+  lastAsrCommitCount = 0;
   pendingManualRestartCount = 0;
   clearAsrRunKey(`hard-reset:${why}`);
+  clearLifecycleRestartTimer();
   stopSpeechWatchdog();
 
   const candidates = new Set<any>();
@@ -525,6 +788,7 @@ function hardResetSpeechEngine(reason?: string): void {
   rec = null;
   setActiveRecognizer(null);
   running = false;
+  setSpeechRunningActual(false, 'hard-reset');
   asrBrainLogged = false;
   lastAsrBlockSyncAt = 0;
   lastAsrBlockSyncLogAt = 0;
@@ -550,20 +814,31 @@ function hardResetSpeechEngine(reason?: string): void {
     );
   } catch {}
   emitHudSnapshot(`speech-hard-reset:${why}`, { force: true });
+  emitAsrHeartbeat(`hard-reset:${why}`, { force: true });
 }
 
-function requestRecognizerRestart(reasonTag?: string): boolean {
+function requestRecognizerRestart(
+  reasonTag?: string,
+  opts?: { abortFirst?: boolean },
+): boolean {
   if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return false;
-  pendingManualRestartCount += 1;
+  const abortFirst = opts?.abortFirst !== false;
+  if (abortFirst) {
+    pendingManualRestartCount += 1;
+  }
   markResultTimestamp();
-  try { activeRecognizer.abort?.(); } catch {}
+  if (abortFirst) {
+    try { activeRecognizer.abort?.(); } catch {}
+  }
   try {
     activeRecognizer.start();
     try { window.debug?.({ tag: 'speech:watchdog:restart', reason: reasonTag || 'watchdog', hasRecognizer: true }); } catch {}
     try { console.log('[speech] watchdog: restarted recognition'); } catch {}
     return true;
   } catch (err) {
-    pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
+    if (abortFirst) {
+      pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
+    }
     try { console.warn('[speech] watchdog: restart failed', err); } catch {}
     return false;
   }
@@ -891,14 +1166,10 @@ function _startWebSpeech(): { stop: () => void } | null {
   r.continuous = true;
   r.interimResults = true;
   r.lang = 'en-US';
-  attachWebSpeechLifecycle(r);
+  attachWebSpeechLifecycle(r, {
+    onError: (e: Event) => { try { console.warn('[speech] error', e); } catch {} },
+  });
   setActiveRecognizer(r);
-  r.onresult = (_e: any) => {
-    // TODO: hook into your scroll matcher if desired
-    // const last = e.results[e.results.length-1]?.[0]?.transcript;
-    // console.log('[speech] text:', last);
-  };
-  r.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
   try { r.start(); } catch {}
   return { stop: () => { try { r.stop(); } catch {} } };
 }
@@ -1014,12 +1285,19 @@ function emitAsrState(state: string, reason?: string): void {
   try { window.dispatchEvent(new CustomEvent('tp:asr:state', { detail: payload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:asr:state', { detail: payload })); } catch {}
   emitHudSnapshot(`asr-state:${String(state || '').toLowerCase() || 'unknown'}`);
+  emitAsrHeartbeat(`state:${String(state || '').toLowerCase() || 'unknown'}`, { force: true });
 }
 
 function shouldAutoRestartSpeech(): boolean {
-  const mode = lastScrollMode || getScrollMode();
+  if (!running) return false;
+  if (suppressRecognizerAutoRestart) return false;
+  const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase();
   rememberMode(mode);
-  return running && (mode === 'asr' || mode === 'hybrid') && isAutoRestartEnabled();
+  if (!isAutoRestartEnabled()) return false;
+  if (mode === 'hybrid') return true;
+  if (mode !== 'asr') return false;
+  const session = getSession();
+  return !!session.asrArmed;
 }
 
 function isDevMode(): boolean {
@@ -1058,6 +1336,11 @@ function installAsrHudDev(): void {
     ].join(' ');
     document.body.appendChild(el);
     const formatBool = (value: unknown) => (value ? 'true' : 'false');
+    const formatAge = (ts: number | null | undefined) => {
+      if (!Number.isFinite(Number(ts)) || Number(ts) <= 0) return '-';
+      const age = Math.max(0, Date.now() - Number(ts));
+      return `${Math.round(age)}ms`;
+    };
     const render = (snap: HudSnapshotPayload) => {
       el.textContent =
 `ASR HUD
@@ -1065,12 +1348,16 @@ href: ${location.pathname}${location.search}${location.hash}
 scrollMode: ${snap.scrollMode || 'unknown'}
 sessionPhase: ${snap.sessionPhase || 'idle'}
 speechRunning: ${formatBool(snap.speechRunning)}
+speechRunningActual: ${formatBool(snap.speechRunningActual)}
 asrDesired: ${formatBool(snap.asrDesired)}
 asrArmed: ${formatBool(snap.asrArmed)}
 
 driver: ${snap.driver ? 'YES' : 'NO'}
 driverId: ${snap.driverId || 'none'}
 lastLineIndex: ${snap.lastLineIndex ?? '-'}
+lastOnResult: ${formatAge(snap.lastOnResultTs)}
+lastIngest: ${formatAge(snap.lastIngestTs)}
+lastCommit: ${formatAge(snap.lastCommitTs)}
 `;
     };
 
@@ -2077,6 +2364,8 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
 function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
   const t = String(text || '').trim();
   if (!t) return;
+  const ingestAt = Date.now();
+  lastAsrIngestTs = Math.max(lastAsrIngestTs, ingestAt);
   const payload = {
     text: t,
     isFinal: !!isFinal,
@@ -2096,6 +2385,7 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
     normalized: normalizeComparableText(t),
   });
   try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
+  syncAsrDriverStats(asrScrollDriver);
 }
 
 function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
@@ -2308,39 +2598,69 @@ try {
   attachSummaryListener();
 } catch {}
 
-function attachWebSpeechLifecycle(sr: SpeechRecognition): void {
+type WebSpeechLifecycleOptions = {
+  onResult?: (event: any) => void;
+  onError?: (event: Event) => void;
+};
+
+function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycleOptions = {}): void {
   if (!sr) return;
+  sr.onstart = (event: Event) => {
+    setSpeechRunningActual(true, 'onstart');
+    markWebSpeechLifecycle('onstart', event);
+  };
+  sr.onaudiostart = (event: Event) => {
+    setSpeechRunningActual(true, 'onaudiostart');
+    markWebSpeechLifecycle('onaudiostart', event);
+  };
+  sr.onspeechstart = (event: Event) => {
+    markWebSpeechLifecycle('onspeechstart', event);
+  };
+  sr.onresult = (event: any) => {
+    const resultCount = Number(event?.results?.length || 0);
+    markWebSpeechLifecycle('onresult', event as Event, {
+      resultCount,
+      resultIndex: Number(event?.resultIndex || 0),
+    });
+    try { opts.onResult?.(event); } catch {}
+  };
+  sr.onspeechend = (event: Event) => {
+    markWebSpeechLifecycle('onspeechend', event);
+  };
+  sr.onaudioend = (event: Event) => {
+    setSpeechRunningActual(false, 'onaudioend');
+    markWebSpeechLifecycle('onaudioend', event);
+    if (shouldAutoRestartSpeech()) {
+      scheduleRecognizerLifecycleRestart('onaudioend', { abortFirst: false });
+    } else {
+      emitAsrState('idle', 'recognition-audioend');
+    }
+  };
   sr.onend = (event: Event) => {
-    try { console.log('[speech] onend', event); } catch {}
+    setSpeechRunningActual(false, 'onend');
+    markWebSpeechLifecycle('onend', event, {
+      pendingManualRestartCount,
+    });
     if (pendingManualRestartCount > 0) {
       pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
       return;
     }
     if (shouldAutoRestartSpeech()) {
-      try {
-        console.log('[speech] restarting recognition after onend');
-        sr.start();
-      } catch (err) {
-        try { console.warn('[speech] restart failed after onend', err); } catch {}
-        emitAsrState('idle', 'recognition-restart-error');
-      }
+      scheduleRecognizerLifecycleRestart('onend', { abortFirst: false });
     } else {
       emitAsrState('idle', 'recognition-end');
     }
   };
   sr.onerror = (event: Event) => {
-    try { console.error('[speech] error', event); } catch {}
-    if (shouldAutoRestartSpeech()) {
-      try { sr.stop(); } catch {}
-      try {
-        sr.start();
-      } catch (err) {
-        try { console.warn('[speech] restart failed after error', err); } catch {}
-        emitAsrState('idle', 'recognition-error');
-      }
-    } else {
-      emitAsrState('idle', 'recognition-error');
+    const code = String((event as any)?.error || '').toLowerCase() || 'error';
+    setSpeechRunningActual(false, 'onerror');
+    markWebSpeechLifecycle('onerror', event, { code });
+    try { opts.onError?.(event); } catch {}
+    if (isRestartableWebSpeechError(event) && shouldAutoRestartSpeech()) {
+      scheduleRecognizerLifecycleRestart('onerror', { abortFirst: false });
+      return;
     }
+    emitAsrState('idle', `recognition-error:${code}`);
   };
 }
 
@@ -2380,6 +2700,7 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
       if (rec && typeof rec.start === 'function') {
         setActiveRecognizer(rec);
       }
+      setSpeechRunningActual(true, 'orchestrator-start');
       return true;
     }
   } catch {}
@@ -2392,6 +2713,7 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
         stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
         abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
       };
+      setSpeechRunningActual(true, 'namespace-start');
       return true;
     }
   } catch {}
@@ -2401,26 +2723,27 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
   const sr = new SR();
   sr.interimResults = true;
   sr.continuous = true;
-  attachWebSpeechLifecycle(sr);
-  setActiveRecognizer(sr);
   let _lastInterimAt = 0;
-  sr.onresult = (e: any) => {
-    try {
-      let interim = '', finals = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const res = e.results[i];
-        if (res.isFinal) finals += res[0].transcript;
-        else interim += res[0].transcript;
-      }
-      if (finals) routeTranscript(finals, true);
-      const now = performance.now();
-      if (interim && (now - _lastInterimAt) > 120) {
-        _lastInterimAt = now;
-        routeTranscript(interim, false);
-      }
-    } catch {}
-  };
-  sr.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
+  attachWebSpeechLifecycle(sr, {
+    onResult: (e: any) => {
+      try {
+        let interim = '', finals = '';
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const res = e.results[i];
+          if (res.isFinal) finals += res[0].transcript;
+          else interim += res[0].transcript;
+        }
+        if (finals) routeTranscript(finals, true);
+        const now = performance.now();
+        if (interim && (now - _lastInterimAt) > 120) {
+          _lastInterimAt = now;
+          routeTranscript(interim, false);
+        }
+      } catch {}
+    },
+    onError: (e: Event) => { try { console.warn('[speech] error', e); } catch {} },
+  });
+  setActiveRecognizer(sr);
   try { sr.start(); } catch {}
   rec = { stop: () => { try { sr.stop(); } catch {} } };
   try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
@@ -2522,6 +2845,16 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       ].filter(Boolean).join(' ');
       console.warn(anchorLine);
     } catch {}
+    suppressRecognizerAutoRestart = false;
+    lastRecognizerOnResultTs = 0;
+    lastAsrIngestTs = 0;
+    lastAsrCommitTs = 0;
+    lastAsrCommitCount = 0;
+    lastRecognizerLifecycleEvent = '';
+    lastRecognizerLifecycleAt = 0;
+    setSpeechRunningActual(false, 'session-start');
+    clearLifecycleRestartTimer();
+    startAsrHeartbeat();
     running = true;
     rememberMode(mode);
     try { document.body.classList.add('listening'); } catch {}
@@ -2552,6 +2885,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
     } catch {
       running = false;
       setActiveRecognizer(null);
+      setSpeechRunningActual(false, 'start-failed');
       setListeningUi(false);
       setReadyUi();
       clearAsrRunKey('start-failed');
@@ -2565,13 +2899,18 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
 }
 
 export function stopSpeechBackendForSession(reason?: string): void {
+  suppressRecognizerAutoRestart = true;
+  clearLifecycleRestartTimer();
   asrSessionIntentActive = false;
   resetAsrInterimStabilizer();
   clearAsrRunKey(`stop:${String(reason || 'unspecified')}`);
   if (!running && !rec) {
+    setSpeechRunningActual(false, 'stop-idle');
     detachAsrScrollDriver();
+    emitAsrHeartbeat(`stop:${String(reason || 'unspecified')}`, { force: true });
     return;
   }
+  running = false;
   detachAsrScrollDriver();
   asrBrainLogged = false;
   try { stopAsrRuntime(); } catch {}
@@ -2583,7 +2922,7 @@ export function stopSpeechBackendForSession(reason?: string): void {
   try { getTpSpeechNamespace()?.stopRecognizer?.(); } catch {}
   setActiveRecognizer(null);
   rec = null;
-  running = false;
+  setSpeechRunningActual(false, 'stop');
   try { document.body.classList.remove('listening'); } catch {}
   try { window.HUD?.bus?.emit?.('speech:toggle', false); } catch {}
   try { window.speechOn = false; } catch {}
@@ -2591,10 +2930,12 @@ export function stopSpeechBackendForSession(reason?: string): void {
   setReadyUi();
   try { window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running: false, reason } })); } catch {}
   emitHudSnapshot('speech-running:false', { force: true });
+  emitAsrHeartbeat(`stop:${String(reason || 'unspecified')}`, { force: true });
 }
 
 export function installSpeech(): void {
   ensureAsrDriverLifecycleHooks();
+  startAsrHeartbeat();
   emitHudSnapshot('installSpeech:init', { force: true });
   installAsrHudDev();
   // Session-first: recBtn only starts preroll/session
@@ -2777,27 +3118,28 @@ async function resolveOrchestratorUrl(): Promise<string> {
         const sr = new SR();
         sr.interimResults = true;
         sr.continuous = true;
-        attachWebSpeechLifecycle(sr);
-        setActiveRecognizer(sr);
         // Web Speech → route finals and throttled partials
         let _lastInterimAt = 0;
-        sr.onresult = (e: any) => {
-          try {
-            let interim = '', finals = '';
-            for (let i = e.resultIndex; i < e.results.length; i++) {
-              const res = e.results[i];
-              if (res.isFinal) finals += res[0].transcript;
-              else interim += res[0].transcript;
-            }
-            if (finals) routeTranscript(finals, true);
-            const now = performance.now();
-            if (interim && (now - _lastInterimAt) > 120) {
-              _lastInterimAt = now;
-              routeTranscript(interim, false);
-            }
-          } catch {}
-        };
-        sr.onerror = (e: Event) => { try { console.warn('[speech] error', e); } catch {} };
+        attachWebSpeechLifecycle(sr, {
+          onResult: (e: any) => {
+            try {
+              let interim = '', finals = '';
+              for (let i = e.resultIndex; i < e.results.length; i++) {
+                const res = e.results[i];
+                if (res.isFinal) finals += res[0].transcript;
+                else interim += res[0].transcript;
+              }
+              if (finals) routeTranscript(finals, true);
+              const now = performance.now();
+              if (interim && (now - _lastInterimAt) > 120) {
+                _lastInterimAt = now;
+                routeTranscript(interim, false);
+              }
+            } catch {}
+          },
+          onError: (e: Event) => { try { console.warn('[speech] error', e); } catch {} },
+        });
+        setActiveRecognizer(sr);
         try { sr.start(); } catch {}
         rec = { stop: () => { try { sr.stop(); } catch {} } };
         try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}

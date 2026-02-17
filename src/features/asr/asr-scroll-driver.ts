@@ -166,11 +166,20 @@ type AsrMoveResult = {
 
 type CueBridgeSkipReason = 'blank' | 'cue' | 'note' | 'speaker';
 
+export type AsrScrollDriverStats = {
+  lastIngestAt: number;
+  lastCommitAt: number;
+  commitCount: number;
+  eventsSinceCommit: number;
+  finalsSinceCommit: number;
+};
+
 export interface AsrScrollDriver {
   ingest(text: string, isFinal: boolean, detail?: TranscriptDetail): void;
   dispose(): void;
   setLastLineIndex(index: number): void;
   getLastLineIndex(): number;
+  getStats(): AsrScrollDriverStats;
 }
 
 const DEFAULT_MIN_LINE_ADVANCE = 1;
@@ -8334,8 +8343,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     updateDebugState('sync-index');
   };
   const getLastLineIndex = () => lastLineIndex;
+  const getStats = (): AsrScrollDriverStats => ({
+    lastIngestAt,
+    lastCommitAt,
+    commitCount,
+    eventsSinceCommit,
+    finalsSinceCommit,
+  });
 
-  const driver: AsrScrollDriver = { ingest, dispose, setLastLineIndex, getLastLineIndex };
+  const driver: AsrScrollDriver = { ingest, dispose, setLastLineIndex, getLastLineIndex, getStats };
   try { (driver as any).__instanceId = driverInstanceId; } catch {}
   if (isDevMode() && typeof window !== 'undefined') {
     try { (window as any).__tpAsrDriver = driver; } catch {}
