@@ -707,8 +707,8 @@ function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
     reason = 'skip:not-speech-lane';
   } else if (!shouldAutoRestartSpeech()) {
     reason = 'skip:autorestart-disabled';
-  } else if (asrStallEpisodeRestarted) {
-    reason = 'skip:episode-already-attempted';
+  } else if (asrStallEpisodeRestarted && cooldownRemainingBeforeMs > 0) {
+    reason = 'skip:episode-cooldown';
   } else if (suppressionRemainingMs > 0) {
     reason = 'skip:manual-suppressed';
   } else if (cooldownRemainingBeforeMs > 0) {
@@ -743,8 +743,6 @@ function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
 function emitAsrStallIfChanged(payload: AsrHeartbeatPayload, opts?: { force?: boolean }): void {
   if (typeof window === 'undefined') return;
   const stallClass = classifyAsrStall(payload);
-  if (!opts?.force && stallClass === lastAsrStallClass) return;
-  lastAsrStallClass = stallClass;
   const stallPayload: AsrStallPayload = {
     reason: payload.reason,
     ts: payload.ts,
@@ -765,11 +763,13 @@ function emitAsrStallIfChanged(payload: AsrHeartbeatPayload, opts?: { force?: bo
     lifecycleEvent: payload.lifecycleEvent,
     lifecycleEventTs: payload.lifecycleEventTs,
   };
+  maybeAutoRestartSpeechStall(stallPayload);
+  if (!opts?.force && stallClass === lastAsrStallClass) return;
+  lastAsrStallClass = stallClass;
   try { window.__tpAsrStallLast = stallPayload; } catch {}
   try { window.__tpBus?.emit?.('tp:asr:stall', stallPayload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:asr:stall', { detail: stallPayload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:asr:stall', { detail: stallPayload })); } catch {}
-  maybeAutoRestartSpeechStall(stallPayload);
   if (isDevMode()) {
     try { console.warn('[ASR_STALL_VERDICT]', stallPayload); } catch {}
   }
@@ -1159,6 +1159,7 @@ function requestRecognizerRestart(
   opts?: { abortFirst?: boolean },
 ): boolean {
   if (!activeRecognizer || typeof activeRecognizer.start !== 'function') return false;
+  const reason = String(reasonTag || 'restart').trim() || 'restart';
   const abortFirst = opts?.abortFirst !== false;
   if (abortFirst) {
     pendingManualRestartCount += 1;
@@ -1168,14 +1169,14 @@ function requestRecognizerRestart(
   }
   try {
     activeRecognizer.start();
-    try { window.debug?.({ tag: 'speech:watchdog:restart', reason: reasonTag || 'watchdog', hasRecognizer: true }); } catch {}
-    try { console.log('[speech] watchdog: restarted recognition'); } catch {}
+    try { window.debug?.({ tag: 'speech:recognizer:restart', reason, hasRecognizer: true }); } catch {}
+    try { console.log('[speech] recognizer: restarted', { reason }); } catch {}
     return true;
   } catch (err) {
     if (abortFirst) {
       pendingManualRestartCount = Math.max(pendingManualRestartCount - 1, 0);
     }
-    try { console.warn('[speech] watchdog: restart failed', err); } catch {}
+    try { console.warn('[speech] recognizer: restart failed', { reason, err }); } catch {}
     return false;
   }
 }

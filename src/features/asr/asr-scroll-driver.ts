@@ -5084,6 +5084,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         line - lastLineIndex <= cueBridgeDelta;
       const cueBridgeCurrent = Math.max(0, Math.floor(lastLineIndex));
       const cueBridgeTarget = Math.max(0, Math.floor(line));
+      const cueBridgeTargetSkipReason = classifySkippableLineForCueBridge(getLineTextAt(cueBridgeTarget));
       const cueBridgeIntermediateReasons: CueBridgeSkipReason[] = [];
       let cueBridgePathValid = cueBridgePathEligible;
       if (cueBridgePathValid) {
@@ -5095,7 +5096,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           }
           cueBridgeIntermediateReasons.push(skipReason);
         }
-        if (cueBridgePathValid && classifySkippableLineForCueBridge(getLineTextAt(cueBridgeTarget))) {
+        if (cueBridgePathValid && cueBridgeTargetSkipReason) {
           cueBridgePathValid = false;
         }
       }
@@ -5111,18 +5112,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         typeof tieMargin === 'number' &&
         Number.isFinite(tieMargin) &&
         tieMargin >= Math.max(thresholds.tieDelta, DEFAULT_CUE_BRIDGE_LARGE_GAP);
-      const cueBridgeStableEvidenceCount = Number(consistency?.count);
-      const cueBridgeStableEvidenceNeed = Number(consistency?.needed);
-      const cueBridgeStableEvidence =
-        Number.isFinite(cueBridgeStableEvidenceCount) &&
-        Number.isFinite(cueBridgeStableEvidenceNeed) &&
-        cueBridgeStableEvidenceNeed > 0 &&
-        cueBridgeStableEvidenceCount >= Math.max(
-          Math.min(cueBridgeStableEvidenceNeed, DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS),
-          1,
-        );
+      const cueBridgeFinalLargeGap = isFinal && cueBridgeLargeSimGap;
       const cueBridgeEvidenceOk =
-        cueBridgeStrongSim || cueBridgeLargeSimGap || cueBridgeStableEvidence;
+        cueBridgeStrongSim || cueBridgeFinalLargeGap;
       const cueBridgeBypass =
         cueBridgePathValid &&
         cueBridgeSkipCountOk &&
@@ -5263,6 +5255,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const strongForwardCommit = conf >= DEFAULT_STRONG_FORWARD_COMMIT_SIM;
       const clampDeltaLimit = DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES;
       const cueBridgeClampEligible =
+        cueBridgeBypass &&
         cueBridgeDelta > clampDeltaLimit &&
         cueBridgeDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
         targetLine > lastLineIndex &&
