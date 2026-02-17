@@ -506,10 +506,34 @@ function shouldEmitAsrHeartbeatPayload(): boolean {
   return !!session.asrArmed;
 }
 
+function isLiveArmedAsr(mode: string, phase: string, asrArmed: boolean): boolean {
+  return (
+    String(mode || '').toLowerCase() === 'asr' &&
+    String(phase || '').toLowerCase() === 'live' &&
+    asrArmed === true
+  );
+}
+
+function maybeLogLiveArmedDetachedInvariant(reason: string): void {
+  if (!isDevMode()) return;
+  const session = getSession();
+  const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase();
+  const phase = String(session.phase || '').toLowerCase();
+  if (!isLiveArmedAsr(mode, phase, !!session.asrArmed)) return;
+  if (shouldLogTag('ASR:invariant:live-armed-detached', 2, 1000)) {
+    try { console.warn('[ASR_INVARIANT_BROKEN] live+armed but no recognizer attached'); } catch {}
+  }
+}
+
 function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
   const now = Date.now();
   const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase() || 'unknown';
   const session = getSession();
+  const recognizerAttached = !!activeRecognizer;
+  if (!recognizerAttached && speechRunningActual) {
+    setSpeechRunningActual(false, 'invariant:detached');
+    maybeLogLiveArmedDetachedInvariant('heartbeat');
+  }
   const driverRef = resolveAsrDriverRef();
   syncAsrDriverStats(driverRef);
   const lastOnResult = Math.max(lastRecognizerOnResultTs, lastResultTs);
@@ -520,8 +544,8 @@ function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
     sessionPhase: String(session.phase || 'idle').toLowerCase() || 'idle',
     asrArmed: !!session.asrArmed,
     speechRunning: !!running,
-    speechRunningActual: !!speechRunningActual,
-    recognizerAttached: !!activeRecognizer,
+    speechRunningActual: recognizerAttached ? !!speechRunningActual : false,
+    recognizerAttached,
     lastOnResultTs: toMaybeTimestamp(lastOnResult),
     lastIngestTs: toMaybeTimestamp(lastAsrIngestTs),
     lastCommitTs: toMaybeTimestamp(lastAsrCommitTs),
@@ -536,6 +560,15 @@ function buildAsrHeartbeat(reason: string): AsrHeartbeatPayload {
 
 function classifyAsrStall(payload: AsrHeartbeatPayload): AsrStallClass {
   const now = Number.isFinite(payload.ts) ? Number(payload.ts) : Date.now();
+  const liveArmedDetached = isLiveArmedAsr(
+    payload.scrollMode,
+    payload.sessionPhase,
+    payload.asrArmed,
+  ) && !payload.recognizerAttached;
+  if (liveArmedDetached) {
+    maybeLogLiveArmedDetachedInvariant('stall-classifier');
+    return 'speech_stall';
+  }
   const commitCount = Math.max(0, Math.floor(Number(payload.commitCount) || 0));
   if (commitCount !== lastMatcherStallCommitCount) {
     lastMatcherStallCommitCount = commitCount;
@@ -625,7 +658,7 @@ function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
   const mode = String(stallPayload.scrollMode || '').toLowerCase();
   const asrArmed = stallPayload.asrArmed === true;
   const inAsrMode = mode === 'asr';
-  const recognizerLaneDied = !!stallPayload.recognizerAttached || !stallPayload.speechRunningActual;
+  const recognizerLaneDied = !stallPayload.recognizerAttached || !stallPayload.speechRunningActual;
   if (!inAsrMode || !asrArmed) {
     asrStallEpisodeRestarted = false;
     asrStallAttemptCountThisEpisode = 0;
@@ -831,6 +864,14 @@ function markResultTimestamp(): void {
 
 function setSpeechRunningActual(next: boolean, reason: string): void {
   const normalized = !!next;
+  if (normalized && !activeRecognizer) {
+    if (speechRunningActual) {
+      speechRunningActual = false;
+    }
+    maybeLogLiveArmedDetachedInvariant(`setSpeechRunningActual:${reason}`);
+    emitHudSnapshot(`speech-running-actual:blocked:${reason}`, { force: true });
+    return;
+  }
   if (speechRunningActual === normalized) return;
   speechRunningActual = normalized;
   emitHudSnapshot(`speech-running-actual:${reason}`, { force: true });
@@ -948,15 +989,31 @@ function startSpeechWatchdog(): void {
   }, WATCHDOG_INTERVAL_MS);
 }
 function setActiveRecognizer(instance: RecognizerLike | null): void {
+  const previousRecognizer = activeRecognizer;
   activeRecognizer = instance && typeof instance.start === 'function' ? instance : null;
   pendingManualRestartCount = 0;
   clearLifecycleRestartTimer();
   if (activeRecognizer) {
     markResultTimestamp();
     startSpeechWatchdog();
+    if (previousRecognizer !== activeRecognizer) {
+      try {
+        markWebSpeechLifecycle('attach', new Event('attach'), {
+          reason: 'setActiveRecognizer',
+        });
+      } catch {}
+    }
   } else {
     stopSpeechWatchdog();
     setSpeechRunningActual(false, 'detach');
+    if (previousRecognizer) {
+      try {
+        markWebSpeechLifecycle('detach', new Event('detach'), {
+          reason: 'setActiveRecognizer:null',
+        });
+      } catch {}
+    }
+    maybeLogLiveArmedDetachedInvariant('setActiveRecognizer:null');
   }
 }
 
@@ -2952,8 +3009,18 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
       try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
       if (rec && typeof rec.start === 'function') {
         setActiveRecognizer(rec);
+      } else {
+        setActiveRecognizer(null);
+      }
+      if (!activeRecognizer) {
+        emitAsrState('idle', 'recognizer-not-attached:orchestrator');
+        setSpeechRunningActual(false, 'orchestrator-no-attach');
+        maybeLogLiveArmedDetachedInvariant('orchestrator-no-attach');
+        emitHudSnapshot('recognizer-attach-failed:orchestrator', { force: true });
+        return false;
       }
       setSpeechRunningActual(true, 'orchestrator-start');
+      emitAsrHeartbeat('recognizer-attached:orchestrator', { force: true });
       return true;
     }
   } catch {}
@@ -2961,12 +3028,26 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
   try {
     const startRecognizer = speechNs?.startRecognizer;
     if (typeof startRecognizer === 'function') {
-      startRecognizer(() => {}, { lang: 'en-US' });
-      rec = {
+      const startNamespaceRecognizer = () => {
+        startRecognizer(() => {}, { lang: 'en-US' });
+      };
+      startNamespaceRecognizer();
+      const namespaceRecognizer: RecognizerLike = {
+        start: () => { startNamespaceRecognizer(); },
         stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
         abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
       };
+      rec = namespaceRecognizer;
+      setActiveRecognizer(namespaceRecognizer);
+      if (!activeRecognizer) {
+        emitAsrState('idle', 'recognizer-not-attached:namespace');
+        setSpeechRunningActual(false, 'namespace-no-attach');
+        maybeLogLiveArmedDetachedInvariant('namespace-no-attach');
+        emitHudSnapshot('recognizer-attach-failed:namespace', { force: true });
+        return false;
+      }
       setSpeechRunningActual(true, 'namespace-start');
+      emitAsrHeartbeat('recognizer-attached:namespace', { force: true });
       return true;
     }
   } catch {}
@@ -2997,8 +3078,22 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     onError: (e: Event) => { try { console.warn('[speech] error', e); } catch {} },
   });
   setActiveRecognizer(sr);
-  try { sr.start(); } catch {}
+  let startedOk = false;
+  try {
+    sr.start();
+    startedOk = true;
+  } catch {}
+  if (!startedOk) {
+    emitAsrState('idle', 'recognizer-start-failed:webspeech');
+    setActiveRecognizer(null);
+    setSpeechRunningActual(false, 'webspeech-start-failed');
+    maybeLogLiveArmedDetachedInvariant('webspeech-start-failed');
+    emitHudSnapshot('recognizer-start-failed:webspeech', { force: true });
+    return false;
+  }
   rec = { stop: () => { try { sr.stop(); } catch {} } };
+  setSpeechRunningActual(true, 'webspeech-start');
+  emitAsrHeartbeat('recognizer-attached:webspeech', { force: true });
   try { window.__tpEmitSpeech = (t: unknown, final?: boolean) => routeRecognizerTranscript(t, !!final); } catch {}
   return true;
 }
@@ -3133,6 +3228,23 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
       const ok = await startBackendForSession(mode, info?.reason);
       if (shouldLogLevel(2)) {
         try { console.debug('[ASR] didCallStartRecognizer', { ok }); } catch {}
+      }
+      if (!ok) {
+        running = false;
+        setActiveRecognizer(null);
+        setSpeechRunningActual(false, 'start-failed:no-attach');
+        setListeningUi(false);
+        setReadyUi();
+        clearAsrRunKey('start-failed:no-attach');
+        emitAsrState('idle', 'recognizer-not-attached');
+        emitHudSnapshot('speech-start-failed:no-attach', { force: true });
+        bootTrace('speech-loader:live-path:error', {
+          mode,
+          reason: info?.reason || null,
+          runKey,
+          detail: 'recognizer-not-attached',
+        });
+        return false;
       }
       try { await window.__tpMic?.requestMic?.(); } catch {}
       bootTrace('speech-loader:live-path:done', { mode, ok, runKey });
