@@ -52,6 +52,7 @@ When `scrollMode='asr'`:
 - Strong same-line final `+1` nudge may bypass short-line ambiguity HOLD only when lexical overlap with current line is high, with no bridge skip and adjacent speakable target only.
 - Dev tuning may enable permissive matcher mode (`__tpAsrPermissiveMatcher` or `asr_matcher=permissive`, default-on in dev): guard branches (`tie`, `low_sim`, short-line ambiguity hold) log but do not hard-block forward commit progression.
 - In permissive matcher mode, same-line final completions may promote a bounded `+1` speakable advance (`forceReason='permissive-final-advance'`), and pending commit gate must honor that bypass at progressive floor.
+- In permissive matcher mode, ambiguity HOLD is non-blocking for bounded final forward advance; hold may log, but it must not trap same-line finals at the cursor.
 - Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.
 - Cue-bridge nudge/confirm into content must require strong evidence (`strongSim`, or large sim-gap, or multi-event stability); low-sim nudges may not bridge into regular content lines.
 - Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.

@@ -1204,8 +1204,6 @@ function isPermissiveAsrMatcherEnabled(): boolean {
       return false;
     }
     const ls = w.localStorage;
-    if (ls?.getItem('tp_asr_permissive_matcher') === '0') return false;
-    if (ls?.getItem('tp_asr_loose_matcher') === '0') return false;
     if (ls?.getItem('tp_asr_permissive_matcher') === '1') return true;
     if (ls?.getItem('tp_asr_loose_matcher') === '1') return true;
   } catch {
@@ -8698,8 +8696,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     const blockCueBridgeForHold =
-      ambiguityHoldActive ||
-      (preNudgeShortLineAmbiguous && !permissiveMatcher);
+      !permissiveMatcher &&
+      (ambiguityHoldActive || preNudgeShortLineAmbiguous);
     const finalMatchNudgeEligible =
       isFinal &&
       rawIdx === cursorLine &&
@@ -8788,6 +8786,38 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 : permissiveFinalNudgeEligible
                 ? `ASR_NUDGE permissive_final best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} overlap=${overlapTokensCurrent.length}/${tokenCount} -> next=${rawIdx}`
                 : `ASR_NUDGE final_match_strong best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`,
+            );
+          } catch {}
+        }
+      }
+    }
+    if (
+      permissiveMatcher &&
+      isFinal &&
+      rawIdx === cursorLine &&
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM
+    ) {
+      const fallbackBridge = findNextSpeakableWithinBridge(
+        cursorLine,
+        DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+      );
+      const totalLines = getTotalLines();
+      let fallbackTarget =
+        fallbackBridge.nextLine != null && fallbackBridge.nextLine > cursorLine
+          ? Math.max(cursorLine + 1, Math.floor(fallbackBridge.nextLine))
+          : cursorLine + 1;
+      if (totalLines > 0) {
+        fallbackTarget = Math.min(fallbackTarget, Math.max(0, totalLines - 1));
+      }
+      if (fallbackTarget > cursorLine) {
+        const before = rawIdx;
+        rawIdx = fallbackTarget;
+        cueBridgeNudgeDelta = Math.max(cueBridgeNudgeDelta || 0, rawIdx - cursorLine);
+        forceReason = forceReason || 'permissive-final-advance';
+        if (isDevMode()) {
+          try {
+            console.info(
+              `ASR_NUDGE permissive_final_fallback best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`,
             );
           } catch {}
         }
@@ -9043,7 +9073,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       holdShortLineAmbiguous
         ? (holdAmbiguity.reason || 'short_line_ambiguous')
         : '';
-    const holdCandidateAmbiguous = rawIdx >= cursorLine && holdShortLineAmbiguous;
+    const holdCandidateAmbiguous =
+      rawIdx >= cursorLine &&
+      holdShortLineAmbiguous &&
+      !permissiveMatcher;
     const holdAnchorCandidates = forwardBandScores
       .filter((entry) =>
         entry.idx > cursorLine &&
@@ -9096,6 +9129,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const holdBestSim = holdBestCandidate ? holdBestCandidate.score : conf;
     const holdSecondIdx = holdSecondCandidate ? holdSecondCandidate.idx : null;
     const holdSecondSim = holdSecondCandidate ? holdSecondCandidate.score : null;
+    if (ambiguityHoldActive && permissiveMatcher) {
+      closeAmbiguityHold(
+        now,
+        'permissive-mode',
+        cursorLine,
+        holdBestIdx,
+        holdBestSim,
+        holdSecondIdx,
+        holdSecondSim,
+      );
+    }
     if (ambiguityHoldActive) {
       if (holdAnchorReady && holdAnchorBest) {
         closeAmbiguityHold(
@@ -9406,11 +9450,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lookaheadBase > matchLookaheadLines ||
       forceReason === 'watchdog' ||
       lostForwardActive;
+    const permissiveForcedAdvance =
+      forceReason === 'permissive-final-advance' &&
+      rawIdx > cursorLine;
     let hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
       ? true
       : isFinal
         ? finalEvidence
         : interimEvidence;
+    if (permissiveForcedAdvance) {
+      hasEvidence = true;
+    }
     const extraDeltaLines = Math.max(0, deltaFromCursor - minLineAdvance);
     if (hasEvidence && extraDeltaLines > 0) {
       const multiLineNeed = clamp(

@@ -95,6 +95,7 @@ In `scrollMode='asr'`:
 - Same-line strong-final plain `+1` nudge may bypass short-line ambiguity HOLD only when current-line lexical overlap is strong (high token hit count and ratio), with no bridge skip and adjacent speakable target only.
 - Dev tuning may run a permissive matcher lane (enabled by `__tpAsrPermissiveMatcher` / `asr_matcher=permissive`, default-on in dev): tie/low-sim/ambiguity guards log diagnostics but should not hard-stop forward commit selection.
 - In permissive matcher lane, same-line final completions may promote to bounded `+1` speakable advance (`forceReason='permissive-final-advance'`) and pending commit gating must honor that bypass at progressive floor.
+- In permissive matcher lane, ambiguity HOLD is diagnostic-only: active hold must not suppress bounded forward final advance when same-line final evidence is strong enough to progress.
 - Cue-boundary bridge widening applies to same-line confirm/nudge flow only; full commit target resolution remains bounded by the normal commit clamp window.
 - When same-line cue bridge selects a forward target, pending commit must carry the same bounded bridge delta (`<=+3`) through clamp arbitration; it must not clamp back to `+1` and re-block on an intermediate cue-only line.
 - Pending commit cue-bridge bypass must be true bridge-only: intermediate skipped lines must all be cue/blank/note/speaker skippable, capped to a small span (`<=2` skipped lines), and target must be speakable.
