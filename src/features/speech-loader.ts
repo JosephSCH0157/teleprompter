@@ -495,7 +495,7 @@ function emitAsrHeartbeat(reason: string, opts?: { force?: boolean }): void {
   }
 }
 
-function _stopAsrHeartbeat(): void {
+function stopAsrHeartbeat(): void {
   if (asrHeartbeatTimer != null) {
     window.clearInterval(asrHeartbeatTimer);
     asrHeartbeatTimer = null;
@@ -528,6 +528,7 @@ function dispatchSessionIntent(active: boolean, detail?: { source?: string; reas
 function armAsrForSessionStart(mode: string, source: string): void {
   const normalizedMode = String(mode || '').toLowerCase();
   if (normalizedMode !== 'asr') return;
+  startAsrHeartbeat();
   const store = window.__tpStore;
   if (!store || typeof store.set !== 'function') return;
   try { store.set('session.asrDesired' as any, true as any); } catch {}
@@ -669,7 +670,7 @@ function scheduleRecognizerLifecycleRestart(
   lifecycleRestartTimer = window.setTimeout(() => {
     lifecycleRestartTimer = null;
     if (!shouldAutoRestartSpeech()) return;
-    const abortFirst = opts?.abortFirst === true;
+    const abortFirst = opts?.abortFirst ?? false;
     const restarted = requestRecognizerRestart(`lifecycle:${trigger}`, {
       abortFirst,
     });
@@ -742,6 +743,9 @@ function clearRecognizerHandlers(instance: any): void {
   try { instance.onsoundstart = null; } catch {}
   try { instance.onsoundend = null; } catch {}
   try { instance.onnomatch = null; } catch {}
+  try { instance.__tpLifecycleAttached = false; } catch {}
+  try { instance.__tpLifecycleOnResult = null; } catch {}
+  try { instance.__tpLifecycleOnError = null; } catch {}
 }
 
 function stopAndAbortRecognizer(instance: any): void {
@@ -766,6 +770,7 @@ function hardResetSpeechEngine(reason?: string): void {
   clearAsrRunKey(`hard-reset:${why}`);
   clearLifecycleRestartTimer();
   stopSpeechWatchdog();
+  stopAsrHeartbeat();
 
   const candidates = new Set<any>();
   const remember = (value: any) => {
@@ -2364,8 +2369,6 @@ function syncAsrDriverFromBlocks(reason: string, opts?: { mode?: string; allowCr
 function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
   const t = String(text || '').trim();
   if (!t) return;
-  const ingestAt = Date.now();
-  lastAsrIngestTs = Math.max(lastAsrIngestTs, ingestAt);
   const payload = {
     text: t,
     isFinal: !!isFinal,
@@ -2603,8 +2606,26 @@ type WebSpeechLifecycleOptions = {
   onError?: (event: Event) => void;
 };
 
+type WebSpeechLifecycleHost = SpeechRecognition & {
+  __tpLifecycleAttached?: boolean;
+  __tpLifecycleOnResult?: ((event: any) => void) | null;
+  __tpLifecycleOnError?: ((event: Event) => void) | null;
+};
+
 function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycleOptions = {}): void {
   if (!sr) return;
+  const host = sr as WebSpeechLifecycleHost;
+  if (host.__tpLifecycleAttached) {
+    host.__tpLifecycleOnResult = opts.onResult ?? null;
+    host.__tpLifecycleOnError = opts.onError ?? null;
+    if (isDevMode() && shouldLogTag('ASR:lifecycle:already-attached', 2, 1000)) {
+      try { console.warn('[speech] lifecycle already attached'); } catch {}
+    }
+    return;
+  }
+  host.__tpLifecycleAttached = true;
+  host.__tpLifecycleOnResult = opts.onResult ?? null;
+  host.__tpLifecycleOnError = opts.onError ?? null;
   sr.onstart = (event: Event) => {
     setSpeechRunningActual(true, 'onstart');
     markWebSpeechLifecycle('onstart', event);
@@ -2622,7 +2643,7 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycl
       resultCount,
       resultIndex: Number(event?.resultIndex || 0),
     });
-    try { opts.onResult?.(event); } catch {}
+    try { host.__tpLifecycleOnResult?.(event); } catch {}
   };
   sr.onspeechend = (event: Event) => {
     markWebSpeechLifecycle('onspeechend', event);
@@ -2655,7 +2676,7 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycl
     const code = String((event as any)?.error || '').toLowerCase() || 'error';
     setSpeechRunningActual(false, 'onerror');
     markWebSpeechLifecycle('onerror', event, { code });
-    try { opts.onError?.(event); } catch {}
+    try { host.__tpLifecycleOnError?.(event); } catch {}
     if (isRestartableWebSpeechError(event) && shouldAutoRestartSpeech()) {
       scheduleRecognizerLifecycleRestart('onerror', { abortFirst: false });
       return;
@@ -2901,6 +2922,7 @@ export async function startSpeechBackendForSession(info?: { reason?: string; mod
 export function stopSpeechBackendForSession(reason?: string): void {
   suppressRecognizerAutoRestart = true;
   clearLifecycleRestartTimer();
+  stopAsrHeartbeat();
   asrSessionIntentActive = false;
   resetAsrInterimStabilizer();
   clearAsrRunKey(`stop:${String(reason || 'unspecified')}`);
