@@ -2637,7 +2637,8 @@ function setHybridBrake(factor: number, ttlMs: number, reason: string | null = n
     }
     if (shouldLogBrake) {
       try {
-        console.info('[HYBRID_BRAKE] set', {
+        const brakeTag = state2.mode === 'asr' ? 'ASR_BRAKE' : 'HYBRID_BRAKE';
+        console.info(`[${brakeTag}] set`, {
           factor: safeFactor,
           ttl,
           expiresAt: hybridBrakeState.expiresAt,
@@ -3082,7 +3083,8 @@ function installScrollRouter(opts) {
             if (isDevMode() && now - lastProgrammaticWriterLogAt >= PROGRAMMATIC_WRITER_LOG_THROTTLE_MS) {
               lastProgrammaticWriterLogAt = now;
               try {
-                console.info('[HYBRID_BRAKE] skip', {
+                const brakeTag = state2.mode === 'asr' ? 'ASR_BRAKE' : 'HYBRID_BRAKE';
+                console.info(`[${brakeTag}] skip`, {
                   reason: 'programmatic-writer',
                   source: writerStamp.source,
                   kind: writerStamp.kind,

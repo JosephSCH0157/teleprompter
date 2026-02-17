@@ -302,7 +302,7 @@ export class AsrMode {
       const score = coverage * confidence;
       if (score > bestScore) { bestScore = score; bestIdx = i; }
     }
-    logAsrDebug('[ASR threshold]', {
+    logAsrDebug('[ASR threshold] (mode-side diagnostic; not driver scorer)', {
       threshold,
       bestScore,
       bestIdx,
