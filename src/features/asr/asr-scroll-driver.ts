@@ -5181,12 +5181,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
         isSessionAsrArmed() &&
         isSessionLivePhase();
+      const finalForwardBypass =
+        (forceReason === 'final-forward-nudge' || forceReason === 'final-forward-fallback') &&
+        line > lastLineIndex &&
+        conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+        isSessionAsrArmed() &&
+        isSessionLivePhase();
       const strongMatch =
         watchdogBypass ||
         progressiveFloorBypass ||
         cueBridgeBypass ||
         lostForwardBypass ||
         permissiveForwardBypass ||
+        finalForwardBypass ||
         (conf >= effectiveMatchThreshold && tieOk);
       if (!strongMatch) {
         const tieParts = !tieOk && typeof tieMargin === 'number'
@@ -5269,6 +5276,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try {
           console.info(
             `ASR_PERMISSIVE_FINAL_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)}`,
+          );
+        } catch {}
+      }
+      if (finalForwardBypass && isDevMode()) {
+        try {
+          console.info(
+            `ASR_FINAL_FORWARD_BYPASS current=${lastLineIndex} target=${line} delta=${line - lastLineIndex} sim=${formatLogScore(conf)} floor=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)} reason=${forceReason}`,
           );
         } catch {}
       }
@@ -8756,8 +8770,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const before = rawIdx;
         rawIdx = nudgeTarget;
         cueBridgeNudgeDelta = Math.max(1, rawIdx - cursorLine);
-        if (permissiveFinalNudgeEligible && !forceReason) {
-          forceReason = 'permissive-final-advance';
+        if (isFinal && rawIdx > cursorLine && !forceReason) {
+          forceReason = permissiveFinalNudgeEligible
+            ? 'permissive-final-advance'
+            : 'final-forward-nudge';
         }
         if (bridgeUsed) {
           logCueBridgeUse(
@@ -8791,12 +8807,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
-    if (
+    const permissiveFinalFallbackEligible =
       permissiveMatcher &&
       isFinal &&
       rawIdx === cursorLine &&
-      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM
-    ) {
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+    const strictFinalFallbackEligible =
+      !permissiveMatcher &&
+      isFinal &&
+      rawIdx === cursorLine &&
+      cueBridgeNudgeEvidenceOk &&
+      conf >= Math.max(effectiveThreshold, DEFAULT_STRONG_FORWARD_COMMIT_SIM) &&
+      overlapTokensCurrent.length >= DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_TOKENS &&
+      overlapRatioCurrent >= DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_RATIO;
+    if (permissiveFinalFallbackEligible || strictFinalFallbackEligible) {
       const fallbackBridge = findNextSpeakableWithinBridge(
         cursorLine,
         DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
@@ -8813,11 +8837,17 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const before = rawIdx;
         rawIdx = fallbackTarget;
         cueBridgeNudgeDelta = Math.max(cueBridgeNudgeDelta || 0, rawIdx - cursorLine);
-        forceReason = forceReason || 'permissive-final-advance';
+        forceReason = forceReason || (
+          permissiveFinalFallbackEligible
+            ? 'permissive-final-advance'
+            : 'final-forward-fallback'
+        );
         if (isDevMode()) {
           try {
             console.info(
-              `ASR_NUDGE permissive_final_fallback best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`,
+              permissiveFinalFallbackEligible
+                ? `ASR_NUDGE permissive_final_fallback best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} -> next=${rawIdx}`
+                : `ASR_NUDGE final_forward_fallback best=${before} cursor=${cursorLine} sim=${formatLogScore(conf)} overlap=${overlapTokensCurrent.length}/${tokenCount} -> next=${rawIdx}`,
             );
           } catch {}
         }
@@ -9453,12 +9483,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const permissiveForcedAdvance =
       forceReason === 'permissive-final-advance' &&
       rawIdx > cursorLine;
+    const finalForwardForcedAdvance =
+      (forceReason === 'final-forward-nudge' || forceReason === 'final-forward-fallback') &&
+      rawIdx > cursorLine;
     let hasEvidence = outrunCommit || catchupCommit || lowSimForwardEvidence || slamDunkFinal || strongSmallForwardEvidence
       ? true
       : isFinal
         ? finalEvidence
         : interimEvidence;
-    if (permissiveForcedAdvance) {
+    if (permissiveForcedAdvance || finalForwardForcedAdvance) {
       hasEvidence = true;
     }
     const extraDeltaLines = Math.max(0, deltaFromCursor - minLineAdvance);
