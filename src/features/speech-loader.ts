@@ -1619,15 +1619,22 @@ function emitAsrState(state: string, reason?: string): void {
 }
 
 function shouldAutoRestartSpeech(): boolean {
-  if (!running) return false;
   if (suppressRecognizerAutoRestart) return false;
   const mode = String(lastScrollMode || getScrollMode() || '').toLowerCase();
   rememberMode(mode);
   if (!isAutoRestartEnabled()) return false;
-  if (mode === 'hybrid') return true;
-  if (mode !== 'asr') return false;
   const session = getSession();
-  return !!session.asrArmed;
+  const phase = String(session.phase || '').toLowerCase();
+  const recognizerActive = !!activeRecognizer || !!speechRunningActual;
+  if (mode === 'hybrid') {
+    return running || recognizerActive;
+  }
+  if (mode !== 'asr') return false;
+  if (!session.asrArmed) return false;
+  if (phase === 'live') {
+    return running || recognizerActive;
+  }
+  return running;
 }
 
 function isDevMode(): boolean {

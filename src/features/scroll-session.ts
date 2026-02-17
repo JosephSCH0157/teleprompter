@@ -44,15 +44,64 @@ type StopAutoScrollContext = {
   shouldRun: boolean;
 };
 
-function dispatchAutoIntent(enabled: boolean): void {
+function buildScriptEndProbe(): Record<string, unknown> {
+  const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
+  const session = getSession();
+  const scroller = resolveActiveScroller(
+    getPrimaryScroller(),
+    getScriptRoot() || getFallbackScroller(),
+  );
+  const scrollTop = Number(scroller?.scrollTop || 0);
+  const scrollHeight = Number(scroller?.scrollHeight || 0);
+  const clientHeight = Number(scroller?.clientHeight || 0);
+  const remainingPx = Math.max(0, scrollHeight - (scrollTop + clientHeight));
+  const remainingRatio = scrollHeight > 0
+    ? Number((remainingPx / scrollHeight).toFixed(4))
+    : null;
+  const probeEndThresholdPx = 24;
+  return {
+    mode,
+    sessionPhase: session.phase,
+    asrArmed: !!session.asrArmed,
+    scroller: describeElement(scroller),
+    scrollTop: Math.round(scrollTop),
+    scrollHeight: Math.round(scrollHeight),
+    clientHeight: Math.round(clientHeight),
+    remainingPx: Math.round(remainingPx),
+    remainingRatio,
+    probeEndThresholdPx,
+    atEndByProbe: remainingPx <= probeEndThresholdPx,
+  };
+}
+
+function dispatchAutoIntent(enabled: boolean, reason: string): void {
+  const safeReason = String(reason || 'scriptEnd');
+  const mode = normalizeScrollMode(appStore.get('scrollMode') as string | undefined);
+  const session = getSession();
   try {
     if (shouldLogLevel(3)) {
-      console.trace('[probe] dispatch tp:auto:intent', { enabled });
+      console.trace('[probe] dispatch tp:auto:intent', {
+        enabled,
+        reason: safeReason,
+        mode,
+        phase: session.phase,
+      });
     }
   } catch {}
+  if (safeReason.toLowerCase() === 'scriptend' && shouldLogLevel(2)) {
+    try {
+      console.warn('[scroll-session] scriptEnd intent probe', buildScriptEndProbe());
+    } catch {}
+  }
   try {
     window.dispatchEvent(new CustomEvent('tp:auto:intent', {
-      detail: { enabled, reason: 'scriptEnd' },
+      detail: {
+        enabled,
+        reason: safeReason,
+        mode,
+        phase: session.phase,
+        source: 'scroll-session',
+      },
     }));
   } catch {
     // ignore
@@ -69,14 +118,23 @@ function startAutoScroll(mode: string): void {
   try {
     console.debug('[scroll-session] dispatching tp:auto:intent (start)');
   } catch {}
-  dispatchAutoIntent(true);
+  dispatchAutoIntent(true, 'session-live-start');
 }
 
 function stopAutoScroll(ctx: StopAutoScrollContext): void {
   try {
     console.info('[scroll-session] STOP requested', ctx);
   } catch {}
-  dispatchAutoIntent(false);
+  if (normalizeScrollMode(ctx.mode) === 'asr') {
+    try {
+      console.debug('[scroll-session] STOP auto-intent suppressed for ASR mode', {
+        reason: ctx.reason,
+        phase: ctx.phase,
+      });
+    } catch {}
+    return;
+  }
+  dispatchAutoIntent(false, ctx.reason || 'phase-change');
 }
 
 function shouldStopAutoForPhase(phase: SessionPhase): boolean {

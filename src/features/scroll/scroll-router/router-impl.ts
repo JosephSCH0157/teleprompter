@@ -3671,13 +3671,38 @@ function installScrollRouter(opts) {
       const enabled = resolveAutoIntentEnabled(detail);
       if (typeof enabled !== 'boolean') return null;
       const reasonRaw = resolveAutoIntentReason(detail);
+      const mode = getScrollMode();
+      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
+      const asrArmed = !!appStore.get('session.asrArmed');
+      const reasonNormalized = String(reasonRaw || '').trim().toLowerCase();
+      const reasonCompact = reasonNormalized.replace(/[^a-z]/g, '');
+      const isScriptEndReason = reasonCompact === 'scriptend';
+      const ignoreAsrScriptEnd =
+        !enabled &&
+        isScriptEndReason &&
+        mode === 'asr' &&
+        currentPhase === 'live' &&
+        asrArmed;
+      if (ignoreAsrScriptEnd) {
+        if (isDevMode()) {
+          try {
+            console.warn('[AUTO_INTENT] scriptEnd ignored in live armed ASR', {
+              enabled,
+              reason: reasonRaw ?? null,
+              mode,
+              phase: currentPhase,
+              asrArmed,
+            });
+          } catch {}
+        }
+        return null;
+      }
       if (shouldIgnoreHybridStop(reasonRaw, enabled)) {
         try {
           console.info('[AUTO_INTENT] hybrid stop ignored (live, non-fatal reason)', { reason: reasonRaw });
         } catch {}
         return null;
       }
-      const mode = getScrollMode();
       const motorRequest = resolveAutoIntentMotorRequest(detail, mode, reasonRaw);
       lastAutoIntentMotorRequest = motorRequest;
       setAutoIntentState(enabled, reasonRaw);
@@ -3686,7 +3711,6 @@ function installScrollRouter(opts) {
       const baseDecision: AutoIntentDecision = enabled ? 'motor-start-request' : 'motor-stop-request';
       const decision: AutoIntentDecision = allowAutoMotor ? baseDecision : 'motor-stop-request';
       const pxPerSec = typeof getCurrentSpeed === 'function' ? getCurrentSpeed() : undefined;
-      const currentPhase = String(appStore.get('session.phase') || sessionPhase);
       try {
         console.info(
           `[scroll-router] tp:auto:intent mode=${state2.mode} brain=${brain} phase=${sessionPhase} decision=${decision} userEnabled=${userEnabled} motorKind=${motorRequest.kind} source=${motorRequest.source}`,

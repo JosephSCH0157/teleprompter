@@ -56,6 +56,7 @@ When `scrollMode='asr'`:
 - In non-final short-line ambiguity HOLD, suppress forced recovery progression (`lost-forward`, watchdog, progressive-floor forcing) and cue-bridge advancement; continue ingesting until anchor rescue resolves.
 - HOLD anchor rescue stays bounded: while HOLD is active, scan only the bounded forward window (`+8` lines) and relock only on strong long-anchor evidence.
 - LOST_FORWARD rescue must de-prioritize adjacent short-line tie pockets (`±1..2` short candidates with near-tied scores) and favor bounded strong long-anchor relock when available.
+- `tp:auto:intent` with `reason='scriptEnd'` must not stop live armed ASR sessions; in `mode='asr' && phase='live' && session.asrArmed=true`, router ignores that stop intent.
 - Post-commit grace rollback is bounded: within a short post-commit window, allow a one-line rollback correction only when `cursor-1` is decisively stronger, then enforce cooldown to prevent oscillation.
 - Guard profile defaults are relaxed for forward continuity: reduce same-line throttle, lower forced-evidence floors, and trigger watchdog recovery sooner while keeping forward recovery bounded.
 - Any non-finite (`NaN`/`Infinity`) value in ASR commit/seek numeric paths must be hard-guarded and dropped; emit a dev diagnostic (`ASR NAN GUARD` / writer non-finite guard) instead of propagating unstable math.

@@ -116,6 +116,7 @@ In `scrollMode='asr'`:
 - While short-line ambiguity HOLD applies to non-final evidence, forced recovery paths (`lost-forward`/watchdog/progressive-floor forcing) and cue-bridge progression are suppressed; keep ingesting until strong anchor rescue resolves.
 - HOLD anchor rescue must stay bounded and strong: while HOLD is active, scan only the bounded forward window (`+8` lines) and relock only on long anchor evidence (long content line, strong similarity, meaningful shared content, and margin over runner-up).
 - LOST_FORWARD rescue must de-prioritize adjacent short-line tie pockets (`±1..2` short candidates with near-tied scores) and prefer bounded strong long-anchor relock when present.
+- AUTO_INTENT `reason='scriptEnd'` must never terminate live armed ASR sessions; router must ignore that stop-intent in `mode='asr' && phase='live' && session.asrArmed=true`.
 - Post-commit grace rollback is one-shot and bounded: within a short post-commit window, if `cursor-1` is decisively stronger than current evidence, allow a single one-line rollback correction and apply cooldown to prevent backstep oscillation.
 - Same-line final confirmations must prefer the bounded nudge path over forced outrun escalation: when final best match equals cursor with sufficient confidence, suppress forced outrun arbitration and let nudge/select-forward logic decide the next line.
 - Scroll-event brake classification must treat recent ASR/writer programmatic scroll writes as `programmatic-writer` and must not emit `manual-scroll` brake reasons for those writes.
