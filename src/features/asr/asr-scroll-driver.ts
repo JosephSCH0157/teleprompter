@@ -428,6 +428,8 @@ const DEFAULT_HOLD_ANCHOR_MIN_SIM = 0.62;
 const DEFAULT_HOLD_ANCHOR_MARGIN = 0.05;
 const DEFAULT_HOLD_ANCHOR_MIN_CONTENT_TOKENS = 12;
 const DEFAULT_HOLD_ANCHOR_MIN_SHARED_CONTENT_HITS = 3;
+const DEFAULT_HOLD_ANCHOR_NEAR_DELTA_LINES = 1;
+const DEFAULT_HOLD_ANCHOR_NEAR_MIN_SIM = 0.72;
 const DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES = 6;
 const HOLD_TICK_LOG_THROTTLE_MS = 500;
 const DEFAULT_NO_PROGRESS_STREAK_TRIGGER = 4;
@@ -7441,6 +7443,54 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         logDev('short-final threshold', { cursorLine, best: rawIdx, need: effectiveThreshold, sim: conf });
       }
     }
+    const interimAmbiguityCandidates = topScoresSpeakable
+      .filter((entry) =>
+        Number.isFinite(entry.idx) &&
+        Number.isFinite(entry.score) &&
+        Math.abs(entry.idx - cursorLine) <= DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES)
+      .map((entry) => ({
+        idx: Math.max(0, Math.floor(Number(entry.idx))),
+        score: Number(entry.score),
+      }))
+      .sort((a, b) =>
+        b.score - a.score ||
+        Math.abs(a.idx - cursorLine) - Math.abs(b.idx - cursorLine) ||
+        a.idx - b.idx,
+      );
+    const interimAmbiguityBest = interimAmbiguityCandidates[0] || null;
+    const interimAmbiguitySecond = interimAmbiguityCandidates[1] || null;
+    const interimAmbiguityTranscript =
+      transcriptComparable ||
+      normalizeComparableText(bufferedText || compacted || text);
+    const interimAmbiguityTranscriptContent = getContentTokenSet(normTokens(interimAmbiguityTranscript));
+    const interimAmbiguityBestTokens = interimAmbiguityBest
+      ? normTokens(normalizeComparableText(getLineTextAt(interimAmbiguityBest.idx)))
+      : [];
+    const interimAmbiguitySecondTokens = interimAmbiguitySecond
+      ? normTokens(normalizeComparableText(getLineTextAt(interimAmbiguitySecond.idx)))
+      : [];
+    const interimAmbiguityBestContentCount = getContentTokenSet(interimAmbiguityBestTokens).size;
+    const interimAmbiguityBestOverlapHits = countSharedContentTokenHits(
+      interimAmbiguityTranscriptContent,
+      interimAmbiguityBestTokens,
+    );
+    const interimAmbiguityEval =
+      interimAmbiguityBest &&
+      interimAmbiguitySecond &&
+      !isFinal
+        ? evaluateShortLineAmbiguityHold(
+            cursorLine,
+            interimAmbiguityBest.idx,
+            interimAmbiguityBest.score,
+            interimAmbiguityBestContentCount,
+            interimAmbiguityBestOverlapHits,
+            interimAmbiguityBestTokens,
+            interimAmbiguitySecond,
+            interimAmbiguitySecondTokens,
+          )
+        : { hold: false, reason: '' };
+    const interimShortLineAmbiguityHold = !isFinal && !!interimAmbiguityEval.hold;
+    const interimShortLineAmbiguityReason = interimAmbiguityEval.reason || 'short_line_ambiguous';
     let outrunCommit = false;
     let forceReason: string | undefined;
     let cueBridgeNudgeDelta: number | undefined;
@@ -7452,7 +7502,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       rawIdx <= cursorLine + 1 &&
       conf >= requiredThreshold;
     const forcedEvidenceOkTight = forcedEvidenceOk || shortFinalTightEvidenceBypass;
-    const allowForced = !isHybridMode() && lostForwardActive;
+    const allowForced = !isHybridMode() && lostForwardActive && !interimShortLineAmbiguityHold;
+    if (interimShortLineAmbiguityHold && lostForwardActive && isSessionLivePhase() && isSessionAsrArmed()) {
+      warnGuard('hold_force_suppressed', [
+        `current=${cursorLine}`,
+        interimAmbiguityBest ? `best=${interimAmbiguityBest.idx}` : '',
+        interimAmbiguitySecond ? `second=${interimAmbiguitySecond.idx}` : '',
+        interimAmbiguityBest ? `sim=${formatLogScore(interimAmbiguityBest.score)}` : '',
+        interimAmbiguitySecond ? `sim2=${formatLogScore(interimAmbiguitySecond.score)}` : '',
+        `reason=${interimShortLineAmbiguityReason}`,
+        snippet ? `clue="${snippet}"` : '',
+      ]);
+    }
     if (
       allowForced &&
       outrunRecent &&
@@ -7895,7 +7956,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const beforeNeed = effectiveThreshold;
       effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM);
       if (rawIdx > cursorLine) {
-        forceReason = forceReason || 'progressive-floor';
+        if (!interimShortLineAmbiguityHold) {
+          forceReason = forceReason || 'progressive-floor';
+        }
       }
       if (isDevMode() && shouldLogTag('ASR_PROGRESSIVE_FLOOR', 2, 250)) {
         try {
@@ -7913,7 +7976,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         }
       }
     }
-    if (lostForwardActive) {
+    if (lostForwardActive && !interimShortLineAmbiguityHold) {
       const lostForwardWindow = getLostForwardLookaheadLines();
       const lostForwardCap = Math.min(lostForwardWindow, getLostForwardCommitCapLines());
       const lostForwardCandidates = forwardBandScores
@@ -8609,11 +8672,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const holdAnchorMargin = holdAnchorBest && holdAnchorSecond
       ? holdAnchorBest.boostedScore - holdAnchorSecond.boostedScore
       : Number.POSITIVE_INFINITY;
+    const holdAnchorDelta = holdAnchorBest ? holdAnchorBest.idx - cursorLine : Number.POSITIVE_INFINITY;
+    const holdAnchorNearNeedsExtraStrength =
+      Number.isFinite(holdAnchorDelta) &&
+      holdAnchorDelta <= DEFAULT_HOLD_ANCHOR_NEAR_DELTA_LINES;
+    const holdAnchorStrengthOk =
+      !!holdAnchorBest &&
+      (!holdAnchorNearNeedsExtraStrength || holdAnchorBest.score >= DEFAULT_HOLD_ANCHOR_NEAR_MIN_SIM);
     const holdAnchorReady =
       !!holdAnchorBest &&
       holdAnchorBest.score >= DEFAULT_HOLD_ANCHOR_MIN_SIM &&
       holdAnchorBest.longAnchor &&
       holdAnchorBest.sharedContentHits >= DEFAULT_HOLD_ANCHOR_MIN_SHARED_CONTENT_HITS &&
+      holdAnchorStrengthOk &&
       holdAnchorMargin >= DEFAULT_HOLD_ANCHOR_MARGIN;
     const holdBestSim = holdBestCandidate ? holdBestCandidate.score : conf;
     const holdSecondIdx = holdSecondCandidate ? holdSecondCandidate.idx : null;
@@ -8678,6 +8749,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         );
       }
     } else if (shouldHoldCandidate) {
+      if (!isFinal) {
+        beginOrRefreshAmbiguityHold(
+          now,
+          holdReasonCode || interimShortLineAmbiguityReason || 'await_anchor',
+          cursorLine,
+          holdBestIdx,
+          holdBestSim,
+          holdSecondIdx,
+          holdSecondSim,
+          holdBestOverlapHits,
+        );
+        return;
+      }
       if (holdAnchorReady && holdAnchorBest) {
         const before = rawIdx;
         rawIdx = holdAnchorBest.idx;

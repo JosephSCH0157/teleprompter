@@ -52,6 +52,7 @@ When `scrollMode='asr'`:
 - Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.
 - Ambiguity is hold-first: for low-confidence/tied/low-information near-line matches, enter HOLD (no commit), continue ingesting, and only relock/commit on strong forward anchor evidence.
 - Short-line ambiguity guard: if best line is short (`<=7` content tokens), confidence is weak/moderate, and a nearby runner-up (`±1..2`) has a small sim gap (`<=0.08`), enter HOLD immediately (no commit, no cue-bridge) when evidence is sparse (`<=2` overlap hits) or the pair is structurally near-duplicate (shared start/end tokens or same-shape prefix match).
+- In non-final short-line ambiguity HOLD, suppress forced recovery progression (`lost-forward`, watchdog, progressive-floor forcing) and cue-bridge advancement; continue ingesting until anchor rescue resolves.
 - HOLD anchor rescue stays bounded: while HOLD is active, scan only the bounded forward window (`+8` lines) and relock only on strong long-anchor evidence.
 - Post-commit grace rollback is bounded: within a short post-commit window, allow a one-line rollback correction only when `cursor-1` is decisively stronger, then enforce cooldown to prevent oscillation.
 - Guard profile defaults are relaxed for forward continuity: reduce same-line throttle, lower forced-evidence floors, and trigger watchdog recovery sooner while keeping forward recovery bounded.
