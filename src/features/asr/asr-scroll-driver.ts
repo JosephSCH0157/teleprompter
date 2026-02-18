@@ -882,7 +882,14 @@ function parseLineIndexFromElement(el: HTMLElement | null): number | null {
     el.getAttribute('data-line') ||
     el.getAttribute('data-line-idx');
   const parsed = Number(raw);
-  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
+  if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed));
+  const id = String(el.id || '');
+  const idMatch = /^tp-line-(\d+)$/.exec(id);
+  if (idMatch) {
+    const idParsed = Number(idMatch[1]);
+    if (Number.isFinite(idParsed)) return Math.max(0, Math.floor(idParsed));
+  }
+  return null;
 }
 
 function parseBlockIndexFromElement(el: HTMLElement | null, fallback: number): number {
@@ -1529,13 +1536,11 @@ function getLineElementByIndex(scroller: HTMLElement | null, lineIndex: number):
       if (candidate) return candidate;
     }
   }
-  for (const root of roots) {
-    if (!root) continue;
-    const list = (root as ParentNode).querySelectorAll?.('.line, .tp-line');
-    if (list && idx < list.length) {
-      const candidate = list[idx] as HTMLElement | null;
-      if (candidate) return candidate;
-    }
+  try {
+    const idHit = document.getElementById(`tp-line-${idx}`) as HTMLElement | null;
+    if (idHit) return idHit;
+  } catch {
+    // ignore
   }
   return null;
 }
@@ -1737,7 +1742,7 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
     const viewer = scroller || getPrimaryScroller();
     const root = getScriptRoot() || viewer;
     const container = viewer || root;
-    const lineEls = Array.from((container || document).querySelectorAll<HTMLElement>('.line'));
+    const lineEls = Array.from((container || document).querySelectorAll<HTMLElement>(INDEXED_LINE_SELECTOR));
     if (!lineEls.length) return 0;
     const activeScroller = resolveActiveScroller(viewer as HTMLElement | null, root as HTMLElement | null);
     const scrollTop = activeScroller?.scrollTop ?? 0;
@@ -1749,18 +1754,24 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
       : 0.4;
     const host = (activeScroller || container) as HTMLElement | null;
     const rect = host ? host.getBoundingClientRect() : document.documentElement.getBoundingClientRect();
+    const markerX = rect.left + (host ? host.clientWidth : window.innerWidth) * 0.5;
     const markerY = rect.top + (host ? host.clientHeight : window.innerHeight) * markerPct;
+    const markerHit = document.elementFromPoint(markerX, markerY) as HTMLElement | null;
+    const markerLine = markerHit?.closest?.('.line, .tp-line') as HTMLElement | null;
+    const markerLineIdx = parseLineIndexFromElement(markerLine);
+    if (markerLineIdx != null) return markerLineIdx;
     let bestIdx = 0;
     let bestDist = Infinity;
     for (let i = 0; i < lineEls.length; i++) {
       const el = lineEls[i];
+      const idx = parseLineIndexFromElement(el);
+      if (idx == null) continue;
       const r = el.getBoundingClientRect();
       const y = r.top + r.height * 0.5;
       const d = Math.abs(y - markerY);
       if (d < bestDist) {
         bestDist = d;
-        const dataIdx = el.dataset.i || el.dataset.index || el.getAttribute('data-line-idx');
-        bestIdx = dataIdx ? Math.max(0, Number(dataIdx) || 0) : i;
+        bestIdx = idx;
       }
     }
     return Math.max(0, Math.floor(bestIdx));
@@ -3685,8 +3696,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     try {
       const root = getScriptRoot() || getPrimaryScroller();
       const container = root || document;
-      const lines = container?.querySelectorAll?.('.line, .tp-line');
-      return lines ? lines.length : 0;
+      const indexedLines = container?.querySelectorAll?.(INDEXED_LINE_SELECTOR) as NodeListOf<HTMLElement> | undefined;
+      if (indexedLines && indexedLines.length) {
+        const seen = new Set<number>();
+        indexedLines.forEach((lineEl) => {
+          const idx = parseLineIndexFromElement(lineEl);
+          if (idx != null) seen.add(idx);
+        });
+        if (seen.size) return seen.size;
+        return indexedLines.length;
+      }
+      const fallback = container?.querySelectorAll?.('.line, .tp-line');
+      return fallback ? fallback.length : 0;
     } catch {
       return 0;
     }
@@ -5967,11 +5988,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         });
         return;
       }
-      const hasWriter = hasActiveScrollWriter();
+      const hasWriterBridge = hasActiveScrollWriter();
       const totalLinesHint = getTotalLines();
       const writerAddressability = assessWriterLineAddressability(scroller, targetLine, totalLinesHint);
       const forcePixelCommit = modeNow === 'asr' && shouldForcePixelAsrCommitPath();
-      const writerAllowed = hasWriter && writerAddressability.allowed && !forcePixelCommit;
       let targetBlockId = -1;
       let writerSeekLineIdx: number | null = null;
       try {
@@ -5982,12 +6002,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetBlockId = -1;
         writerSeekLineIdx = null;
       }
+      const writerPathReady = targetBlockId >= 0 && writerAddressability.allowed;
+      const writerAllowed = writerPathReady && !forcePixelCommit;
       if (isDevMode() && shouldLogLevel(2)) {
         console.log('[ASR] commit->seek', {
           commitCount: commitCount + 1,
           blockId: targetBlockId,
           lineIdx: targetLine,
-          hasWriter,
+          hasWriter: hasWriterBridge,
+          writerPathReady,
           writerAllowed,
           writerIndexedLines: writerAddressability.indexedLineCount,
           writerIndexedMin: writerAddressability.minIndexedLineCount,
