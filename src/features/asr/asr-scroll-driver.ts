@@ -1235,8 +1235,9 @@ function shouldForcePixelAsrCommitPath(): boolean {
   } catch {
     // ignore
   }
-  // Stabilization default: in dev mode use pixel commit path unless explicitly overridden.
-  return isDevMode();
+  // Writer-first is the canonical path in all environments.
+  // Pixel commits are an explicit debug override only.
+  return false;
 }
 
 function normalizeSpeechMatchResult(input: unknown): MatchResult | null {
