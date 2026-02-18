@@ -7497,13 +7497,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       cursorLine,
       scoredForwardCandidatesForAnchor,
     );
-    const isShortishForwardCandidate = (lineIdx: number) => {
-      const evidence = getForwardLineEvidence(lineIdx);
-      return (
-        evidence.contentTokenCount > 0 &&
-        evidence.contentTokenCount <= DEFAULT_AMBIG_SHORT_LINE_MAX_CONTENT_TOKENS
-      );
-    };
     const forwardCandidatesChecked = forwardCandidateLineIdx.length;
     const forwardWindowCandidatesChecked = forwardWindowScores.length;
     if (outrunRecent && forwardCandidatesChecked === 0 && isDevMode()) {
