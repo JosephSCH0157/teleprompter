@@ -409,6 +409,8 @@ const DEFAULT_CUE_BRIDGE_BYPASS_MAX_SKIPPED_LINES = 2;
 const DEFAULT_CUE_BRIDGE_STRONG_SIM = 0.6;
 const DEFAULT_CUE_BRIDGE_LARGE_GAP = 0.12;
 const DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS = 2;
+const DEFAULT_CUE_STALL_RESCUE_DELAY_MS = 900;
+const DEFAULT_CUE_STALL_RESCUE_COOLDOWN_MS = 1800;
 const DEFAULT_MULTI_JUMP_MIN_SIM = 0.45;
 const DEFAULT_MULTI_JUMP_HARD_DENY_SIM = 0.3;
 const DEFAULT_AMBIGUITY_HOLD_MIN_SIM = 0.35;
@@ -2514,6 +2516,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let noProgressStreak = 0;
   let lostForwardWallStreak = 0;
   let lastProgressCursorLine = -1;
+  let lastCueStallRescueAt = 0;
   let lostForwardActive = false;
   let lostForwardStage = 0;
   let lostForwardEnteredAt = 0;
@@ -4231,6 +4234,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (disposed) return false;
     if (getScrollMode() !== 'asr') return false;
     if (!isSessionLivePhase() || !isSessionAsrArmed()) return false;
+    const now = Date.now();
+    if (now - lastCueStallRescueAt < DEFAULT_CUE_STALL_RESCUE_COOLDOWN_MS) return false;
     const cursorRaw = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
     if (!Number.isFinite(cursorRaw) || cursorRaw < 0) return false;
     const cursorLine = Math.max(0, Math.floor(cursorRaw));
@@ -4276,6 +4281,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       targetText ? `line="${formatLogSnippet(targetText, 56)}"` : '',
     ]);
     emitHudStatus('cue_rescue', `Rescue: cue bridge +${deltaLines}`);
+    lastCueStallRescueAt = now;
     schedulePending();
     return true;
   }
@@ -6553,6 +6559,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
 
     maybeBumpForStall(now);
+    if (
+      commitCount > 0 &&
+      eventsSinceCommit >= 2 &&
+      now - lastForwardCommitAt >= DEFAULT_CUE_STALL_RESCUE_DELAY_MS
+    ) {
+      if (maybeScheduleStallCueRescue('auto-stall')) {
+        return;
+      }
+    }
     if (now - lastForwardCommitAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS && now - lastStuckDumpAt >= DEFAULT_FORWARD_PROGRESS_WINDOW_MS) {
       lastStuckDumpAt = now;
       if (stallRescueRequested) {
@@ -9737,6 +9752,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     noProgressStreak = 0;
     lostForwardWallStreak = 0;
     lastProgressCursorLine = lastLineIndex;
+    lastCueStallRescueAt = 0;
     lostForwardActive = false;
     lostForwardStage = 0;
     lostForwardEnteredAt = 0;
