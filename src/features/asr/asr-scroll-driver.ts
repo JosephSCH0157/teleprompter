@@ -5497,6 +5497,19 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetLine > lastLineIndex &&
         targetLine - lastLineIndex <= DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES &&
         conf >= DEFAULT_HOLD_ANCHOR_MIN_SIM;
+      const finalNudgeClampEligible =
+        (
+          forceTag === 'final-forward-nudge' ||
+          forceTag === 'final-forward-fallback' ||
+          forceTag === 'permissive-final-advance'
+        ) &&
+        cueBridgePathValid &&
+        cueBridgeSkipCountOk &&
+        cueBridgeDelta > clampDeltaLimit &&
+        cueBridgeDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES &&
+        targetLine > lastLineIndex &&
+        targetLine - lastLineIndex <= cueBridgeDelta &&
+        conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
       const watchdogClampEligible =
         forceTag === 'watchdog' &&
         targetLine > lastLineIndex &&
@@ -5509,11 +5522,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               clampDeltaLimit,
               Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()),
             )
+          : (finalNudgeClampEligible
+            ? Math.max(clampDeltaLimit, cueBridgeDelta)
           : (watchdogClampEligible
             ? Math.max(clampDeltaLimit, DEFAULT_STUCK_WATCHDOG_COMMIT_CAP_LINES)
             : (cueBridgeClampEligible
               ? cueBridgeDelta
-              : clampDeltaLimit)));
+              : clampDeltaLimit))));
       if (cueBridgeClampEligible && isDevMode()) {
         try {
           console.info(
@@ -5532,6 +5547,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try {
           console.info(
             `ASR_LOST_FORWARD_CLAMP carry=+${Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines())} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
+          );
+        } catch {}
+      }
+      if (finalNudgeClampEligible && isDevMode()) {
+        try {
+          console.info(
+            `ASR_FINAL_NUDGE_CLAMP carry=+${cueBridgeDelta} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine} force=${forceTag}`,
           );
         } catch {}
       }

@@ -108,6 +108,7 @@ In `scrollMode='asr'`:
 - In permissive matcher lane, same-line final completions may promote to bounded `+1` speakable advance (`forceReason='permissive-final-advance'`) and pending commit gating must honor that bypass at progressive floor.
 - Permissive same-line final forward promotion requires lexical overlap and marker-position consistency: bounded advance may proceed with meaningful overlap unless cursor has drifted materially ahead of marker; marker-ahead lag scenarios may still permissively advance.
 - Same-line final forward promotions (`final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance`) must propagate into pending gating so low-sim/tie arbitration cannot re-block bounded forward progress in live armed ASR.
+- Same-line final forward promotions that carry a valid cue-bridge delta (`+2..+3`) may raise commit clamp to that bounded cue-bridge cap so clamp does not demote the commit onto a cue-only line and trigger `cue_commit_blocked`.
 - In permissive matcher lane, ambiguity HOLD is diagnostic-only: active hold must not suppress bounded forward final advance when same-line final evidence is strong enough to progress.
 - Cue-boundary bridge widening applies to same-line confirm/nudge flow only; full commit target resolution remains bounded by the normal commit clamp window.
 - When same-line cue bridge selects a forward target, pending commit must carry the same bounded bridge delta (`<=+3`) through clamp arbitration; it must not clamp back to `+1` and re-block on an intermediate cue-only line.
