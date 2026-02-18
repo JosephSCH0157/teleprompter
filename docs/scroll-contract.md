@@ -66,6 +66,7 @@ When `scrollMode='asr'`:
 - Final forward promotions (`final-forward-nudge`, `final-forward-fallback`, `permissive-final-advance`) must carry through pending arbitration so bounded forward picks are not re-blocked by low-sim/tie gates during live armed ASR.
 - In permissive matcher mode, ambiguity HOLD is non-blocking for bounded final forward advance; hold may log, but it must not trap same-line finals at the cursor.
 - Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.
+- For bounded same-line final cue-bridge promotions, a tiny multi-jump floor epsilon (`<=0.005`) is allowed to avoid float-boundary stalls, only on `final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance` with valid cue-bridge pathing. Hard deny floor (`sim<0.30`) remains unchanged.
 - During live armed `speech_stall`, runtime may emit `tp:asr:rescue`; driver may synthesize a bounded cue-bridge forward commit (`forceReason='stall-rescue'`) only when skipped lines are cue/meta/blank and a speakable target exists within bridge cap (`+3`).
 - Auto cue-stall rescue follows the same bounded bridge but is cue-only at cursor: automatic stall rescue may run only when the current cursor line is cue/meta/blank; content-line stalls must not auto-bridge.
 - Cue-bridge nudge/confirm into content must require strong evidence (`strongSim`, or large sim-gap, or multi-event stability); low-sim nudges may not bridge into regular content lines.

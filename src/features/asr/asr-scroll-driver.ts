@@ -413,6 +413,7 @@ const DEFAULT_CUE_BRIDGE_STABILITY_MIN_EVENTS = 2;
 const DEFAULT_CUE_STALL_RESCUE_DELAY_MS = 900;
 const DEFAULT_CUE_STALL_RESCUE_COOLDOWN_MS = 1800;
 const DEFAULT_MULTI_JUMP_MIN_SIM = 0.45;
+const DEFAULT_MULTI_JUMP_BRIDGE_SIM_EPS = 0.005;
 const DEFAULT_MULTI_JUMP_HARD_DENY_SIM = 0.3;
 const DEFAULT_AMBIGUITY_HOLD_MIN_SIM = 0.35;
 const DEFAULT_AMBIGUITY_HOLD_NEAR_WINDOW_LINES = 2;
@@ -5613,22 +5614,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       const multiJumpDelta = targetLine - lastLineIndex;
       if (multiJumpDelta > 1) {
+        const multiJumpBridgeEpsEligible =
+          isFinal &&
+          (
+            forceTag === 'final-forward-nudge' ||
+            forceTag === 'final-forward-fallback' ||
+            forceTag === 'permissive-final-advance'
+          ) &&
+          cueBridgePathValid &&
+          cueBridgeSkipCountOk &&
+          cueBridgeDelta >= multiJumpDelta &&
+          multiJumpDelta <= DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES;
+        const multiJumpNeed = Math.max(
+          DEFAULT_MULTI_JUMP_HARD_DENY_SIM,
+          DEFAULT_MULTI_JUMP_MIN_SIM - (multiJumpBridgeEpsEligible ? DEFAULT_MULTI_JUMP_BRIDGE_SIM_EPS : 0),
+        );
         const hardDeny = conf < DEFAULT_MULTI_JUMP_HARD_DENY_SIM;
-        const need = DEFAULT_MULTI_JUMP_MIN_SIM;
-        if (hardDeny || conf < need) {
+        if (hardDeny || conf < multiJumpNeed) {
           warnGuard('multi_jump_low_sim', [
             `current=${lastLineIndex}`,
             `best=${targetLine}`,
             `delta=${multiJumpDelta}`,
             `sim=${formatLogScore(conf)}`,
-            `need=${formatLogScore(need)}`,
+            `need=${formatLogScore(multiJumpNeed)}`,
+            multiJumpBridgeEpsEligible ? `eps=${formatLogScore(DEFAULT_MULTI_JUMP_BRIDGE_SIM_EPS)}` : '',
             hardDeny ? `hardFloor=${formatLogScore(DEFAULT_MULTI_JUMP_HARD_DENY_SIM)}` : '',
             forceReason ? `force=${forceReason}` : '',
             snippet ? `clue="${snippet}"` : '',
           ]);
           emitHudStatus(
             'multi_jump_low_sim',
-            `Hold: ambiguous jump blocked (sim=${formatLogScore(conf)}, need=${formatLogScore(need)})`,
+            `Hold: ambiguous jump blocked (sim=${formatLogScore(conf)}, need=${formatLogScore(multiJumpNeed)})`,
           );
           return;
         }
