@@ -4,7 +4,7 @@ export {};
 import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-writer';
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
-import { getAsrBlockElements } from '../../../scroll/asr-block-store';
+import { getAsrBlockElements, getAsrBlockIndex } from '../../../scroll/asr-block-store';
 import { applyCanonicalScrollTop, getScrollerEl } from '../../../scroll/scroller';
 import {
   DEFAULT_COMPLETION_POLICY,
@@ -2351,7 +2351,110 @@ let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 let hybridLastMatch: { bestIdx: number; bestSim: number; isFinal: boolean; ts: number } | null = null;
 let hybridMatchSeen = false;
 let hybridLastNoMatch: boolean | null = null;
+let hybridMatcherSource = 'unknown';
+let hybridMatcherSourceDetail = 'unknown';
+let lastHybridMatcherProbeAt = 0;
 const HYBRID_HARD_NOMATCH_SIM_MIN = 0.25;
+const HYBRID_MATCHER_PROBE_THROTTLE_MS = 350;
+const HYBRID_BLOCKS_NOT_READY_HOLD_MS = 3500;
+
+function isHybridBackendReady(): boolean {
+  try {
+    if ((window as any).__tpSpeechOrchestrator?.start) return true;
+  } catch {}
+  try {
+    if ((window as any).__tpSpeech?.startRecognizer) return true;
+  } catch {}
+  try {
+    if ((window as any).__tpSpeechCanDynImport === true) return true;
+  } catch {}
+  try {
+    if ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) return true;
+  } catch {}
+  return false;
+}
+
+function computeAsrBlockScriptSig(meta: any): string | null {
+  if (!meta || !Array.isArray(meta.units) || !meta.units.length) return null;
+  try {
+    const units = meta.units;
+    const first = units[0];
+    const last = units[units.length - 1];
+    const sums = units.reduce(
+      (acc: { chars: number; sentences: number }, unit: any) => {
+        const chars = Number(unit?.charCount);
+        const sentences = Number(unit?.sentenceCount);
+        if (Number.isFinite(chars)) acc.chars += Math.max(0, Math.floor(chars));
+        if (Number.isFinite(sentences)) acc.sentences += Math.max(0, Math.floor(sentences));
+        return acc;
+      },
+      { chars: 0, sentences: 0 },
+    );
+    return [
+      units.length,
+      Number(first?.unitStart ?? -1),
+      Number(first?.unitEnd ?? -1),
+      Number(last?.unitStart ?? -1),
+      Number(last?.unitEnd ?? -1),
+      sums.sentences,
+      sums.chars,
+    ].join(':');
+  } catch {
+    return null;
+  }
+}
+
+function readHybridScriptHash(): string | null {
+  try {
+    const hash = String((window as any).__TP_LAST_APPLIED_HASH || '').trim();
+    return hash || null;
+  } catch {
+    return null;
+  }
+}
+
+function getHybridBlockRuntimeState() {
+  const blockEls = getAsrBlockElements();
+  const meta = getAsrBlockIndex() as any;
+  const storeCount = Array.isArray(blockEls) ? blockEls.length : 0;
+  let globalCount = 0;
+  let globalReady = false;
+  try {
+    const rawCount = Number((window as any).__tpAsrBlockCount);
+    globalCount = Number.isFinite(rawCount) ? Math.max(0, Math.floor(rawCount)) : 0;
+    globalReady = Boolean((window as any).__tpAsrBlocksReady);
+  } catch {}
+  const blockCount = Math.max(storeCount, globalCount);
+  const blocksReady = (globalReady || storeCount > 0) && blockCount > 0;
+  const scriptSig = computeAsrBlockScriptSig(meta);
+  return {
+    blocksReady,
+    blockCount,
+    blockSource: String(meta?.source || 'unknown'),
+    schemaVersion: Number.isFinite(Number(meta?.schemaVersion)) ? Number(meta?.schemaVersion) : null,
+    scriptSig,
+    scriptHash: readHybridScriptHash(),
+    backendReady: isHybridBackendReady(),
+    matcherSource: hybridMatcherSource,
+    matcherSourceDetail: hybridMatcherSourceDetail,
+  };
+}
+
+function isHybridBlocksNotReadyHold(now = nowMs(), runtime = getHybridBlockRuntimeState()): boolean {
+  if (!runtime.backendReady || runtime.blocksReady) return false;
+  const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
+  return speechActive || lastSpeechAgeMs <= HYBRID_BLOCKS_NOT_READY_HOLD_MS;
+}
+
+function logHybridMatcherProbe(reason: string, payload: Record<string, unknown>) {
+  if (!isDevMode()) return;
+  const now = nowMs();
+  if (now - lastHybridMatcherProbeAt < HYBRID_MATCHER_PROBE_THROTTLE_MS) return;
+  lastHybridMatcherProbeAt = now;
+  try {
+    console.info('[HYBRID_MATCHER_PROBE]', { reason, ...payload });
+  } catch {}
+}
 
 function getHybridMatchState() {
   const matchSim =
@@ -4153,6 +4256,29 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   function updateHybridScaleFromDetail(detail: { bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     const now = nowMs();
+    const runtime = getHybridBlockRuntimeState();
+    const blocksNotReadyHold = isHybridBlocksNotReadyHold(now, runtime);
+    if (blocksNotReadyHold) {
+      offScriptEvidence = 0;
+      lastOffScriptEvidenceTs = 0;
+      if (hybridSilence.offScriptActive) {
+        hybridSilence.offScriptActive = false;
+      }
+      if (Number.isFinite(hybridScale) && hybridScale !== RECOVERY_SCALE) {
+        setHybridScale(RECOVERY_SCALE);
+      }
+      logHybridMatcherProbe('scale-hold:blocks-not-ready', {
+        blocksReady: runtime.blocksReady,
+        blockCount: runtime.blockCount,
+        blockSource: runtime.blockSource,
+        scriptHash: runtime.scriptHash,
+        scriptSig: runtime.scriptSig,
+        backendReady: runtime.backendReady,
+        matcherSource: runtime.matcherSource,
+        matcherSourceDetail: runtime.matcherSourceDetail,
+      });
+      return;
+    }
     const inBandValue = detail.inBand;
     const inBand = inBandValue === 1 || inBandValue === true || inBandValue === "1";
     const bestSimRaw = detail.bestSim ?? detail.sim ?? detail.score;
@@ -4215,6 +4341,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     if (getScrollMode() !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(detail.timestamp, perfNow);
+    hybridMatcherSource = 'tp:speech:transcript';
+    hybridMatcherSourceDetail = String(detail.source || 'speech-loader');
     const isNoMatch = detail.noMatch === true;
     const wasSilent = hybridSilence.pausedBySilence;
     hybridSilence.lastSpeechAtMs = now;
@@ -4251,8 +4379,11 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
       if (getScrollMode() !== "hybrid") return;
+      hybridMatcherSource = 'tp:asr:sync';
+      hybridMatcherSourceDetail = String(detail.source || 'sync');
+      const noMatch = detail.noMatch === true;
       try {
-        noteHybridSpeechActivity(ts, { source: "sync", noMatch: detail.noMatch === true });
+        noteHybridSpeechActivity(ts, { source: "sync", noMatch });
       } catch (err) {
         handleHybridFatalOnce(err);
         return;
@@ -4313,6 +4444,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   try {
     window.addEventListener("tp:hybrid:matchState", (ev) => {
       const detail = (ev as CustomEvent).detail || {};
+      hybridMatcherSource = 'tp:hybrid:matchState';
+      hybridMatcherSourceDetail = String(detail.source || detail.reason || 'match-state');
       const bestIdxRaw = detail.bestIdx;
       const bestSimRaw = detail.bestSim;
       const bestIdx = Number.isFinite(bestIdxRaw) ? bestIdxRaw : -1;
@@ -4625,12 +4758,27 @@ function applyHybridVelocityCore(silence = hybridSilence) {
   const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
   const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
   const now = nowMs();
+  const runtime = getHybridBlockRuntimeState();
+  const blocksNotReadyHold = isHybridBlocksNotReadyHold(now, runtime);
+  if (blocksNotReadyHold) {
+    offScriptEvidence = 0;
+    offScriptStreak = 0;
+    lastOffScriptEvidenceTs = 0;
+    if (hybridSilence.offScriptActive) {
+      hybridSilence.offScriptActive = false;
+    }
+    if (Number.isFinite(hybridScale) && hybridScale !== RECOVERY_SCALE) {
+      setHybridScale(RECOVERY_SCALE);
+    }
+  }
   const matchState = getHybridMatchState();
   const { bestSim, sawNoMatch, weakMatch: baseWeakMatch, hardNoMatch } = matchState;
+  const sawNoMatchEffective = blocksNotReadyHold ? false : sawNoMatch;
+  const hardNoMatchEffective = blocksNotReadyHold ? false : hardNoMatch;
   const matchSimValue =
     Number.isFinite(bestSim ?? NaN) && bestSim != null ? (bestSim as number) : null;
   const matchKnown =
-    hybridMatchSeen && matchSimValue != null && matchSimValue > 0 && !sawNoMatch;
+    hybridMatchSeen && matchSimValue != null && matchSimValue > 0 && !sawNoMatchEffective;
   const matchReason = matchKnown
     ? hybridLastMatch?.isFinal
       ? 'asr-final'
@@ -4647,7 +4795,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const silenceMs = getSilenceMs(now);
     const errorInfo = computeHybridErrorPx(now);
     const driftWeakMatch = isHybridDriftWeak(errorInfo);
-    const weakMatch = baseWeakMatch || driftWeakMatch;
+    const weakMatch = blocksNotReadyHold ? false : (baseWeakMatch || driftWeakMatch);
     const eligibility = evaluateHybridEligibility(now);
     const eligible = eligibility.eligible;
     const eligibleReason = eligibility.reason;
@@ -4700,7 +4848,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         : 0;
     const lineMult = updateHybridLineMult(candidateTargetMult, dtMs, errorLinesRaw > 0);
     let appliedTargetMult = Number.isFinite(lineMult) ? lineMult : 1;
-    const offScriptSeverity = computeOffScriptSeverity();
+    const offScriptSeverity = blocksNotReadyHold ? 0 : computeOffScriptSeverity();
     const offScriptCap = Math.max(
       HYBRID_CTRL_MIN_MULT,
       1 - offScriptSeverity * HYBRID_CTRL_OFFSCRIPT_PENALTY,
@@ -5061,8 +5209,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       lineMult,
       capReason,
       scaleReason: hybridScaleDetail.reason,
-      sawNoMatch,
-      hardNoMatch,
+      noMatch: sawNoMatchEffective || !matchKnown,
+      sawNoMatch: sawNoMatchEffective,
+      hardNoMatch: hardNoMatchEffective,
       offScriptActive: hybridScaleDetail.offScriptActive,
       bestSim,
       weakMatch,
@@ -5101,9 +5250,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
         const matchSimLog = matchKnown ? matchSimValue : null;
         const stateParts = [
-          `noMatch=${sawNoMatch || !matchKnown}`,
+          `noMatch=${sawNoMatchEffective || !matchKnown}`,
+          `sawNoMatch=${sawNoMatchEffective}`,
           `weakMatch=${weakMatch}`,
-          `hardNoMatch=${hardNoMatch}`,
+          `hardNoMatch=${hardNoMatchEffective}`,
           `offScriptActive=${offScriptActive}`,
           `reason=${reason}`,
           `conf=${conf.toFixed(2)}`,
@@ -5111,8 +5261,37 @@ function applyHybridVelocityCore(silence = hybridSilence) {
           `matchSim=${matchSimLog != null ? matchSimLog.toFixed(2) : "null"}`,
           `matchReason=${matchReason}`,
           `targetTopSrc=${matchKnown ? errorInfo?.targetTopSource ?? "unknown" : "unknown"}`,
+          `blocksReady=${runtime.blocksReady}`,
+          `blockCount=${runtime.blockCount}`,
+          `blockSource=${runtime.blockSource}`,
+          `backendReady=${runtime.backendReady}`,
+          `blocksHold=${blocksNotReadyHold}`,
+          `scriptHash=${runtime.scriptHash ?? "null"}`,
+          `scriptSig=${runtime.scriptSig ?? "null"}`,
+          `matcherSource=${runtime.matcherSource}`,
+          `matcherFeed=${runtime.matcherSourceDetail}`,
         ];
         console.info("[HYBRID_FINAL_MILE_STATE]", stateParts.join(" "));
+        if (blocksNotReadyHold || sawNoMatchEffective || offScriptActive || hardNoMatchEffective) {
+          logHybridMatcherProbe('final-mile', {
+            noMatch: sawNoMatchEffective || !matchKnown,
+            sawNoMatch: sawNoMatchEffective,
+            weakMatch,
+            hardNoMatch: hardNoMatchEffective,
+            offScriptActive,
+            bestSim: matchSimLog,
+            reason,
+            blocksReady: runtime.blocksReady,
+            blockCount: runtime.blockCount,
+            blockSource: runtime.blockSource,
+            scriptHash: runtime.scriptHash,
+            scriptSig: runtime.scriptSig,
+            matcherSource: runtime.matcherSource,
+            matcherSourceDetail: runtime.matcherSourceDetail,
+            backendReady: runtime.backendReady,
+            blocksNotReadyHold,
+          });
+        }
       } catch {}
     }
     if (wantedPxps !== sentPxps) {
@@ -5476,13 +5655,16 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const now = nowMs();
     const gateWanted = computeGateWanted();
     const phaseAllowed = canRunHybridMotor();
+    const runtime = getHybridBlockRuntimeState();
     const baseHybridPxPerSec = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
     const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
+    const speechHeardRecently = speechActive || lastSpeechAgeMs <= HYBRID_BLOCKS_NOT_READY_HOLD_MS;
+    const blocksNotReadyHold = runtime.backendReady && !runtime.blocksReady && speechHeardRecently;
     const liveGraceActive = isLiveGraceActive(now);
     const errorInfo = computeHybridErrorPx(now);
     const silenceStopMs = computeHybridSilenceDelayMs();
     const isSilent = !liveGraceActive && lastSpeechAgeMs >= silenceStopMs;
-    const speechAllowed = !isSilent;
+    const speechAllowed = !isSilent || blocksNotReadyHold;
     const gateSatisfied = isHybridBypass() ? true : gateWanted;
     const wantEnabled =
       hybridWantedRunning &&
@@ -5516,8 +5698,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       };
     const matchState = getHybridMatchState();
     const driftWeakMatch = isHybridDriftWeak(errorInfo);
-    const gateWeakMatch = matchState.weakMatch || driftWeakMatch;
-    const gateEffectiveOffScript = (safeSilence.offScriptActive ?? false) || gateWeakMatch;
+    const gateWeakMatch = blocksNotReadyHold ? false : (matchState.weakMatch || driftWeakMatch);
+    const gateEffectiveOffScript = blocksNotReadyHold
+      ? false
+      : ((safeSilence.offScriptActive ?? false) || gateWeakMatch);
     const hybridScaleDetail = computeEffectiveHybridScale(
       now,
       safeSilence,
@@ -5597,6 +5781,16 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       gateWanted,
       phaseAllowed,
       blocked: hybridBlockedReason,
+      blocksReady: runtime.blocksReady,
+      blockCount: runtime.blockCount,
+      blockSource: runtime.blockSource,
+      blockSchemaVersion: runtime.schemaVersion,
+      scriptHash: runtime.scriptHash,
+      scriptSig: runtime.scriptSig,
+      matcherSource: runtime.matcherSource,
+      matcherSourceDetail: runtime.matcherSourceDetail,
+      backendReady: runtime.backendReady,
+      blocksNotReadyHold,
       viewer: {
         has: !!viewerEl,
         top: viewerEl?.scrollTop ?? -1,
@@ -5625,6 +5819,8 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       shouldRunHybrid ? "1" : "0",
       Number.isFinite(effectivePxPerSec) ? effectivePxPerSec.toFixed(1) : "0",
       Number.isFinite(hybridBasePxps) ? hybridBasePxps.toFixed(0) : "0",
+      runtime.blocksReady ? "1" : "0",
+      blocksNotReadyHold ? "1" : "0",
     ];
     const gateFingerprint = fingerprintParts.join("|");
     if (gateFingerprint !== lastHybridGateFingerprint) {
@@ -5632,6 +5828,24 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       try {
         console.warn("[HYBRID] gate", snap);
       } catch {}
+    }
+    if (blocksNotReadyHold || gateEffectiveOffScript || matchState.hardNoMatch) {
+      logHybridMatcherProbe('gate', {
+        blocksReady: runtime.blocksReady,
+        blockCount: runtime.blockCount,
+        blockSource: runtime.blockSource,
+        scriptHash: runtime.scriptHash,
+        scriptSig: runtime.scriptSig,
+        matcherSource: runtime.matcherSource,
+        matcherSourceDetail: runtime.matcherSourceDetail,
+        backendReady: runtime.backendReady,
+        blocksNotReadyHold,
+        hardNoMatch: matchState.hardNoMatch,
+        weakMatch: gateWeakMatch,
+        offScriptActive: gateEffectiveOffScript,
+        speechActive,
+        lastSpeechAgeMs: Math.round(lastSpeechAgeMs),
+      });
     }
     if (shouldRunHybrid) {
       if (silenceTimer) {
