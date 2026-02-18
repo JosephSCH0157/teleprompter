@@ -1,7 +1,7 @@
 // =============================================================
 // File: src/index-hooks/asr.ts
 // =============================================================
-import { AsrMode } from '../features/asr-mode';
+import type { AsrMode } from '../features/asr-mode';
 import { installAsrHotkeys } from '../hotkeys/asr-hotkeys';
 import { ensureAsrSettingsWired } from '../ui/settings-asr';
 import { AsrTopbar } from '../ui/topbar-asr';

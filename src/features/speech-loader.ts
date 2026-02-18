@@ -752,7 +752,7 @@ function maybeLogLiveArmedDetachedInvariant(reason: string): void {
   const phase = String(session.phase || '').toLowerCase();
   if (!isLiveArmedAsr(mode, phase, !!session.asrArmed)) return;
   if (shouldLogTag('ASR:invariant:live-armed-detached', 2, 1000)) {
-    try { console.warn('[ASR_INVARIANT_BROKEN] live+armed but no recognizer attached'); } catch {}
+    try { console.warn('[ASR_INVARIANT_BROKEN] live+armed but no recognizer attached', { reason }); } catch {}
   }
 }
 
@@ -1816,7 +1816,7 @@ function setReadyUi(): void {
   } catch {}
 }
 
-function setUnsupportedUi(): void {
+function _setUnsupportedUi(): void {
   try {
     const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
@@ -1852,7 +1852,7 @@ function setListeningUi(listening: boolean): void {
 
 // … (keep your existing helper functions unchanged above installSpeech)
 
-function beginCountdownThen(sec: number, cb: () => Promise<void> | void, source = 'speech'): Promise<void> {
+function _beginCountdownThen(sec: number, cb: () => Promise<void> | void, source = 'speech'): Promise<void> {
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
   // Overlay helpers (local so they don't leak globals if loader is re-imported)

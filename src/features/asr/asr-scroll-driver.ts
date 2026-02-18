@@ -2624,7 +2624,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return pendingMatch;
     };
     let pendingRaf = 0;
-    let postCommitReadabilitySeq = 0;
+    let _postCommitReadabilitySeq = 0;
     let commitWindowActive = false;
     let commitWindowAuthority: 'writer' | null = null;
     let commitWindowStartedAt = 0;
@@ -6508,7 +6508,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           beginWriterCommitWindow(writerCommitStartedAt);
         }
         didGlide = false;
-        postCommitReadabilitySeq += 1;
+        _postCommitReadabilitySeq += 1;
         const immediateReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
           allowNudge: !writerCommitted,
         });
@@ -10261,7 +10261,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     emitSummary('dispose');
     disposed = true;
     releaseCommitWindow('dispose');
-    postCommitReadabilitySeq += 1;
+    _postCommitReadabilitySeq += 1;
     try {
       unsubscribe();
     } catch {
@@ -10289,7 +10289,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     scriptEndEventEmitted = false;
     releaseCommitWindow('setLastLineIndex');
     lastLineIndex = Math.max(0, Math.floor(index));
-    postCommitReadabilitySeq += 1;
+    _postCommitReadabilitySeq += 1;
     lastSeekTs = 0;
     lastSameLineNudgeTs = 0;
     lastMoveAt = 0;
