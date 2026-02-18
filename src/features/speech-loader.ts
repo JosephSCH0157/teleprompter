@@ -163,6 +163,16 @@ type AsrStallAutoRestartPayload = {
   restarted: boolean;
 };
 
+type PendingAsrScriptEndStop = {
+  dedupeKey: string;
+  runKey: string;
+  mode: string;
+  lineIndex: number | null;
+  lastSpeakableLineIndex: number | null;
+  armedAt: number;
+  targetLineTokens: string[];
+};
+
 declare global {
   interface Window {
     __tpBus?: { emit?: AnyFn };
@@ -271,6 +281,7 @@ let lastAsrStallRescueAt = 0;
 let lastMatcherStallCommitCount = -1;
 let lastMatcherStallCommitStableSince = 0;
 let lastAsrScriptEndStopKey = '';
+let pendingAsrScriptEndStop: PendingAsrScriptEndStop | null = null;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
@@ -286,6 +297,39 @@ const ASR_STALL_RESCUE_COOLDOWN_MS = 2000;
 const LIFECYCLE_RESTART_DELAY_MS = 120;
 const LIFECYCLE_RESTART_COOLDOWN_MS = 350;
 const HUD_SNAPSHOT_THROTTLE_MS = 120;
+const ASR_SCRIPT_END_CONFIRM_MAX_WAIT_MS = 15000;
+const ASR_SCRIPT_END_CONFIRM_MIN_SHARED_MEANINGFUL_TOKENS = 1;
+const ASR_SCRIPT_END_CONFIRM_MIN_SHARED_TOKENS = 2;
+const ASR_SCRIPT_END_STOPWORDS = new Set([
+  'the',
+  'and',
+  'that',
+  'this',
+  'with',
+  'from',
+  'your',
+  'you',
+  'for',
+  'are',
+  'was',
+  'were',
+  'have',
+  'has',
+  'had',
+  'into',
+  'onto',
+  'then',
+  'than',
+  'but',
+  'not',
+  'its',
+  'it',
+  'they',
+  'them',
+  'their',
+  'there',
+  'here',
+]);
 
 function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -435,6 +479,172 @@ function syncAsrDriverStats(driverRef?: any): void {
   lastAsrIngestTs = Math.max(lastAsrIngestTs, stats.lastIngestAt);
   lastAsrCommitTs = Math.max(lastAsrCommitTs, stats.lastCommitAt);
   lastAsrCommitCount = Math.max(lastAsrCommitCount, stats.commitCount);
+}
+
+function normalizeLineIndex(value: unknown): number | null {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return null;
+  return Math.max(0, Math.floor(raw));
+}
+
+function resolveRuntimeAsrLineIndex(): number | null {
+  const driverRef = resolveAsrDriverRef();
+  const fromDriver = normalizeLineIndex(driverRef?.getLastLineIndex?.());
+  if (fromDriver != null) return fromDriver;
+  try {
+    return normalizeLineIndex((window as any)?.currentIndex);
+  } catch {
+    return null;
+  }
+}
+
+function countTokenOverlap(
+  transcriptTokens: string[],
+  targetTokens: string[],
+): { sharedAny: number; sharedMeaningful: number } {
+  if (!transcriptTokens.length || !targetTokens.length) {
+    return { sharedAny: 0, sharedMeaningful: 0 };
+  }
+  const transcriptSet = new Set(transcriptTokens);
+  let sharedAny = 0;
+  let sharedMeaningful = 0;
+  for (const token of targetTokens) {
+    if (!transcriptSet.has(token)) continue;
+    sharedAny += 1;
+    if (token.length >= 4 && !ASR_SCRIPT_END_STOPWORDS.has(token)) {
+      sharedMeaningful += 1;
+    }
+  }
+  return { sharedAny, sharedMeaningful };
+}
+
+function clearPendingAsrScriptEnd(reason: string): void {
+  if (!pendingAsrScriptEndStop) return;
+  if (isDevMode() && shouldLogTag('ASR:script-end-pending-clear', 2, 250)) {
+    try {
+      console.info('[ASR] script-end pending cleared', {
+        reason,
+        dedupeKey: pendingAsrScriptEndStop.dedupeKey,
+      });
+    } catch {}
+  }
+  pendingAsrScriptEndStop = null;
+}
+
+function finalizePendingAsrScriptEndStop(
+  pending: PendingAsrScriptEndStop,
+  evidence: {
+    source: 'route-line' | 'token-overlap';
+    matchedLine: number | null;
+    sharedAny: number;
+    sharedMeaningful: number;
+    overlapRatio: number;
+  },
+): void {
+  const session = getSession();
+  const mode = String(pending.mode || getScrollMode() || '').toLowerCase();
+  if (session.phase !== 'live' || !isAsrLikeMode(mode)) {
+    clearPendingAsrScriptEnd('session-not-live');
+    return;
+  }
+  lastAsrScriptEndStopKey = pending.dedupeKey;
+  pendingAsrScriptEndStop = null;
+  const stopIntent = {
+    source: 'asr-script-end',
+    reason: 'script-end',
+    mode,
+    phase: session.phase,
+  };
+  dispatchSessionIntent(false, stopIntent);
+  try { setSessionPhase('wrap'); } catch {}
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:session:stop', {
+        detail: {
+          ...stopIntent,
+          intentSource: 'asr-script-end',
+          lineIndex: pending.lineIndex,
+          lastSpeakableLineIndex: pending.lastSpeakableLineIndex,
+          confirmSource: evidence.source,
+          confirmMatchedLine: evidence.matchedLine,
+          confirmSharedTokens: evidence.sharedAny,
+          confirmSharedMeaningfulTokens: evidence.sharedMeaningful,
+          confirmOverlapRatio: evidence.overlapRatio,
+        },
+      }),
+    );
+  } catch {}
+  emitHudSnapshot('script-end-stop', { force: true });
+  if (isDevMode() && shouldLogTag('ASR:script-end-stop', 2, 1000)) {
+    try {
+      console.info('[ASR] session stop at script end', {
+        mode,
+        lineIndex: pending.lineIndex,
+        lastSpeakableLineIndex: pending.lastSpeakableLineIndex,
+        runKey: pending.runKey,
+        confirmSource: evidence.source,
+        confirmMatchedLine: evidence.matchedLine,
+        sharedTokens: evidence.sharedAny,
+        sharedMeaningfulTokens: evidence.sharedMeaningful,
+        overlapRatio: Number(evidence.overlapRatio.toFixed(3)),
+      });
+    } catch {}
+  }
+}
+
+function maybeConfirmPendingAsrScriptEnd(
+  text: string,
+  isFinal: boolean,
+  detail?: Partial<TranscriptPayload>,
+): void {
+  const pending = pendingAsrScriptEndStop;
+  if (!pending) return;
+  const now = Date.now();
+  if (now - pending.armedAt > ASR_SCRIPT_END_CONFIRM_MAX_WAIT_MS) {
+    clearPendingAsrScriptEnd('timeout');
+    return;
+  }
+  if (!isFinal) return;
+  const mode = String(detail?.mode || pending.mode || getScrollMode() || '').toLowerCase();
+  const session = getSession();
+  if (session.phase !== 'live' || !isAsrLikeMode(mode)) {
+    clearPendingAsrScriptEnd('mode-or-phase-change');
+    return;
+  }
+  const targetLine = pending.lastSpeakableLineIndex ?? pending.lineIndex;
+  const runtimeLine = resolveRuntimeAsrLineIndex();
+  if (targetLine != null && runtimeLine != null && runtimeLine < targetLine) return;
+
+  const matchedLine =
+    normalizeLineIndex(detail?.line) ??
+    normalizeLineIndex(detail?.currentIdx);
+  if (targetLine != null && matchedLine != null && matchedLine >= targetLine) {
+    finalizePendingAsrScriptEndStop(pending, {
+      source: 'route-line',
+      matchedLine,
+      sharedAny: 0,
+      sharedMeaningful: 0,
+      overlapRatio: 0,
+    });
+    return;
+  }
+
+  const transcriptTokens = normTokens(String(text || ''));
+  const targetTokens = pending.targetLineTokens;
+  const { sharedAny, sharedMeaningful } = countTokenOverlap(transcriptTokens, targetTokens);
+  const overlapRatio = targetTokens.length > 0 ? sharedAny / targetTokens.length : 0;
+  const hasTokenEvidence =
+    (sharedMeaningful >= ASR_SCRIPT_END_CONFIRM_MIN_SHARED_MEANINGFUL_TOKENS &&
+      sharedAny >= ASR_SCRIPT_END_CONFIRM_MIN_SHARED_TOKENS) ||
+    (targetTokens.length > 0 && overlapRatio >= 0.5);
+  if (!hasTokenEvidence) return;
+  finalizePendingAsrScriptEndStop(pending, {
+    source: 'token-overlap',
+    matchedLine,
+    sharedAny,
+    sharedMeaningful,
+    overlapRatio,
+  });
 }
 
 function toMaybeTimestamp(ts: number): number | null {
@@ -2775,6 +2985,7 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
   });
   try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
   syncAsrDriverStats(asrScrollDriver);
+  maybeConfirmPendingAsrScriptEnd(t, !!isFinal, detail);
 }
 
 function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
@@ -2855,6 +3066,7 @@ function ensureAsrDriverLifecycleHooks(): void {
       syncAsrDriverFromBlocks('scroll-mode', { mode, allowCreate: true });
       return;
     }
+    clearPendingAsrScriptEnd('scroll-mode-exit-asr');
     if (!running) {
       detachAsrScrollDriver();
     }
@@ -2864,6 +3076,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     const session = getSession();
     const mode = getScrollMode();
     lastAsrScriptEndStopKey = '';
+    clearPendingAsrScriptEnd('session-start');
     asrSessionIntentActive = true;
     if (session.asrDesired || isAsrLikeMode(mode)) {
       attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true });
@@ -2895,6 +3108,7 @@ function ensureAsrDriverLifecycleHooks(): void {
   };
   const onSessionStop = () => {
     lastAsrScriptEndStopKey = '';
+    clearPendingAsrScriptEnd('session-stop');
     asrSessionIntentActive = false;
     resetAsrInterimStabilizer();
     clearAsrRunKey('lifecycle-session-stop');
@@ -2904,6 +3118,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     const phase = String((event as CustomEvent)?.detail?.phase || '').toLowerCase();
     if (phase === 'idle' || phase === 'wrap') {
       lastAsrScriptEndStopKey = '';
+      clearPendingAsrScriptEnd(`phase-${phase}`);
       asrSessionIntentActive = false;
       resetAsrInterimStabilizer();
       clearAsrRunKey(`phase-${phase}`);
@@ -2924,35 +3139,31 @@ function ensureAsrDriverLifecycleHooks(): void {
     const runKey = String(detail.runKey || activeAsrRunKey || 'no-run');
     const dedupeKey = `${runKey}|${lineIndex ?? 'na'}|${lastSpeakableLineIndex ?? 'na'}`;
     if (dedupeKey === lastAsrScriptEndStopKey) return;
-    lastAsrScriptEndStopKey = dedupeKey;
-    const stopIntent = {
-      source: 'asr-script-end',
-      reason: 'script-end',
+    const targetLine = lastSpeakableLineIndex ?? lineIndex;
+    const host = getScriptRoot() || getPrimaryScroller() || document;
+    const targetLineText =
+      targetLine != null
+        ? getLineTextAtIndex(targetLine, host)
+        : '';
+    pendingAsrScriptEndStop = {
+      dedupeKey,
+      runKey,
       mode,
-      phase: session.phase,
+      lineIndex,
+      lastSpeakableLineIndex,
+      armedAt: Date.now(),
+      targetLineTokens: normTokens(targetLineText),
     };
-    dispatchSessionIntent(false, stopIntent);
-    try { setSessionPhase('wrap'); } catch {}
-    try {
-      window.dispatchEvent(
-        new CustomEvent('tp:session:stop', {
-          detail: {
-            ...stopIntent,
-            intentSource: 'asr-script-end',
-            lineIndex,
-            lastSpeakableLineIndex,
-          },
-        }),
-      );
-    } catch {}
-    emitHudSnapshot('script-end-stop', { force: true });
-    if (isDevMode() && shouldLogTag('ASR:script-end-stop', 2, 1000)) {
+    emitHudSnapshot('script-end-pending', { force: true });
+    if (isDevMode() && shouldLogTag('ASR:script-end-pending', 2, 1000)) {
       try {
-        console.info('[ASR] session stop at script end', {
+        console.info('[ASR] script end armed (awaiting final confirmation)', {
           mode,
           lineIndex,
           lastSpeakableLineIndex,
           runKey,
+          targetLine,
+          targetTokens: pendingAsrScriptEndStop.targetLineTokens.length,
         });
       } catch {}
     }
