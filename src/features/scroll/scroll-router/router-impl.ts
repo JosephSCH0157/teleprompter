@@ -152,7 +152,6 @@ let lastCandidate = -1;
 let stableSince = 0;
 let asrMotorConflictLogged = false;
 let scrollWriteWarned = false;
-let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
 let hybridModeMismatchLogged = false;
@@ -4467,9 +4466,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     });
   } catch {}
   try {
-    window.addEventListener("tp:asr:guard", () => {
+    window.addEventListener("tp:asr:guard", (ev) => {
       try {
-        markHybridOffScriptFn?.();
+        if (getScrollMode() !== "hybrid") return;
+        const detail = (ev as CustomEvent).detail || {};
+        if (isDevMode()) {
+          try {
+            console.info("[HYBRID] structural guard (no offscript decay)", {
+              status: detail.status ?? null,
+              reason: detail.reason ?? null,
+              source: detail.source ?? null,
+            });
+          } catch {}
+        }
       } catch (err) {
         if (!guardHandlerErrorLogged) {
           guardHandlerErrorLogged = true;
@@ -5366,13 +5375,6 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const target = typeof window !== 'undefined' ? window : globalThis;
     (target as any).__tpApplyHybridVelocity = applyHybridVelocityCore;
   } catch {}
-
-  function _markHybridOffScript() {
-    if (state2.mode !== "hybrid") return;
-    const changed = setHybridScale(OFFSCRIPT_DEEP);
-    if (!changed) emitHybridSafety();
-  }
-  markHybridOffScriptFn = _markHybridOffScript;
   function suppressAssistScale(boost: number, base: number) {
     if (!Number.isFinite(boost) || boost <= 0) return 0;
     if (!Number.isFinite(base) || base <= 0) return 0;

@@ -1,5 +1,5 @@
 # Anvil Manifest (SSOT Map)
-Version: v1.8.4 (2026-02-18)
+Version: v1.8.5 (2026-02-18)
 
 This is the canonical manifest for Anvil's runtime architecture.
 Purpose: **one map, one truth** -- where state lives, who owns it, and which modules are allowed to publish globals.
@@ -166,6 +166,7 @@ In `scrollMode='hybrid'`:
 - Hybrid matcher/runtime readiness must resolve from the same ASR block SSOT used by ASR driver (`asr-block-store` metadata + runtime readiness globals), and diagnostics should include `blocksReady`, `blockCount`, matcher source feed, and current script hash/sig.
 - When speech activity is present but blocks are not yet ready (`backendReady && !blocksReady && speechHeardRecently`), Hybrid must enter a temporary blocks-not-ready hold lane.
 - In that hold lane, no-match/off-script degradation is diagnostic-only (no hard off-script decay or hard-no-match gating), and velocity should remain in stable fallback/recovery behavior until blocks become ready.
+- `tp:asr:guard` is structural commit-suppression telemetry (`commit suppressed`), not semantic off-script truth; Hybrid/router must not map guard events directly to off-script evidence or decay.
 
 ---
 
