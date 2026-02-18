@@ -4164,7 +4164,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const applyPostCommitReadabilityGuarantee = (
     scroller: HTMLElement,
     activeLineIndex: number,
-    opts?: { allowNudge?: boolean },
+    opts?: { allowNudge?: boolean; forwardOnly?: boolean },
   ) => {
     const beforeTop = Number(scroller.scrollTop || 0);
     const beforeMetrics = measurePostCommitReadability(scroller, activeLineIndex);
@@ -4214,7 +4214,11 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       targetTop = beforeTop + clampedDeltaPx;
     }
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    targetTop = clamp(Math.max(beforeTop, targetTop), 0, maxTop);
+    if (opts?.forwardOnly === true) {
+      targetTop = clamp(Math.max(beforeTop, targetTop), 0, maxTop);
+    } else {
+      targetTop = clamp(targetTop, 0, maxTop);
+    }
     let nudgeApplied = false;
     let afterTop = beforeTop;
     const writeSuppressedByCommitWindow =
@@ -5332,7 +5336,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const settledScroller = getScroller() || commitScroller;
     const firstExpected = resolveExpectedTop(settledScroller, Number(settledScroller.scrollTop || 0));
     const settledTop = Number(settledScroller.scrollTop || 0);
-    if (Math.abs(settledTop - firstExpected) <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+    const settledErr = settledTop - firstExpected;
+    if (Math.abs(settledErr) <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+      return { ok: true, actualTop: settledTop, corrected: false };
+    }
+    // Keep commit settle monotonic: if writer landed ahead of expected target,
+    // treat as healthy and avoid backward "truth correction" bounce.
+    if (settledErr > DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
       return { ok: true, actualTop: settledTop, corrected: false };
     }
 
@@ -5355,8 +5365,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const finalScroller = getScroller() || commitScroller;
     const finalExpected = resolveExpectedTop(finalScroller, firstExpected);
     const finalTop = Number(finalScroller.scrollTop || 0);
-    const finalErr = Math.abs(finalTop - finalExpected);
-    if (finalErr <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+    const finalDelta = finalTop - finalExpected;
+    const finalErr = Math.abs(finalDelta);
+    if (finalErr <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX || finalDelta > DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
       return { ok: true, actualTop: finalTop, corrected: true };
     }
 
@@ -6415,6 +6426,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           await waitForWriterCommitWindowRelease(writerCommitStartedAt);
           const settledReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
             allowNudge: true,
+            forwardOnly: true,
           });
           logPostCommitReadabilityProbe(
             'commit:writer-settle',
