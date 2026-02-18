@@ -676,7 +676,6 @@ function emitAsrStallRescue(reason: string, stall: AsrStallPayload): void {
   try { window.__tpBus?.emit?.('tp:asr:rescue', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: payload })); } catch {}
   try { document.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: payload })); } catch {}
-  try { (window as any).__tpAsrRequestRescue?.(); } catch {}
   if (isDevMode() && shouldLogTag('ASR_STALL_RESCUE', 2, 1000)) {
     try { console.info('[ASR_STALL_RESCUE]', payload); } catch {}
   }

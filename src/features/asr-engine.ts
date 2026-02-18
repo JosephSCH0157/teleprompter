@@ -26,14 +26,10 @@ export const asrEngine = {
   setEnabled(enabled: boolean) {
     const anyWin = window as any;
     const asrMode = (anyWin.__tpAsrMode as AsrMode | undefined) || null;
-    if (!asrMode) {
-      if (anyWin.__tpDevMode) console.warn('[ASR-ENGINE] Missing __tpAsrMode; cannot toggle ASR');
-      return;
-    }
 
     if (!enabled) {
       if (anyWin.__tpDevMode) console.info('[ASR-ENGINE] Disabling ASR scroll');
-      try { asrMode.setEnabled(false); } catch {}
+      try { asrMode?.setEnabled?.(false); } catch {}
       return;
     }
 
@@ -54,6 +50,7 @@ export const asrEngine = {
       });
     } catch {}
 
-    try { asrMode.setEnabled(true); } catch {}
+    // Legacy compatibility only. Runtime ASR ownership lives in speech-loader.
+    try { asrMode?.setEnabled?.(true); } catch {}
   },
 };

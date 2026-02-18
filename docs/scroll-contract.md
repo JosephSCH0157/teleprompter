@@ -23,6 +23,8 @@ When `scrollMode='asr'`:
 - No auto-intent flow may drive scroll.
 - No preroll event may trigger movement.
 - Movement trigger is ASR commit only.
+- ASR movement authority is single-lane: `speech-loader -> asr-scroll-driver` commit path.
+- Legacy `AsrMode` -> `tp:scroll:intent` movement lane is compatibility-only and blocked by default.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - ASR commit movement is writer-first: resolve block mapping via `seekToBlockAnimated(...)`, then (in ASR mode) ease toward commit `targetTop` with bounded-speed animation; this remains commit-driven (no continuous ASR motor lane).
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays near the marker band while forward readable lookahead remains visible.

@@ -135,6 +135,7 @@ let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
 let auto: any | null = null;
 let scrollIntentListenerWired = false;
+let legacyAsrIntentLaneBlockedLogged = false;
 const ASR_INTENT_DEBOUNCE_MS = 450;
 const ASR_INTENT_STABLE_MS = 250;
 const ASR_INTENT_FIRST_STABLE_MS = 600;
@@ -155,6 +156,13 @@ let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
 let hybridModeMismatchLogged = false;
+function shouldBlockLegacyAsrIntentLane(): boolean {
+  try {
+    return (window as any).__tpAllowLegacyAsrIntent !== true;
+  } catch {
+    return true;
+  }
+}
 let recentAsrMatches: Array<{
   ts: number;
   blockIdx: number;
@@ -3278,15 +3286,22 @@ function installScrollRouter(opts) {
   }
   if (!scrollIntentListenerWired) {
     scrollIntentListenerWired = true;
-    // TODO (ARCHITECTURE):
-    // Forward ASR block commits must be gated on *block completion*, not mere detection.
-    // “Completion” is a semantic invariant (e.g. last-line confirmation, coverage threshold,
-    // boundary crossing, or post-line silence), not a heuristic.
-    // Until this is implemented, first ASR commits may feel eager but remain truthful.
-    // Do NOT implement completion logic in ASR; router is the commit authority (SSOT).
+    // Legacy compatibility lane for tp:scroll:intent('asr').
+    // Default runtime ownership is speech-loader -> asr-scroll-driver commit path.
+    // This listener remains behind a dev override for diagnostics only.
     onScrollIntent((intent) => {
       try {
         if (!intent || intent.source !== 'asr') return;
+        // Legacy ASR intent lane is disabled. Commit ownership lives in speech-loader -> asr-scroll-driver.
+        if (shouldBlockLegacyAsrIntentLane()) {
+          if (!legacyAsrIntentLaneBlockedLogged) {
+            legacyAsrIntentLaneBlockedLogged = true;
+            if (isDevMode()) {
+              try { console.info('[ASR] ignoring legacy tp:scroll:intent (driver-owned commit lane)'); } catch {}
+            }
+          }
+          return;
+        }
         const telemetry = getAsrTelemetry();
         const intentReason = typeof intent.reason === 'string' ? intent.reason : '';
         recordAsrIntentTelemetry(telemetry, intentReason);
