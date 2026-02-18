@@ -4337,13 +4337,60 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     logHud();
   }
-  function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
+  function handleTranscriptEvent(detail: {
+    timestamp?: number;
+    source?: string;
+    noMatch?: boolean;
+    bestSim?: number;
+    sim?: number;
+    score?: number;
+    inBand?: boolean | number;
+    bestIdx?: number;
+    line?: number;
+    idx?: number;
+    currentIdx?: number;
+    final?: boolean;
+    isFinal?: boolean;
+    match?: {
+      bestIdx?: number;
+      bestSim?: number;
+      currentIdx?: number;
+    } | null;
+  }) {
     if (getScrollMode() !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(detail.timestamp, perfNow);
     hybridMatcherSource = 'tp:speech:transcript';
     hybridMatcherSourceDetail = String(detail.source || 'speech-loader');
     const isNoMatch = detail.noMatch === true;
+    const inBand = detail.inBand === true || detail.inBand === 1 || (detail.inBand as unknown) === "1";
+    const bestIdxRaw = detail.bestIdx ?? detail.line ?? detail.idx ?? detail.match?.bestIdx;
+    const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.max(0, Math.floor(Number(bestIdxRaw))) : -1;
+    const simRaw = detail.bestSim ?? detail.sim ?? detail.score ?? detail.match?.bestSim;
+    const parsedBestSim = Number.isFinite(Number(simRaw)) ? Number(simRaw) : Number.NaN;
+    const inferredBestSim =
+      Number.isFinite(parsedBestSim) ? parsedBestSim : isNoMatch ? Number.NaN : inBand ? HYBRID_ON_SCRIPT_SIM : HYBRID_OFFSCRIPT_MILD_SIM;
+    const currentIdxRaw = detail.currentIdx ?? detail.match?.currentIdx ?? (window as any)?.currentIndex;
+    const currentIdx = Number.isFinite(Number(currentIdxRaw))
+      ? Math.max(0, Math.floor(Number(currentIdxRaw)))
+      : lastAsrMatch.currentIndex;
+    if (!isNoMatch && bestIdx >= 0) {
+      hybridMatchSeen = true;
+      hybridLastMatch = {
+        bestIdx,
+        bestSim: inferredBestSim,
+        isFinal: Boolean(detail.isFinal ?? detail.final),
+        ts: now,
+      };
+      lastAsrMatch = {
+        currentIndex: currentIdx,
+        bestIndex: bestIdx,
+        bestSim: inferredBestSim,
+      };
+      if (Number.isFinite(inferredBestSim) && inferredBestSim >= HYBRID_HARD_NOMATCH_SIM_MIN) {
+        hybridLastNoMatch = false;
+      }
+    }
     const wasSilent = hybridSilence.pausedBySilence;
     hybridSilence.lastSpeechAtMs = now;
     hybridSilence.pausedBySilence = false;
