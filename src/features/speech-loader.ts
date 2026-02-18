@@ -1570,17 +1570,25 @@ function normalizeMatcherResult(input: unknown): Record<string, unknown> | null 
   const bestIdxRaw = raw.bestIdx ?? raw.idx;
   const bestSimRaw = raw.bestSim ?? raw.sim;
   const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
-  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const explicitNoMatch = raw.noMatch === true;
+  const noMatch = explicitNoMatch || bestIdx < 0;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : undefined;
   const topScores = Array.isArray(raw.topScores)
     ? raw.topScores
     : (Array.isArray(raw.candidates) ? raw.candidates : []);
-  return {
+  const normalized: Record<string, unknown> = {
     ...raw,
-    bestIdx,
-    bestSim,
+    bestIdx: noMatch ? -1 : bestIdx,
     topScores,
-    noMatch: typeof raw.noMatch === 'boolean' ? raw.noMatch : bestIdx < 0,
+    noMatch,
   };
+  if (!noMatch && Number.isFinite(bestSim)) {
+    normalized.bestSim = Number(bestSim);
+  } else {
+    delete normalized.bestSim;
+    delete normalized.sim;
+  }
+  return normalized;
 }
 
 function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown> | null {
@@ -1592,7 +1600,8 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
   }
   const bestIdxRaw = raw?.bestIdx ?? raw?.line ?? raw?.idx;
   const bestSimRaw = raw?.bestSim ?? raw?.sim ?? raw?.score;
-  const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || raw?.noMatch === true;
+  const explicitNoMatch = raw?.noMatch === true;
+  const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || explicitNoMatch;
   if (!hasStructuredHint) {
     const transcript = String(payload.text || '');
     const finalFlag = Boolean(payload.isFinal ?? payload.final);
@@ -1613,7 +1622,8 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
     return null;
   }
   const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
-  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const noMatch = explicitNoMatch || bestIdx < 0;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : undefined;
   const topScores = Array.isArray(raw?.topScores)
     ? raw.topScores
     : (Array.isArray(raw?.candidates) ? raw.candidates : []);
@@ -1623,12 +1633,20 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
     (speechStoreState as any)?.currentIdx ??
     (speechStoreState as any)?.currentIndex;
   const currentIdx = Number.isFinite(Number(currentIdxRaw)) ? Math.floor(Number(currentIdxRaw)) : null;
-  return {
-    bestIdx,
-    bestSim,
+  const result: Record<string, unknown> = {
+    bestIdx: noMatch ? -1 : bestIdx,
     topScores,
     currentIdx,
+    noMatch,
   };
+  const reason = raw?.reason;
+  if (typeof reason === 'string' && reason) {
+    result.reason = reason;
+  }
+  if (!noMatch && Number.isFinite(bestSim)) {
+    result.bestSim = Number(bestSim);
+  }
+  return result;
 }
 
 function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPayload {
@@ -1643,11 +1661,16 @@ function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPa
   }
 
   const bestIdxRaw = (match as any)?.bestIdx;
-  const hasForwardMatch = Number.isFinite(Number(bestIdxRaw)) && Number(bestIdxRaw) >= 0;
-  if (next.noMatch == null) {
-    next.noMatch = !hasForwardMatch;
+  const matchNoMatch = (match as any)?.noMatch === true;
+  const hasForwardMatch = !matchNoMatch && Number.isFinite(Number(bestIdxRaw)) && Number(bestIdxRaw) >= 0;
+  if (matchNoMatch) {
+    next.noMatch = true;
+  } else if (next.noMatch == null) {
+    next.noMatch = matchNoMatch || !hasForwardMatch;
   }
-  if (next.matchId == null || next.matchId === '') {
+  if (next.noMatch === true) {
+    next.matchId = null;
+  } else if (next.matchId == null || next.matchId === '') {
     next.matchId = next.noMatch ? null : nextFallbackTranscriptMatchId();
   }
   if (next.currentIdx == null) {
@@ -1658,8 +1681,21 @@ function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPa
     next.line = Math.floor(Number(bestIdxRaw));
   }
   const simRaw = (match as any)?.bestSim ?? (payload as any)?.bestSim;
-  if (next.sim == null && Number.isFinite(Number(simRaw))) {
+  if (next.noMatch !== true && next.sim == null && Number.isFinite(Number(simRaw))) {
     next.sim = Number(simRaw);
+  }
+  if (next.noMatch === true) {
+    if (next.sim != null) delete (next as any).sim;
+    if (next.match && typeof next.match === 'object') {
+      const normalizedMatch: Record<string, unknown> = {
+        ...(next.match as Record<string, unknown>),
+        noMatch: true,
+        bestIdx: -1,
+      };
+      delete normalizedMatch.bestSim;
+      delete normalizedMatch.sim;
+      next.match = normalizedMatch;
+    }
   }
   if (next.candidates == null && Array.isArray((match as any)?.topScores)) {
     next.candidates = (match as any).topScores;

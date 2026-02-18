@@ -1262,16 +1262,27 @@ function normalizeSpeechMatchResult(input: unknown): MatchResult | null {
   const bestIdxRaw = raw.bestIdx ?? raw.idx;
   const bestSimRaw = raw.bestSim ?? raw.sim;
   const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
+  const explicitNoMatch = raw.noMatch === true;
+  const noMatch = explicitNoMatch || bestIdx < 0;
   const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
   const topScores = Array.isArray(raw.topScores)
     ? raw.topScores
     : (Array.isArray(raw.candidates) ? raw.candidates : []);
-  return {
+  const normalized: MatchResult & Record<string, unknown> = {
     ...(raw as MatchResult),
-    bestIdx,
-    bestSim,
+    bestIdx: noMatch ? -1 : bestIdx,
+    bestSim: noMatch ? Number.NaN : bestSim,
     topScores: topScores as Array<{ idx: number; score: number }>,
   };
+  normalized.noMatch = noMatch;
+  return normalized;
+}
+
+function isNoMatchResult(match: MatchResult | null | undefined): boolean {
+  if (!match) return true;
+  if ((match as any).noMatch === true) return true;
+  const bestIdx = Number((match as any).bestIdx);
+  return !Number.isFinite(bestIdx) || bestIdx < 0;
 }
 
 function resolveSpeechMatchResult(text: string, isFinal: boolean): MatchResult | null {
@@ -6908,13 +6919,25 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
     if (postCatchupSamplesLeft > 0) postCatchupSamplesLeft -= 1;
     let rawMatchId = (detail as any)?.matchId;
-    const noMatch = detail?.noMatch === true;
+    let noMatch = detail?.noMatch === true;
     let incomingMatch: MatchResult | undefined = detail?.match;
+    if (incomingMatch && isNoMatchResult(incomingMatch)) {
+      incomingMatch = undefined;
+      noMatch = true;
+    }
     if (!incomingMatch) {
       const fallbackMatch = resolveSpeechMatchResult(compacted, isFinal);
-      if (fallbackMatch) {
+      if (fallbackMatch && !isNoMatchResult(fallbackMatch)) {
         incomingMatch = fallbackMatch;
+      } else if (fallbackMatch) {
+        noMatch = true;
       }
+    }
+    if (incomingMatch) {
+      noMatch = false;
+    }
+    if (noMatch && !incomingMatch) {
+      rawMatchId = null;
     }
     let hasMatchId = typeof rawMatchId === 'string' && rawMatchId.length > 0;
     const explicitNoMatch = (rawMatchId === null || rawMatchId === undefined) && noMatch && !incomingMatch;
