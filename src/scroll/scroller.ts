@@ -1,9 +1,72 @@
-import { computeAnchorLineIndex, shouldLogScrollWrite } from './scroll-helpers';
-
 let displayScrollChannel: BroadcastChannel | null = null;
 let scrollEventTrackerInstalled = false;
 
 export type ScrollerRole = 'main' | 'display';
+
+function shouldLogScrollWrite(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__tpScrollDebug === true) return true;
+    if (w.__tpScrollWriteDebug === true) return true;
+    const qs = new URLSearchParams(window.location.search || '');
+    if (qs.has('scrollDebug') || qs.has('scrollWriteDebug')) return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function readLineIndex(el: Element | null): number | null {
+  if (!el) return null;
+  const line = (el as HTMLElement).closest ? (el as HTMLElement).closest('.line') as HTMLElement | null : null;
+  if (!line) return null;
+  const raw =
+    line.dataset.i ||
+    line.dataset.index ||
+    line.dataset.lineIdx ||
+    line.dataset.line ||
+    line.getAttribute('data-line') ||
+    line.getAttribute('data-line-idx');
+  if (raw != null && raw !== '') {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return Math.max(0, Math.floor(n));
+  }
+  const id = line.id || '';
+  const m = /^tp-line-(\d+)$/.exec(id);
+  if (m) return Math.max(0, Number(m[1]));
+  return null;
+}
+
+function computeAnchorLineIndex(scroller: HTMLElement | null): number | null {
+  if (!scroller) return null;
+  if (typeof document === 'undefined' || typeof window === 'undefined') return null;
+  const rect = scroller.getBoundingClientRect();
+  if (!rect.height || !rect.width) return null;
+  const markerPct = typeof (window as any).__TP_MARKER_PCT === 'number'
+    ? (window as any).__TP_MARKER_PCT
+    : 0.4;
+  const markerY = rect.top + rect.height * markerPct;
+  const markerX = rect.left + rect.width * 0.5;
+  const hit = document.elementFromPoint(markerX, markerY);
+  const hitIdx = readLineIndex(hit);
+  if (hitIdx != null) return hitIdx;
+  const lines = Array.from(scroller.querySelectorAll<HTMLElement>('.line'));
+  if (!lines.length) return null;
+  let bestIdx: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < lines.length; i++) {
+    const el = lines[i];
+    const r = el.getBoundingClientRect();
+    const y = r.top + r.height * 0.5;
+    const d = Math.abs(y - markerY);
+    if (d < bestDist) {
+      bestDist = d;
+      bestIdx = readLineIndex(el) ?? i;
+    }
+  }
+  return bestIdx != null ? Math.max(0, Math.floor(bestIdx)) : null;
+}
 
 function isElementLike(node: unknown): node is HTMLElement {
   return !!node && typeof node === 'object' && (node as any).nodeType === 1;
