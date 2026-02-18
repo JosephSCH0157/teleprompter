@@ -4004,6 +4004,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         viewportTop: 0,
         viewportHeight: Math.max(1, scroller.clientHeight || 0),
         readableLinesBelowCount: 0,
+        requiredNextLineOverflowPx: 0,
         requiredLookaheadOverflowPx: 0,
       };
     }
@@ -4022,6 +4023,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     );
     let readableLinesBelowCount = 0;
     let speakableSeen = 0;
+    let requiredNextLineOverflowPx = 0;
+    let nextLineSeen = false;
     let requiredLookaheadOverflowPx = 0;
     for (let idx = activeLineIndex + 1; idx <= maxLookahead; idx += 1) {
       const lineText = getLineTextAt(idx);
@@ -4029,6 +4032,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const lineEl = getLineElementByIndex(scroller, idx);
       if (!lineEl) continue;
       const lineRect = lineEl.getBoundingClientRect();
+      if (!nextLineSeen) {
+        requiredNextLineOverflowPx = Math.max(0, lineRect.bottom - visibleBottom);
+        nextLineSeen = true;
+      }
       if (lineRect.top >= viewportTop && lineRect.bottom <= visibleBottom) {
         readableLinesBelowCount += 1;
       }
@@ -4044,6 +4051,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       viewportTop,
       viewportHeight,
       readableLinesBelowCount,
+      requiredNextLineOverflowPx,
       requiredLookaheadOverflowPx,
     };
   };
@@ -4078,11 +4086,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ratio > markerBandMaxRatio
     ) {
       const desiredCenter =
-        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerTargetRatio;
+      beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerTargetRatio;
       const ratioNudgePx = Math.max(0, beforeMetrics.activeCenterY - desiredCenter);
       if (ratioNudgePx > 0) {
         targetTop = Math.max(targetTop, beforeTop + ratioNudgePx);
       }
+    }
+    if (beforeMetrics.requiredNextLineOverflowPx > 0) {
+      targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredNextLineOverflowPx);
     }
     if (beforeMetrics.requiredLookaheadOverflowPx > 0) {
       targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredLookaheadOverflowPx);

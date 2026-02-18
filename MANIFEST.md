@@ -76,6 +76,7 @@ In `scrollMode='asr'`:
 - Pixel commit path is debug-only (`asr_pixel` / explicit override); dev mode must not implicitly force pixel commits.
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line near the marker band (not pinned at top) while preserving forward readable lines (minimum lookahead target) so commits remain readable without jumping ahead.
 - Post-commit readability nudges must preserve a tight marker-centered active-line band (with responsive same-line recenter cadence), should prioritize restoring forward readable lookahead when it is clipped, and may not push the active line above that band solely to satisfy lookahead.
+- Post-commit readability must prioritize immediate continuity: when the next speakable line is clipped below the viewport, nudge to reveal it before deeper lookahead targets.
 - Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
