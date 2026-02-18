@@ -201,6 +201,7 @@ const DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES = 3;
 const DEFAULT_SCROLL_TRUTH_MISMATCH_PX = 4;
 const DEFAULT_SCROLL_TRUTH_GLIDE_SAFETY_MS = 120;
 const DEFAULT_SCROLL_TRUTH_GLIDE_MAX_WAIT_MS = 1200;
+const DEFAULT_SCROLL_TRUTH_AHEAD_TOLERANCE_LINES = 1;
 const DEFAULT_DEADBAND_PX = 32;
 const DEFAULT_MAX_VEL_PX_PER_SEC = 470;
 const DEFAULT_MAX_VEL_MED_PX_PER_SEC = 170;
@@ -5345,6 +5346,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (Number.isFinite(expectedTopHint)) return Number(expectedTopHint);
       return fallback;
     };
+    const resolveAheadTolerancePx = (
+      scrollerEl: HTMLElement,
+      fallbackLine: HTMLElement | null,
+    ): number => {
+      let lineEl = fallbackLine;
+      if (!lineEl || !lineEl.isConnected) {
+        lineEl = getLineElementByIndex(scrollerEl, targetLine);
+      }
+      const lineRectH = lineEl?.getBoundingClientRect?.().height ?? 0;
+      const lineOffsetH = lineEl?.offsetHeight ?? 0;
+      const lineClientH = lineEl?.clientHeight ?? 0;
+      const lineHeightPx = Math.max(
+        12,
+        Number.isFinite(lineRectH) && lineRectH > 0 ? lineRectH : 0,
+        Number.isFinite(lineOffsetH) && lineOffsetH > 0 ? lineOffsetH : 0,
+        Number.isFinite(lineClientH) && lineClientH > 0 ? lineClientH : 0,
+      );
+      const allowance = lineHeightPx * DEFAULT_SCROLL_TRUTH_AHEAD_TOLERANCE_LINES;
+      return Math.max(DEFAULT_SCROLL_TRUTH_MISMATCH_PX, Math.round(allowance + DEFAULT_SCROLL_TRUTH_MISMATCH_PX));
+    };
     await waitForWriterCommitWindowRelease(commitStartTs);
     if (isSeekAnimationActive()) {
       const activeScroller = getScroller() || commitScroller;
@@ -5368,12 +5389,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const firstExpected = resolveExpectedTop(settledScroller, Number(settledScroller.scrollTop || 0));
     const settledTop = Number(settledScroller.scrollTop || 0);
     const settledErr = settledTop - firstExpected;
+    const aheadTolerancePx = resolveAheadTolerancePx(settledScroller, fallbackLineEl);
     if (Math.abs(settledErr) <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
       return { ok: true, actualTop: settledTop, corrected: false };
     }
-    // Keep commit settle monotonic: if writer landed ahead of expected target,
-    // treat as healthy and avoid backward "truth correction" bounce.
-    if (settledErr > DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+    // Keep commit settle monotonic for small forward settle deltas only.
+    // Large ahead landings are corrected back to avoid active-line off-screen drift.
+    if (settledErr > DEFAULT_SCROLL_TRUTH_MISMATCH_PX && settledErr <= aheadTolerancePx) {
       return { ok: true, actualTop: settledTop, corrected: false };
     }
 
@@ -5398,7 +5420,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const finalTop = Number(finalScroller.scrollTop || 0);
     const finalDelta = finalTop - finalExpected;
     const finalErr = Math.abs(finalDelta);
-    if (finalErr <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX || finalDelta > DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+    if (
+      finalErr <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX ||
+      (finalDelta > DEFAULT_SCROLL_TRUTH_MISMATCH_PX && finalDelta <= aheadTolerancePx)
+    ) {
       return { ok: true, actualTop: finalTop, corrected: true };
     }
 
