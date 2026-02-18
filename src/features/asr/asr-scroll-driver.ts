@@ -199,6 +199,8 @@ const DEFAULT_CREEP_NEAR_PX = 8;
 const DEFAULT_CREEP_BUDGET_PX = 56;
 const DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES = 3;
 const DEFAULT_SCROLL_TRUTH_MISMATCH_PX = 4;
+const DEFAULT_SCROLL_TRUTH_GLIDE_SAFETY_MS = 120;
+const DEFAULT_SCROLL_TRUTH_GLIDE_MAX_WAIT_MS = 1200;
 const DEFAULT_DEADBAND_PX = 32;
 const DEFAULT_MAX_VEL_PX_PER_SEC = 470;
 const DEFAULT_MAX_VEL_MED_PX_PER_SEC = 170;
@@ -5211,17 +5213,47 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     targetLine: number,
     expectedTopHint: number,
     fallbackLineEl: HTMLElement | null,
+    commitStartedAt: number,
   ): Promise<{ ok: boolean; actualTop: number; corrected: boolean }> => {
+    const commitStartTs = Number.isFinite(commitStartedAt) ? commitStartedAt : Date.now();
     const firstScroller = getScroller() || commitScroller;
     maybeLogScrollContainerIdentity(commitScroller, firstScroller);
-    const firstExpected = (() => {
-      const resolved = resolveTargetTop(firstScroller, targetLine);
+    const resolveExpectedTop = (scrollerEl: HTMLElement, fallback: number) => {
+      const resolved = resolveTargetTop(scrollerEl, targetLine);
       if (Number.isFinite(resolved as number)) return Number(resolved);
       if (Number.isFinite(expectedTopHint)) return Number(expectedTopHint);
-      return Number(firstScroller.scrollTop || 0);
-    })();
+      return fallback;
+    };
+
+    const minTruthCheckAt = commitStartTs + DEFAULT_SCROLL_TRUTH_GLIDE_SAFETY_MS;
+    while (Date.now() < minTruthCheckAt) {
+      await waitAnimationFrames(1);
+    }
+
+    const glideDeadline = commitStartTs + DEFAULT_SCROLL_TRUTH_GLIDE_MAX_WAIT_MS;
+    while (isSeekAnimationActive() && Date.now() < glideDeadline) {
+      await waitAnimationFrames(1);
+    }
+    if (isSeekAnimationActive()) {
+      const activeScroller = getScroller() || commitScroller;
+      const activeTop = Number(activeScroller.scrollTop || 0);
+      if (isDevMode() && shouldLogLevel(2)) {
+        try {
+          console.debug('[ASR_TRUTH] deferred while glide active', {
+            line: targetLine,
+            elapsedMs: Math.max(0, Date.now() - commitStartTs),
+            activeTop: Math.round(activeTop),
+          });
+        } catch {
+          // ignore
+        }
+      }
+      return { ok: true, actualTop: activeTop, corrected: false };
+    }
+
     await waitAnimationFrames(DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES);
     const settledScroller = getScroller() || commitScroller;
+    const firstExpected = resolveExpectedTop(settledScroller, Number(settledScroller.scrollTop || 0));
     const settledTop = Number(settledScroller.scrollTop || 0);
     if (Math.abs(settledTop - firstExpected) <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
       return { ok: true, actualTop: settledTop, corrected: false };
@@ -5243,11 +5275,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
     await waitAnimationFrames(DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES);
     const finalScroller = getScroller() || commitScroller;
-    const finalExpected = (() => {
-      const resolved = resolveTargetTop(finalScroller, targetLine);
-      if (Number.isFinite(resolved as number)) return Number(resolved);
-      return firstExpected;
-    })();
+    const finalExpected = resolveExpectedTop(finalScroller, firstExpected);
     const finalTop = Number(finalScroller.scrollTop || 0);
     const finalErr = Math.abs(finalTop - finalExpected);
     if (finalErr <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
@@ -6260,6 +6288,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       let commitAfterTop = currentTop;
       let writerNoMove = false;
       if (modeNow === 'asr') {
+        const writerCommitStartedAt = Date.now();
         const role = resolveViewerRole();
         const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
         const commitMove = applyAsrCommitMovement(
@@ -6330,6 +6359,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             targetLine,
             commitAfterTop,
             lineEl,
+            writerCommitStartedAt,
           );
           commitAfterTop = truth.actualTop;
           lastKnownScrollTop = commitAfterTop;
