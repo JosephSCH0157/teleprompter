@@ -31,7 +31,7 @@ When `scrollMode='asr'`:
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - ASR commit movement is writer-first: resolve block mapping via `seekToBlockAnimated(...)`, then (in ASR mode) ease toward commit `targetTop` with bounded-speed animation; this remains commit-driven (no continuous ASR motor lane).
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays near the marker band while forward readable lookahead remains visible.
-- Post-commit readability nudge must preserve a marker-centered active-line band; lookahead nudges must not force the active line above that band.
+- Post-commit readability nudge must preserve a tight marker-centered active-line band with responsive same-line recentering; lookahead nudges must not force the active line above that band.
 - Live ASR capture may force interim hypotheses on transport even when UI interim toggle is off; commit/movement remains gated by ASR commit logic.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
@@ -59,6 +59,7 @@ When `scrollMode='asr'`:
 - In strict matcher mode, if same-line final remains pinned after nudge arbitration but confidence/overlap are strong, a bounded cue-bridge fallback forward pick is allowed (`forceReason='final-forward-fallback'`).
 - Dev tuning may enable permissive matcher mode (`__tpAsrPermissiveMatcher` or `asr_matcher=permissive`, default-on in dev): guard branches (`tie`, `low_sim`, short-line ambiguity hold) log but do not hard-block forward commit progression.
 - In permissive matcher mode, same-line final completions may promote a bounded `+1` speakable advance (`forceReason='permissive-final-advance'`), and pending commit gate must honor that bypass at progressive floor.
+- Permissive same-line final forward promotion is evidence- and position-gated: require meaningful lexical overlap and block only true run-ahead (cursor materially ahead of marker); when marker is ahead (lag), permissive forward advance may proceed.
 - Final forward promotions (`final-forward-nudge`, `final-forward-fallback`, `permissive-final-advance`) must carry through pending arbitration so bounded forward picks are not re-blocked by low-sim/tie gates during live armed ASR.
 - In permissive matcher mode, ambiguity HOLD is non-blocking for bounded final forward advance; hold may log, but it must not trap same-line finals at the cursor.
 - Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.

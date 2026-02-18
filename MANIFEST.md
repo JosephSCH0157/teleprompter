@@ -75,7 +75,7 @@ In `scrollMode='asr'`:
 - ASR commit movement is conditionally writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first when the DOM is line-addressable; otherwise ASR must use the non-writer targetTop path (no free-running motor lane).
 - Pixel commit path is debug-only (`asr_pixel` / explicit override); dev mode must not implicitly force pixel commits.
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line near the marker band (not pinned at top) while preserving forward readable lines (minimum lookahead target) so commits remain readable without jumping ahead.
-- Post-commit readability nudges must preserve a marker-centered active-line band and may not push the active line above that band solely to satisfy lookahead.
+- Post-commit readability nudges must preserve a tight marker-centered active-line band (with responsive same-line recenter cadence) and may not push the active line above that band solely to satisfy lookahead.
 - Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
@@ -104,6 +104,7 @@ In `scrollMode='asr'`:
 - Strict matcher lane may apply a bounded final-forward fallback (`forceReason='final-forward-fallback'`) when same-line final confidence/overlap are strong but no forward pick survived nudge arbitration; fallback target remains cue-bridge bounded and speakable.
 - Dev tuning may run a permissive matcher lane (enabled by `__tpAsrPermissiveMatcher` / `asr_matcher=permissive`, default-on in dev): tie/low-sim/ambiguity guards log diagnostics but should not hard-stop forward commit selection.
 - In permissive matcher lane, same-line final completions may promote to bounded `+1` speakable advance (`forceReason='permissive-final-advance'`) and pending commit gating must honor that bypass at progressive floor.
+- Permissive same-line final forward promotion requires lexical overlap and marker-position consistency: bounded advance may proceed with meaningful overlap unless cursor has drifted materially ahead of marker; marker-ahead lag scenarios may still permissively advance.
 - Same-line final forward promotions (`final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance`) must propagate into pending gating so low-sim/tie arbitration cannot re-block bounded forward progress in live armed ASR.
 - In permissive matcher lane, ambiguity HOLD is diagnostic-only: active hold must not suppress bounded forward final advance when same-line final evidence is strong enough to progress.
 - Cue-boundary bridge widening applies to same-line confirm/nudge flow only; full commit target resolution remains bounded by the normal commit clamp window.

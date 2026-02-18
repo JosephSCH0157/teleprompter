@@ -193,10 +193,10 @@ const DEFAULT_LOOKAHEAD_BEHIND_HITS = 2;
 const DEFAULT_LOOKAHEAD_BEHIND_WINDOW_MS = 1800;
 const DEFAULT_LOOKAHEAD_STALL_MS = 2500;
 const DEFAULT_BAND_BACK_TOLERANCE_LINES = 1;
-const DEFAULT_SAME_LINE_THROTTLE_MS = 120;
-const DEFAULT_CREEP_PX = 8;
-const DEFAULT_CREEP_NEAR_PX = 12;
-const DEFAULT_CREEP_BUDGET_PX = 40;
+const DEFAULT_SAME_LINE_THROTTLE_MS = 90;
+const DEFAULT_CREEP_PX = 10;
+const DEFAULT_CREEP_NEAR_PX = 8;
+const DEFAULT_CREEP_BUDGET_PX = 56;
 const DEFAULT_DEADBAND_PX = 32;
 const DEFAULT_MAX_VEL_PX_PER_SEC = 470;
 const DEFAULT_MAX_VEL_MED_PX_PER_SEC = 170;
@@ -384,7 +384,7 @@ const WITHIN_BLOCK_CONTINUITY_SIM_SLACK = 0.04;
 const POST_COMMIT_ACTIVE_MAX_RATIO = 0.58;
 const POST_COMMIT_ACTIVE_TARGET_RATIO = 0.42;
 const POST_COMMIT_ACTIVE_MIN_RATIO = 0.14;
-const POST_COMMIT_ACTIVE_BAND_RADIUS = 0.08;
+const POST_COMMIT_ACTIVE_BAND_RADIUS = 0.05;
 const POST_COMMIT_MIN_READABLE_LINES_BELOW = 4;
 const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
@@ -456,6 +456,9 @@ const DEFAULT_GRACE_ROLLBACK_MAX_CURRENT_SIM = 0.25;
 const DEFAULT_GRACE_ROLLBACK_MIN_MARGIN = 0.35;
 const DEFAULT_GRACE_ROLLBACK_COOLDOWN_MS = 5000;
 const DEFAULT_STRONG_FORWARD_COMMIT_SIM = 0.82;
+const DEFAULT_PERMISSIVE_FINAL_MIN_CONTENT_HITS = 1;
+const DEFAULT_PERMISSIVE_FINAL_MIN_OVERLAP_RATIO = 0.25;
+const DEFAULT_PERMISSIVE_FINAL_MARKER_BACK_TOLERANCE_LINES = 1;
 const DEFAULT_WEAK_CURRENT_OVERLAP_MAX_TOKENS = 1;
 const DEFAULT_WEAK_CURRENT_FORWARD_MIN_TOKENS = 3;
 const DEFAULT_WEAK_CURRENT_FORWARD_SIM_SLACK = 0.1;
@@ -8814,6 +8817,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       overlapRatioCurrent >= (
         permissiveMatcher ? 0.25 : DEFAULT_STRONG_FINAL_NUDGE_MIN_OVERLAP_RATIO
       );
+    const permissiveMarkerConsistencyOk =
+      markerIdx < 0 ||
+      markerIdx >= (
+        cursorLine -
+        Math.max(DEFAULT_PERMISSIVE_FINAL_MARKER_BACK_TOLERANCE_LINES, consistencyMarkerBandLines)
+      );
     const preNudgeHoldReason = preNudgeAmbiguity.reason || 'short_line_ambiguous';
     if (
       preNudgeShortLineAmbiguous &&
@@ -8846,10 +8855,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       permissiveMatcher &&
       isFinal &&
       rawIdx === cursorLine &&
+      permissiveMarkerConsistencyOk &&
       conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+      preNudgeBestOverlapHits >= DEFAULT_PERMISSIVE_FINAL_MIN_CONTENT_HITS &&
       (
         overlapTokensCurrent.length >= 2 ||
-        overlapRatioCurrent >= 0.2
+        overlapRatioCurrent >= DEFAULT_PERMISSIVE_FINAL_MIN_OVERLAP_RATIO
       );
     const strongFinalNudgeHoldBypass =
       preNudgeStrongFinalHoldBypass &&
@@ -8935,7 +8946,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       permissiveMatcher &&
       isFinal &&
       rawIdx === cursorLine &&
-      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+      permissiveMarkerConsistencyOk &&
+      conf >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM &&
+      preNudgeBestOverlapHits >= DEFAULT_PERMISSIVE_FINAL_MIN_CONTENT_HITS &&
+      (
+        overlapTokensCurrent.length >= 2 ||
+        overlapRatioCurrent >= DEFAULT_PERMISSIVE_FINAL_MIN_OVERLAP_RATIO
+      );
     const strictFinalFallbackEligible =
       !permissiveMatcher &&
       isFinal &&
