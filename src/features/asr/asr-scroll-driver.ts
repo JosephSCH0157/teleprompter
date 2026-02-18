@@ -4444,6 +4444,20 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       allowContentForwardRescue &&
       deltaLines === 1 &&
       cueBridge.skippedReasons.length === 0;
+    if (isAutoStallRescue && !directContentForwardRescue) {
+      stallRescueRequested = false;
+      if (isDevMode()) {
+        warnGuard('cue_stall_rescue_blocked', [
+          `at=${cursorLine}`,
+          'reason=auto-stall-bounded-content-only',
+          reason ? `source=${reason}` : '',
+          `delta=${deltaLines}`,
+          `skipped=[${cueBridge.skippedReasons.join(',')}]`,
+          cursorLineText ? `line="${formatLogSnippet(cursorLineText, 56)}"` : '',
+        ]);
+      }
+      return false;
+    }
     if (!cueBridge.skippedReasons.length && !directContentForwardRescue) {
       stallRescueRequested = false;
       if (isDevMode() && isAutoStallRescue) {
@@ -9112,7 +9126,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 : 0;
             const currentSim =
               Number.isFinite(arbitrationCurrentScore) ? arbitrationCurrentScore : conf;
-            if (tryGraceRollback(
+            if (isFinal && tryGraceRollback(
               cursorLine,
               prevLine,
               now,

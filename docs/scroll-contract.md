@@ -71,7 +71,7 @@ When `scrollMode='asr'`:
 - Multi-line cue-bridge commits require stronger confidence (`sim>=0.45`); low-floor bypass is not allowed for multi-line bridge jumps.
 - For bounded same-line final cue-bridge promotions, a small multi-jump floor epsilon (`<=0.08`) is allowed to avoid float-boundary stalls, only on `final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance` with valid cue-bridge pathing. Hard deny floor (`sim<0.30`) remains unchanged.
 - During live armed `speech_stall`, runtime may emit `tp:asr:rescue`; driver may synthesize a bounded cue-bridge forward commit (`forceReason='stall-rescue'`) only when skipped lines are cue/meta/blank and a speakable target exists within bridge cap (`+3`).
-- Auto cue-stall rescue is bounded: automatic stall rescue may run for cue/meta/blank cursor lines via bounded cue bridge, and may also run as a conservative direct content step (`+1` only) when both cursor and target are content lines.
+- Auto cue-stall rescue is bounded to conservative continuity: automatic stall rescue may schedule only a direct content step (`+1`) when both cursor and target are content lines; multi-line cue-bridge rescue is reserved for explicit/manual rescue signals.
 - Rescue latch hygiene: `stallRescueRequested` should arm only when rescue scheduling succeeds; blocked content-line auto-stall checks must leave the latch false.
 - LOST_FORWARD may use bounded behind-marker catch-up when marker is ahead of cursor and forward content evidence exists: candidate window remains bounded (`<=+6`), per-commit cap defaults to `+1`, and `+2` is allowed only under strong evidence at progressive floor (`sim>=0.20`).
 - Same-line/behind low-sim handling includes a small relaxed threshold lane (floor-clamped) so stable same-line evidence can proceed without waiting for strict full-threshold confidence.
@@ -87,7 +87,7 @@ When `scrollMode='asr'`:
 - LOST_FORWARD rescue must de-prioritize adjacent short-line tie pockets (`±1..2` short candidates with near-tied scores) and favor bounded strong long-anchor relock when available.
 - `tp:auto:intent` with `reason='scriptEnd'` must not stop live armed ASR sessions; in `mode='asr' && phase='live' && session.asrArmed=true`, router ignores that stop intent.
 - EOF completion is explicit in ASR lane: when commit reaches the last speakable line, driver emits one-shot `tp:asr:script-end`; runtime must transition session to `wrap` by dispatching session-intent stop (`active=false`) and `tp:session:stop` to avoid endless stall/restart churn at script end.
-- Post-commit grace rollback is bounded: within a short post-commit window, allow a one-line rollback correction only when `cursor-1` is decisively stronger, then enforce cooldown to prevent oscillation.
+- Post-commit grace rollback is bounded and final-only: within a short post-commit window, allow a one-line rollback correction only when `cursor-1` is decisively stronger than current final evidence, then enforce cooldown to prevent oscillation.
 - Guard profile defaults are relaxed for forward continuity: reduce same-line throttle, lower forced-evidence floors, and trigger watchdog recovery sooner while keeping forward recovery bounded.
 - Any non-finite (`NaN`/`Infinity`) value in ASR commit/seek numeric paths must be hard-guarded and dropped; emit a dev diagnostic (`ASR NAN GUARD` / writer non-finite guard) instead of propagating unstable math.
 - Forward-evidence may still block backward jumps, large forward skips, and ambiguous multi-line collisions.
