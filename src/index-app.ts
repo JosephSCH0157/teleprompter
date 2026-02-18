@@ -75,7 +75,6 @@ import type { SpeakerBindingsSettings } from './types/speaker-profiles';
 // Console noise filter gated later (only with ?muteExt=1). Do not auto-install.
 // import './boot/console-noise-filter';
 import { initSpeechBridge } from './asr/v2/bridge-speech';
-import { initAsrScrollBridge } from './asr/v2/scroll-bridge';
 import { installScheduler } from './boot/scheduler';
 import { injectSettingsFolderForSmoke } from './features/inject-settings-folder';
 import './features/scripts-local';
@@ -265,12 +264,6 @@ function attachScrollWriterOnce(): void {
 
 // appStore singleton is created inside state/app-store and attached to window.__tpStore
 try {
-	initAsrScrollBridge(appStore);
-	bootTrace('index-app.ts:early:asr-bridge:init');
-} catch (error) {
-	bootTrace('index-app.ts:early:asr-bridge:error', { error: String(error) });
-}
-try {
 	initObsBridge(appStore);
 	bootTrace('index-app.ts:early:obs-bridge:init');
 } catch (error) {
@@ -384,8 +377,32 @@ const SETTINGS_KEYS: PersistedAppKey[] = [
  'settingsTab',
 ];
 
+type LegacyAsrModeCompat = {
+	setEnabled?(_v: boolean): void;
+	getState?(): unknown;
+	__tpLegacyShim?: true;
+};
+
+function allowLegacyAsrModeRuntime(): boolean {
+	if (typeof window === 'undefined') return false;
+	try {
+		if ((window as any).__tpAllowLegacyAsrMode === true) return true;
+		const params = new URLSearchParams(window.location.search || '');
+		if (params.get('legacyAsrMode') === '1') return true;
+	} catch {}
+	return false;
+}
+
+function resolveCompatAsrMode(): LegacyAsrModeCompat | null {
+	const asrMode = (window as any).__tpAsrMode as LegacyAsrModeCompat | undefined;
+	if (!asrMode || typeof asrMode !== 'object') return null;
+	if (asrMode.__tpLegacyShim === true) return asrMode;
+	if (allowLegacyAsrModeRuntime() && typeof asrMode.setEnabled === 'function') return asrMode;
+	return null;
+}
+
 function getAsrModeState(): string | null {
-	const asrMode = (window as any).__tpAsrMode;
+	const asrMode = resolveCompatAsrMode();
 	if (asrMode && typeof asrMode.getState === 'function') {
 		try {
 			const state = asrMode.getState();
@@ -1036,7 +1053,7 @@ function applyUiScrollMode(
   try { setModeStatusLabel(normalized); } catch {}
 
 	const brain = getScrollBrain();
-  const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
+  const asr = resolveCompatAsrMode();
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
     | undefined;

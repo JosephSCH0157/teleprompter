@@ -377,6 +377,16 @@ function getTpSpeechNamespace(): any {
   return ns;
 }
 
+function isLegacySpeechNamespaceAllowed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if ((window as any).__tpAllowLegacySpeechNamespace === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('legacySpeechNs') === '1') return true;
+  } catch {}
+  return false;
+}
+
 function getTpSpeechStoreSnapshot(): any {
   try {
     const ns = getTpSpeechNamespace();
@@ -2432,10 +2442,12 @@ function canAttachAsrBackend(): boolean {
   try {
     if (window.__tpSpeechOrchestrator?.start) return true;
   } catch {}
-  try {
-    const ns = getTpSpeechNamespace();
-    if (typeof ns?.startRecognizer === 'function') return true;
-  } catch {}
+  if (isLegacySpeechNamespaceAllowed()) {
+    try {
+      const ns = getTpSpeechNamespace();
+      if (typeof ns?.startRecognizer === 'function') return true;
+    } catch {}
+  }
   try {
     if (window.SpeechRecognition || window.webkitSpeechRecognition) return true;
   } catch {}
@@ -2907,7 +2919,6 @@ function ensureAsrDriverLifecycleHooks(): void {
   window.addEventListener('tp:session:intent', onSessionIntent, TRANSCRIPT_EVENT_OPTIONS);
   document.addEventListener('tp:session:intent', onSessionIntent as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:scroll:mode', onScrollMode, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:scroll:mode', onScrollMode as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:start', onSessionStart, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:stop', onSessionStop, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:phase', onSessionPhase, TRANSCRIPT_EVENT_OPTIONS);
@@ -2916,7 +2927,6 @@ function ensureAsrDriverLifecycleHooks(): void {
   window.addEventListener('tp:script:reset', onScriptReset, TRANSCRIPT_EVENT_OPTIONS);
   document.addEventListener('tp:script:reset', onScriptReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:asr:blocks-ready', onBlocksReady, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:asr:blocks-ready', onBlocksReady as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:script-rendered', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
   document.addEventListener('tp:script-rendered', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:render:done', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
@@ -3060,6 +3070,7 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycl
 
 async function startBackendForSession(mode: string, reason?: string): Promise<boolean> {
   const speechNs = getTpSpeechNamespace();
+  const allowLegacyNs = isLegacySpeechNamespaceAllowed();
   const speechStoreState = getTpSpeechStoreSnapshot();
   if (isSettingsHydrating()) {
     try { console.debug('[ASR] startBackend blocked during settings hydration', { mode, reason }); } catch {}
@@ -3072,7 +3083,8 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
         mode,
         reason,
         hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
-        hasRecognizerStart: typeof speechNs?.startRecognizer === 'function',
+        allowLegacyNamespace: allowLegacyNs,
+        hasRecognizerStart: allowLegacyNs && typeof speechNs?.startRecognizer === 'function',
         hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
         sessionPhase: (speechStoreState as any)?.sessionPhase,
         scrollMode: (speechStoreState as any)?.scrollMode,
@@ -3109,32 +3121,34 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     }
   } catch {}
 
-  try {
-    const startRecognizer = speechNs?.startRecognizer;
-    if (typeof startRecognizer === 'function') {
-      const startNamespaceRecognizer = () => {
-        startRecognizer(() => {}, { lang: 'en-US' });
-      };
-      startNamespaceRecognizer();
-      const namespaceRecognizer: RecognizerLike = {
-        start: () => { startNamespaceRecognizer(); },
-        stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
-        abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
-      };
-      rec = namespaceRecognizer;
-      setActiveRecognizer(namespaceRecognizer);
-      if (!activeRecognizer) {
-        emitAsrState('idle', 'recognizer-not-attached:namespace');
-        setSpeechRunningActual(false, 'namespace-no-attach');
-        maybeLogLiveArmedDetachedInvariant('namespace-no-attach');
-        emitHudSnapshot('recognizer-attach-failed:namespace', { force: true });
-        return false;
+  if (allowLegacyNs) {
+    try {
+      const startRecognizer = speechNs?.startRecognizer;
+      if (typeof startRecognizer === 'function') {
+        const startNamespaceRecognizer = () => {
+          startRecognizer(() => {}, { lang: 'en-US' });
+        };
+        startNamespaceRecognizer();
+        const namespaceRecognizer: RecognizerLike = {
+          start: () => { startNamespaceRecognizer(); },
+          stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
+          abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
+        };
+        rec = namespaceRecognizer;
+        setActiveRecognizer(namespaceRecognizer);
+        if (!activeRecognizer) {
+          emitAsrState('idle', 'recognizer-not-attached:namespace');
+          setSpeechRunningActual(false, 'namespace-no-attach');
+          maybeLogLiveArmedDetachedInvariant('namespace-no-attach');
+          emitHudSnapshot('recognizer-attach-failed:namespace', { force: true });
+          return false;
+        }
+        setSpeechRunningActual(true, 'namespace-start');
+        emitAsrHeartbeat('recognizer-attached:namespace', { force: true });
+        return true;
       }
-      setSpeechRunningActual(true, 'namespace-start');
-      emitAsrHeartbeat('recognizer-attached:namespace', { force: true });
-      return true;
-    }
-  } catch {}
+    } catch {}
+  }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) throw new Error('NoSpeechBackend');

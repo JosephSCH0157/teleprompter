@@ -16,6 +16,26 @@ let asrRejectionToastShown = false;
 let selectPrefersAsr = false;
 let asrProbeToken = 0;
 
+type LegacyAsrModeCompat = { setEnabled?(_v: boolean): void; __tpLegacyShim?: true };
+
+function allowLegacyAsrModeRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if ((window as any).__tpAllowLegacyAsrMode === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('legacyAsrMode') === '1') return true;
+  } catch {}
+  return false;
+}
+
+function resolveCompatAsrMode(): LegacyAsrModeCompat | null {
+  const asr = (window as any).__tpAsrMode as LegacyAsrModeCompat | undefined;
+  if (!asr || typeof asr !== 'object') return null;
+  if (asr.__tpLegacyShim === true) return asr;
+  if (allowLegacyAsrModeRuntime() && typeof asr.setEnabled === 'function') return asr;
+  return null;
+}
+
 export function normalizeUiScrollMode(mode: string | null | undefined): UiScrollMode {
   const value = String(mode || '').trim().toLowerCase() as UiScrollMode;
   if (String(mode || '').toLowerCase() === 'manual') return 'hybrid';
@@ -162,7 +182,7 @@ function applyModeNow(
   try { setModeStatusLabel(normalized); } catch {}
 
   const brain = getScrollBrain();
-  const asr = (window as any).__tpAsrMode as { setEnabled?(_v: boolean): void } | undefined;
+  const asr = resolveCompatAsrMode();
   const setClampMode = (window as any).__tpSetClampMode as
     | ((_m: 'follow' | 'backtrack' | 'free') => void)
     | undefined;

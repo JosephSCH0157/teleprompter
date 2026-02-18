@@ -66,6 +66,9 @@ In `scrollMode='asr'`:
 - `session.asrArmed` gates ASR movement permission only (commit may process bookkeeping while unarmed, but must not write scroll).
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
 - ASR movement authority is single-lane: `speech-loader -> asr-scroll-driver` commit path owns movement in ASR mode.
+- Runtime auto-motor authority is single-lane: `scroll-router` owns `__tpAuto` enablement; ASR bridge helpers must not toggle auto enablement.
+- Legacy namespace recognizer backend (`window.__tpSpeech.startRecognizer`) is compatibility-only and opt-in (`window.__tpAllowLegacySpeechNamespace === true` or `?legacySpeechNs=1`).
+- Legacy `window.__tpAsrMode` runtime is compatibility-only and opt-in (`window.__tpAllowLegacyAsrMode === true` or `?legacyAsrMode=1`); default runtime must use speech-loader shim ownership.
 - Legacy ASR intent lane (`AsrMode` -> `tp:scroll:intent`) is compatibility-only and must not drive movement unless explicitly dev-overridden.
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first) only when line-addressable commit anchors are present in meaningful quantity.
 - ASR commit movement is conditionally writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first when the DOM is line-addressable; otherwise ASR must use the non-writer targetTop path (no free-running motor lane).

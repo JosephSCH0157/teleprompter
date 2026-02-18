@@ -22,10 +22,41 @@ function mapEngine(engine: string): string {
   return 'webspeech';
 }
 
+type LegacyAsrModeCompat = Pick<AsrMode, 'setEnabled'> & {
+  __tpLegacyShim?: true;
+};
+
+let legacyAsrModeBlockedWarned = false;
+
+function allowLegacyAsrModeRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if ((window as any).__tpAllowLegacyAsrMode === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('legacyAsrMode') === '1') return true;
+  } catch {}
+  return false;
+}
+
+function resolveLegacyAsrModeCompat(): LegacyAsrModeCompat | null {
+  const anyWin = window as any;
+  const mode = (anyWin.__tpAsrMode as LegacyAsrModeCompat | undefined) || null;
+  if (!mode || typeof mode.setEnabled !== 'function') return null;
+  if (mode.__tpLegacyShim === true) return mode;
+  if (allowLegacyAsrModeRuntime()) return mode;
+  if (!legacyAsrModeBlockedWarned) {
+    legacyAsrModeBlockedWarned = true;
+    try {
+      console.warn('[ASR-ENGINE] blocked non-shim __tpAsrMode to prevent dual runtime. Use ?legacyAsrMode=1 to allow.');
+    } catch {}
+  }
+  return null;
+}
+
 export const asrEngine = {
   setEnabled(enabled: boolean) {
     const anyWin = window as any;
-    const asrMode = (anyWin.__tpAsrMode as AsrMode | undefined) || null;
+    const asrMode = resolveLegacyAsrModeCompat();
 
     if (!enabled) {
       if (anyWin.__tpDevMode) console.info('[ASR-ENGINE] Disabling ASR scroll');

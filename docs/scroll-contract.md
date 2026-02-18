@@ -24,6 +24,9 @@ When `scrollMode='asr'`:
 - No preroll event may trigger movement.
 - Movement trigger is ASR commit only.
 - ASR movement authority is single-lane: `speech-loader -> asr-scroll-driver` commit path.
+- Auto-motor authority is single-lane: `scroll-router` owns `__tpAuto` enable/disable state; bridge modules must not toggle it.
+- Legacy namespace recognizer backend (`window.__tpSpeech.startRecognizer`) is compatibility-only and opt-in (`window.__tpAllowLegacySpeechNamespace===true` or `?legacySpeechNs=1`).
+- Legacy `window.__tpAsrMode` runtime is compatibility-only and opt-in (`window.__tpAllowLegacyAsrMode===true` or `?legacyAsrMode=1`); default runtime must stay on speech-loader shim ownership.
 - Legacy `AsrMode` -> `tp:scroll:intent` movement lane is compatibility-only and blocked by default.
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - ASR commit movement is writer-first: resolve block mapping via `seekToBlockAnimated(...)`, then (in ASR mode) ease toward commit `targetTop` with bounded-speed animation; this remains commit-driven (no continuous ASR motor lane).
