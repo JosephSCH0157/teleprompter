@@ -217,12 +217,7 @@ const DEFAULT_LINE_MISSING_LOOKUP_FRAMES = 2;
 const DEFAULT_NO_TARGET_RETRY_WINDOW_MS = 350;
 const DEFAULT_STRONG_WINDOW_MS = 700;
 const DEFAULT_FINAL_EVIDENCE_LEAD_LINES = 2;
-const DEFAULT_BACK_RECOVERY_MAX_PX = 15;
-const DEFAULT_BACK_RECOVERY_COOLDOWN_MS = 5000;
-const DEFAULT_BACK_RECOVERY_HIT_LIMIT = 2;
-const DEFAULT_BACK_RECOVERY_WINDOW_MS = 1200;
-const DEFAULT_BACK_RECOVERY_STRONG_CONF = 0.75;
-const MARKER_BIAS_PX = 6;
+const MARKER_BIAS_PX = 0;
 const DEFAULT_REALIGN_LEAD_LINES = 6;
 const DEFAULT_REALIGN_LOOKBACK_LINES = 3;
 const DEFAULT_REALIGN_SIM = 0.7;
@@ -405,6 +400,7 @@ const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 3600;
 const DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS = 2500;
 const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 14;
 const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.2;
+const DEFAULT_ALLOW_BEHIND_REANCHOR = false;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
 const DEFAULT_COMMIT_CLAMP_MAX_DELTA_LINES = 1;
@@ -1627,8 +1623,14 @@ function assessWriterLineAddressability(
 
 function computeLineTargetTop(scroller: HTMLElement | null, lineEl: HTMLElement | null): number | null {
   if (!scroller || !lineEl) return null;
-  const offset = Math.max(0, (scroller.clientHeight - (lineEl.offsetHeight || lineEl.clientHeight || 0)) / 2);
-  const raw = (lineEl.offsetTop || 0) - offset;
+  const lineHeight = lineEl.offsetHeight || lineEl.clientHeight || 0;
+  const markerRatioRaw =
+    typeof (window as any).__TP_MARKER_PCT === 'number'
+      ? Number((window as any).__TP_MARKER_PCT)
+      : POST_COMMIT_ACTIVE_TARGET_RATIO;
+  const markerRatio = clamp(markerRatioRaw, POST_COMMIT_ACTIVE_MIN_RATIO, POST_COMMIT_ACTIVE_MAX_RATIO);
+  const markerOffsetPx = scroller.clientHeight * markerRatio - lineHeight * 0.5;
+  const raw = (lineEl.offsetTop || 0) - markerOffsetPx;
   const biased = raw - MARKER_BIAS_PX;
   const max = Math.max(0, (scroller.scrollHeight || 0) - scroller.clientHeight);
   return clamp(biased, 0, max);
@@ -2487,10 +2489,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let glideAnim: { cancel: () => void } | null = null;
   let microPursuitUntil = 0;
   let microPursuitCapPxPerSec = MICRO_PURSUE_MAX_PXPS;
-  let lastBackRecoverAt = 0;
-  let lastBackRecoverIdx = -1;
-  let lastBackRecoverHitAt = 0;
-  let backRecoverStreak = 0;
   let creepBudgetLine = -1;
   let creepBudgetUsed = 0;
   let lastInterimBestIdx = -1;
@@ -3084,11 +3082,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const maxTargetJumpPx = DEFAULT_MAX_TARGET_JUMP_PX;
   const strongWindowMs = DEFAULT_STRONG_WINDOW_MS;
   const finalEvidenceLeadLines = DEFAULT_FINAL_EVIDENCE_LEAD_LINES;
-  const backRecoverMaxPx = DEFAULT_BACK_RECOVERY_MAX_PX;
-  const backRecoverCooldownMs = DEFAULT_BACK_RECOVERY_COOLDOWN_MS;
-  const backRecoverHitLimit = DEFAULT_BACK_RECOVERY_HIT_LIMIT;
-  const backRecoverWindowMs = DEFAULT_BACK_RECOVERY_WINDOW_MS;
-  const backRecoverStrongConf = DEFAULT_BACK_RECOVERY_STRONG_CONF;
   const realignLeadLines = DEFAULT_REALIGN_LEAD_LINES;
   const realignLookbackLines = DEFAULT_REALIGN_LOOKBACK_LINES;
   const realignSim = DEFAULT_REALIGN_SIM;
@@ -4063,22 +4056,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetTop = Math.max(targetTop, beforeTop + ratioNudgePx);
       }
     }
-    if (
-      beforeMetrics.requiredLookaheadOverflowPx > 0 &&
-      ratio != null &&
-      ratio > markerBandMaxRatio
-    ) {
-      targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredLookaheadOverflowPx);
-    }
     if (beforeMetrics.activeCenterY != null) {
       const desiredCenter =
         beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerTargetRatio;
-      if (ratio != null && ratio < markerBandMinRatio) {
-        const raisePx = Math.max(0, desiredCenter - beforeMetrics.activeCenterY);
-        if (raisePx > 0) {
-          targetTop = Math.min(targetTop, beforeTop - raisePx);
-        }
-      }
       const minCenter =
         beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerBandMinRatio;
       const maxCenter =
@@ -4089,7 +4069,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       targetTop = beforeTop + clampedDeltaPx;
     }
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-    targetTop = clamp(targetTop, 0, maxTop);
+    targetTop = clamp(Math.max(beforeTop, targetTop), 0, maxTop);
     let nudgeApplied = false;
     let afterTop = beforeTop;
     if ((opts?.allowNudge ?? true) && Math.abs(targetTop - beforeTop) > POST_COMMIT_MIN_NUDGE_PX) {
@@ -4998,9 +4978,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       blockId: commit.blockId,
     }) ?? 0;
     const max = Math.max(0, deps.scroller.scrollHeight - deps.scroller.clientHeight);
-    const targetTopRawCandidate = Number.isFinite(commit.targetTop)
-      ? commit.targetTop
-      : (Number.isFinite(commit.nextTargetTop) ? commit.nextTargetTop : beforeTop);
+    const targetTopRawCandidate = Number.isFinite(commit.nextTargetTop)
+      ? commit.nextTargetTop
+      : (Number.isFinite(commit.targetTop) ? commit.targetTop : beforeTop);
     const targetTopRaw =
       finiteNumberOrNull('commit.targetTop.raw', targetTopRawCandidate, {
         lineIdx: commit.lineIdx,
@@ -5857,32 +5837,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           return;
         }
 
-        const strongBack = conf >= Math.max(backRecoverStrongConf, baselineRequired);
-        if (isFinal && strongBack && deltaPx < 0 && Math.abs(deltaPx) <= backRecoverMaxPx) {
-          if (Math.abs(targetLine - lastBackRecoverIdx) <= 1 && now - lastBackRecoverHitAt <= backRecoverWindowMs) {
-            backRecoverStreak += 1;
-          } else {
-            backRecoverStreak = 1;
-          }
-          lastBackRecoverIdx = targetLine;
-          lastBackRecoverHitAt = now;
-              if (backRecoverStreak >= backRecoverHitLimit && now - lastBackRecoverAt >= backRecoverCooldownMs) {
-                stopGlide('back-recovery');
-                const applied = applyScrollWithHybridGuard(currentTop + deltaPx, {
-                  scroller,
-                  reason: 'asr-back-recovery',
-                });
-              lastKnownScrollTop = applied;
-              lastMoveAt = Date.now();
-              markProgrammaticScroll();
-              lastBackRecoverAt = now;
-              backRecoverStreak = 0;
-              logDev('back-recovery nudge', { px: deltaPx, conf, line: targetLine });
-            updateDebugState('back-recovery');
-          }
-        } else {
-          backRecoverStreak = 0;
-        }
+        // Never move backward in ASR mode; preserve monotonic forward motion.
         warnGuard('behind_blocked', [
           `current=${lastLineIndex}`,
           `best=${targetLine}`,
@@ -6076,7 +6031,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         didGlide = false;
         const readabilitySeq = ++postCommitReadabilitySeq;
         const immediateReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
-          allowNudge: !writerCommitted || writerNoMove,
+          allowNudge: writerCommitted ? writerNoMove : false,
         });
         logPostCommitReadabilityProbe(
           writerCommitted ? 'commit:writer-pending' : 'commit:immediate',
@@ -9440,6 +9395,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         behindStrongSince = 0;
       }
       if (
+        DEFAULT_ALLOW_BEHIND_REANCHOR &&
         strongBehind &&
         behindStrongCount >= backConfirmHits &&
         behindStrongSince > 0 &&
@@ -9754,10 +9710,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     lastCommitDeltaPx = 0;
     stopGlide('sync-index');
     microPursuitUntil = 0;
-    lastBackRecoverAt = 0;
-    lastBackRecoverIdx = -1;
-    lastBackRecoverHitAt = 0;
-    backRecoverStreak = 0;
     creepBudgetLine = -1;
     creepBudgetUsed = 0;
     lastInterimBestIdx = -1;

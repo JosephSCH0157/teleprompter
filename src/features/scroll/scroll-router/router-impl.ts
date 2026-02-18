@@ -656,10 +656,13 @@ function resolveCurrentBlockIdx(): number | null {
 }
 
 function runHybridVelocity(silence = hybridSilence) {
-  if (state2.mode !== 'hybrid') {
+  const mode = getScrollMode();
+  if (mode !== 'hybrid') {
+    if (state2.mode !== mode) state2.mode = mode;
     assertHybridStoppedIfNotHybrid('runHybridVelocity');
     return;
   }
+  if (state2.mode !== 'hybrid') state2.mode = 'hybrid';
   const target = typeof window !== 'undefined' ? window : globalThis;
   const fn = (target as any).__tpApplyHybridVelocity;
   if (typeof fn === 'function') {
@@ -2551,7 +2554,7 @@ function scheduleHybridVelocityRefresh() {
   if (typeof window === "undefined") return;
   hybridVelocityRefreshRaf = window.requestAnimationFrame(() => {
     hybridVelocityRefreshRaf = null;
-    if (state2.mode !== "hybrid") return;
+    if (getScrollMode() !== "hybrid") return;
     const now = nowMs();
     if (!shouldHybridRefresh(now)) {
       stopHybridVelocityRefresh();
@@ -2595,7 +2598,12 @@ function stopHybridVelocityRefresh() {
 }
 
 function shouldHybridRefresh(now: number = nowMs()) {
-  if (state2.mode !== "hybrid") return false;
+  const mode = getScrollMode();
+  if (mode !== "hybrid") {
+    if (state2.mode !== mode) state2.mode = mode;
+    return false;
+  }
+  if (state2.mode !== "hybrid") state2.mode = "hybrid";
   if (hybridMotor.isRunning()) return true;
   if (isHybridGraceActive(now)) return true;
   const brakeActive = hybridBrakeState.expiresAt > now;
@@ -4607,6 +4615,13 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
 
 function applyHybridVelocityCore(silence = hybridSilence) {
+  const mode = getScrollMode();
+  if (mode !== "hybrid") {
+    if (state2.mode !== mode) state2.mode = mode;
+    assertHybridStoppedIfNotHybrid("applyHybridVelocityCore");
+    return;
+  }
+  if (state2.mode !== "hybrid") state2.mode = "hybrid";
   const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
   const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
   const now = nowMs();

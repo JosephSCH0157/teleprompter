@@ -59,6 +59,7 @@ Everything else (`auto`, `off`, `manual`) is a UI/legacy convenience state, not 
 In `scrollMode='asr'`:
 - Must not wire auto-intent listeners.
 - Must not start timed/hybrid/wpm motors.
+- Hybrid velocity refresh/apply paths must gate on effective SSOT mode (`scrollMode`) each tick; stale local router mode must never allow hybrid velocity math or motor activity while ASR is active.
 - Router auto-intent motor normalization is motorless in ASR: requested motor kinds are `auto|hybrid` only, and ASR gate blocking reason must remain `blocked:mode-asr-motorless` (no `asr` motor lane).
 - Must not use preroll to trigger any scrolling.
 - `session.scrollAutoOnLive` must not gate ASR startup/attach decisions.
