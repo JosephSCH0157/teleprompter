@@ -2646,7 +2646,6 @@ function isWeakNoMatch(detail: any) {
 let sliderTouchedThisSession = false;
 let offScriptEvidence = 0;
 let lastOffScriptEvidenceTs = 0;
-let hybridOffscriptEvidenceSeq = 0;
 
 function scheduleHybridVelocityRefresh() {
   if (!shouldHybridRefresh()) {
@@ -4330,21 +4329,6 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
     }
     lastOffScriptEvidenceTs = now;
-    if (isDevMode()) {
-      hybridOffscriptEvidenceSeq += 1;
-      try {
-        console.info('[HYBRID] offscript evidence++', {
-          seq: hybridOffscriptEvidenceSeq,
-          utteranceId: (detail as any)?.utteranceId ?? (detail as any)?.matchId ?? null,
-          source: (detail as any)?.source ?? hybridMatcherSource ?? null,
-          noMatch: isNoMatch,
-          sim: bestSim != null ? Number(bestSim.toFixed(3)) : null,
-          reason: (detail as any)?.reason ?? null,
-          nextScale,
-          evidenceNext: offScriptEvidence + 1,
-        });
-      } catch {}
-    }
     offScriptEvidence += 1;
     if (offScriptEvidence >= OFFSCRIPT_EVIDENCE_THRESHOLD) {
       offScriptEvidence = 0;
