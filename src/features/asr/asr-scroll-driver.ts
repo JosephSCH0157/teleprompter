@@ -4261,6 +4261,21 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const cursorRaw = lastLineIndex >= 0 ? lastLineIndex : Number((window as any)?.currentIndex ?? -1);
     if (!Number.isFinite(cursorRaw) || cursorRaw < 0) return false;
     const cursorLine = Math.max(0, Math.floor(cursorRaw));
+    const reasonTag = String(reason || '').trim().toLowerCase();
+    const isAutoStallRescue = reasonTag === 'auto-stall';
+    const cursorLineText = getLineTextAt(cursorLine);
+    const cursorIsCueLine = isIgnorableCueLineText(cursorLineText);
+    if (isAutoStallRescue && !cursorIsCueLine) {
+      if (isDevMode()) {
+        warnGuard('cue_stall_rescue_blocked', [
+          `at=${cursorLine}`,
+          'reason=content-line',
+          reason ? `source=${reason}` : '',
+          cursorLineText ? `line="${formatLogSnippet(cursorLineText, 56)}"` : '',
+        ]);
+      }
+      return false;
+    }
     const cueBridge = findNextSpeakableWithinBridge(
       cursorLine,
       DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
