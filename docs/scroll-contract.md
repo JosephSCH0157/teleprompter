@@ -31,7 +31,7 @@ When `scrollMode='asr'`:
 - Commit path is writer-first: `seekToBlockAnimated(...)`.
 - ASR commit movement is writer-first: resolve block mapping via `seekToBlockAnimated(...)`, then (in ASR mode) ease toward commit `targetTop` with bounded-speed animation; this remains commit-driven (no continuous ASR motor lane).
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays near the marker band while forward readable lookahead remains visible.
-- Post-commit readability nudge must preserve a tight marker-centered active-line band with responsive same-line recentering; lookahead nudges must not force the active line above that band.
+- Post-commit readability nudge must preserve a tight marker-centered active-line band with responsive same-line recentering; when forward readable lookahead is clipped, nudge should restore lookahead without forcing the active line above that band.
 - Live ASR capture may force interim hypotheses on transport even when UI interim toggle is off; commit/movement remains gated by ASR commit logic.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.

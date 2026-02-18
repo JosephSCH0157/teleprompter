@@ -206,7 +206,7 @@ const DEFAULT_MIN_STEP_PX = 6;
 const DEFAULT_MAX_STEP_PX = 10;
 const DEFAULT_CATCHUP_MED_MIN_PX = 80;
 const DEFAULT_CATCHUP_FAST_MIN_PX = 250;
-const DEFAULT_MAX_TARGET_JUMP_PX = 120;
+const DEFAULT_MAX_TARGET_JUMP_PX = 180;
 const DEFAULT_MAX_TARGET_JUMP_HYBRID_PX = 80;
 const DEFAULT_PURSUE_KP = 3.2;
 const DEFAULT_PURSUE_MANUAL_CANCEL_PX = 48;
@@ -369,7 +369,7 @@ const MANUAL_ANCHOR_MAX_SCROLL_WINDOW_MS = 1000;
 const MANUAL_ANCHOR_PENDING_TIMEOUT_MS = 5000;
 const MANUAL_ANCHOR_WINDOW_LINES = 10;
 const MANUAL_ANCHOR_SIM_SLACK = 0.03;
-const MAX_LINES_PER_COMMIT = 1.25;
+const MAX_LINES_PER_COMMIT = 2.0;
 const DELTA_SMOOTHING_FACTOR = 0.3;
 const TAPER_EXPONENT = 2.2;
 const TAPER_MIN = 0.15;
@@ -389,8 +389,8 @@ const POST_COMMIT_MIN_READABLE_LINES_BELOW = 4;
 const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
 const POST_COMMIT_MIN_NUDGE_PX = 1;
-const POST_COMMIT_WRITER_SETTLE_MS = 230;
-const POST_COMMIT_WRITER_SETTLE_RETRY_MS = 90;
+const POST_COMMIT_WRITER_SETTLE_MS = 140;
+const POST_COMMIT_WRITER_SETTLE_RETRY_MS = 70;
 const POST_COMMIT_WRITER_SETTLE_MAX_RETRIES = 12;
 const COMMIT_BAND_RESEED_BACK_LINES = 2;
 const COMMIT_BAND_RESEED_AHEAD_LINES = 60;
@@ -4083,6 +4083,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (ratioNudgePx > 0) {
         targetTop = Math.max(targetTop, beforeTop + ratioNudgePx);
       }
+    }
+    if (beforeMetrics.requiredLookaheadOverflowPx > 0) {
+      targetTop = Math.max(targetTop, beforeTop + beforeMetrics.requiredLookaheadOverflowPx);
     }
     if (beforeMetrics.activeCenterY != null) {
       const minCenter =
