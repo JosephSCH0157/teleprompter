@@ -32,7 +32,7 @@ When `scrollMode='asr'`:
 - ASR commit movement is writer-first: resolve block mapping via `seekToBlockAnimated(...)`, then (in ASR mode) ease toward commit `targetTop` with bounded-speed animation; this remains commit-driven (no continuous ASR motor lane).
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays near the marker band while forward readable lookahead remains visible.
 - Post-commit readability nudge must preserve a tight marker-centered active-line band with responsive same-line recentering; when forward readable lookahead is clipped, nudge should restore lookahead without forcing the active line above that band.
-- Post-commit readability should ensure immediate continuity: if the next speakable line is clipped below viewport, reveal it before chasing deeper lookahead.
+- Post-commit readability should ensure immediate continuity: if the next speakable line is near bottom clipping (small guard margin), reveal it before chasing deeper lookahead.
 - Live ASR capture may force interim hypotheses on transport even when UI interim toggle is off; commit/movement remains gated by ASR commit logic.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
@@ -57,6 +57,7 @@ When `scrollMode='asr'`:
 - Cue-bridge low-sim bypass must be bridge-only: intermediate skipped lines must be skippable cue/meta/blank lines, capped to a small bridge (`<=2` skipped lines), and target must be speakable.
 - Cue-bridge progression for multi-line advancement requires an actual bridge (`>=1` skipped skippable line). Same-line final confirmation may plain-advance only `+1` to the adjacent speakable line when confidence is strong (`sim>=0.82`); otherwise plain advancement without a bridge is disallowed.
 - Final forward nudges/fallbacks that already carry a valid cue-bridge delta may raise commit clamp to that bounded bridge cap (`<=3`) so clamp cannot collapse the move to a cue-only line and immediately block commit.
+- If commit-time cue-safe resolution finds only cue/meta lines in the clamp window, retry with a bounded cue-bridge scan from cursor (`+3`) and commit to that speakable line when available; only then allow `cue_commit_blocked`.
 - Strong same-line final `+1` nudge may bypass short-line ambiguity HOLD only when lexical overlap with current line is high, with no bridge skip and adjacent speakable target only.
 - Same-line final forward promotion should not be blocked just because current-line recenter delta is outside the near-band; when bounded/floor-qualified, it should commit forward through normal clamp path.
 - In strict matcher mode, if same-line final remains pinned after nudge arbitration but confidence/overlap are strong, a bounded cue-bridge fallback forward pick is allowed (`forceReason='final-forward-fallback'`).
@@ -69,6 +70,7 @@ When `scrollMode='asr'`:
 - For bounded same-line final cue-bridge promotions, a small multi-jump floor epsilon (`<=0.08`) is allowed to avoid float-boundary stalls, only on `final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance` with valid cue-bridge pathing. Hard deny floor (`sim<0.30`) remains unchanged.
 - During live armed `speech_stall`, runtime may emit `tp:asr:rescue`; driver may synthesize a bounded cue-bridge forward commit (`forceReason='stall-rescue'`) only when skipped lines are cue/meta/blank and a speakable target exists within bridge cap (`+3`).
 - Auto cue-stall rescue follows the same bounded bridge but is cue-only at cursor: automatic stall rescue may run only when the current cursor line is cue/meta/blank; content-line stalls must not auto-bridge.
+- LOST_FORWARD may use bounded behind-marker catch-up when marker is ahead of cursor and forward content evidence exists: candidate window remains bounded (`<=+6`) and per-commit jump remains capped (`+2`) at progressive floor (`sim>=0.20`).
 - Cue-bridge nudge/confirm into content must require strong evidence (`strongSim`, or large sim-gap, or multi-event stability); low-sim nudges may not bridge into regular content lines.
 - Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.
 - Ambiguity is hold-first: for low-confidence/tied/low-information near-line matches, enter HOLD (no commit), continue ingesting, and only relock/commit on strong forward anchor evidence.

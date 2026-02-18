@@ -388,6 +388,7 @@ const POST_COMMIT_ACTIVE_BAND_RADIUS = 0.05;
 const POST_COMMIT_MIN_READABLE_LINES_BELOW = 4;
 const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
+const POST_COMMIT_NEXT_LINE_VIS_GUARD_PX = 18;
 const POST_COMMIT_MIN_NUDGE_PX = 1;
 const POST_COMMIT_WRITER_SETTLE_MS = 140;
 const POST_COMMIT_WRITER_SETTLE_RETRY_MS = 70;
@@ -440,6 +441,8 @@ const DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM = 0.33;
 const DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS = 2;
 const DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MAX_DELTA_LINES = 3;
 const DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MIN_HITS = 2;
+const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_MAX_DELTA_LINES = 6;
+const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_COMMIT_CAP_LINES = 2;
 const LOST_FORWARD_WINDOW_STEPS = [10, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES, 60] as const;
 const LOST_FORWARD_STAGE_STREAKS = [
   DEFAULT_NO_PROGRESS_STREAK_TRIGGER,
@@ -1820,7 +1823,7 @@ function scheduleCommitTruthProbe(
     }
   };
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-    window.requestAnimationFrame(logFn);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(logFn));
   } else {
     setTimeout(logFn, 0);
   }
@@ -4020,6 +4023,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const activeCenterY = activeRect.top + activeRect.height * 0.5;
     const activeLineViewportRatio = clamp((activeCenterY - viewportTop) / viewportHeight, 0, 1);
     const visibleBottom = viewportBottom - POST_COMMIT_READABLE_BOTTOM_PAD_PX;
+    const nextLineVisibleBottom = Math.max(viewportTop, visibleBottom - POST_COMMIT_NEXT_LINE_VIS_GUARD_PX);
     const total = getTotalLines();
     const maxLookahead = Math.min(
       Math.max(0, total - 1),
@@ -4037,7 +4041,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (!lineEl) continue;
       const lineRect = lineEl.getBoundingClientRect();
       if (!nextLineSeen) {
-        requiredNextLineOverflowPx = Math.max(0, lineRect.bottom - visibleBottom);
+        requiredNextLineOverflowPx = Math.max(0, lineRect.bottom - nextLineVisibleBottom);
         nextLineSeen = true;
       }
       if (lineRect.top >= viewportTop && lineRect.bottom <= visibleBottom) {
@@ -5586,7 +5590,37 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         lastLineIndex,
         effectiveClampDeltaLimit,
       );
-      if (cueSafeInitialTarget.nextLine == null) {
+      let cueSafeTargetLine = cueSafeInitialTarget.nextLine;
+      let cueFallbackBridgeReasons: CueBridgeSkipReason[] = [];
+      if (cueSafeTargetLine == null) {
+        const cueBridgeFallback = findNextSpeakableWithinBridge(
+          lastLineIndex,
+          DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+        );
+        cueFallbackBridgeReasons = cueBridgeFallback.skippedReasons;
+        if (cueBridgeFallback.nextLine != null && cueBridgeFallback.nextLine > lastLineIndex) {
+          cueSafeTargetLine = cueBridgeFallback.nextLine;
+          warnGuard('cue_commit_fallback', [
+            `current=${lastLineIndex}`,
+            `from=${targetLine}`,
+            `to=${cueSafeTargetLine}`,
+            cueSafeInitialTarget.skippedFrom != null ? `cueLine=${cueSafeInitialTarget.skippedFrom}` : '',
+            cueSafeInitialTarget.skippedText
+              ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
+              : '',
+            cueFallbackBridgeReasons.length
+              ? `bridge=[${cueFallbackBridgeReasons.join(',')}]`
+              : '',
+            snippet ? `clue="${snippet}"` : '',
+          ]);
+          logCueBridgeUse(lastLineIndex, cueSafeTargetLine, cueFallbackBridgeReasons, 'commit-fallback');
+          emitHudStatus(
+            'cue_commit_fallback',
+            `Bridge fallback: +${Math.max(1, cueSafeTargetLine - lastLineIndex)} lines`,
+          );
+        }
+      }
+      if (cueSafeTargetLine == null) {
         warnGuard('cue_commit_blocked', [
           `current=${lastLineIndex}`,
           `best=${targetLine}`,
@@ -5595,23 +5629,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           cueSafeInitialTarget.skippedText
             ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
             : '',
+          cueFallbackBridgeReasons.length
+            ? `bridge=[${cueFallbackBridgeReasons.join(',')}]`
+            : '',
           snippet ? `clue="${snippet}"` : '',
         ]);
         emitHudStatus('cue_commit_blocked', 'Blocked: cue-only commit target');
         return;
       }
-      if (cueSafeInitialTarget.nextLine !== targetLine) {
+      if (cueSafeInitialTarget.nextLine != null && cueSafeTargetLine !== targetLine) {
         warnGuard('cue_commit_skip', [
           `current=${lastLineIndex}`,
           `from=${targetLine}`,
-          `to=${cueSafeInitialTarget.nextLine}`,
+          `to=${cueSafeTargetLine}`,
           cueSafeInitialTarget.skippedText
             ? `cue="${formatLogSnippet(cueSafeInitialTarget.skippedText, 48)}"`
             : '',
           snippet ? `clue="${snippet}"` : '',
         ]);
-        targetLine = cueSafeInitialTarget.nextLine;
       }
+      targetLine = cueSafeTargetLine;
       const multiJumpDelta = targetLine - lastLineIndex;
       if (multiJumpDelta > 1) {
         const multiJumpBridgeEpsEligible =
@@ -8530,6 +8567,10 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             ) > 0,
           )?.idx ?? null;
         const firstMeaningfulOverlap = firstMeaningfulForwardIdx != null && lostForwardPick.idx === firstMeaningfulForwardIdx;
+        const cueSafeMarkerIdx = markerIdx >= 0
+          ? markerIdx
+          : computeCueSafeMarkerIndex(scrollerForMatch, DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES);
+        const behindMarker = cueSafeMarkerIdx >= 0 && cueSafeMarkerIdx >= cursorLine + 1;
         const neededAnchorHits = transcriptAnchorSet.size >= 2 ? 2 : 1;
         const candidateAnchorCount = candidateAnchorSet.size;
         const longEnough = transcriptTokens.length >= DEFAULT_TELEPORT_MIN_TOKENS;
@@ -8564,6 +8605,18 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           competitiveForward &&
           lostForwardPick.score >= DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM &&
           progressEvidenceOk;
+        const markerCatchupGateOk =
+          behindMarker &&
+          lostForwardPick.idx > cursorLine &&
+          (lostForwardPick.idx - cursorLine) <= Math.min(
+            lostForwardCap,
+            DEFAULT_LOST_FORWARD_MARKER_CATCHUP_MAX_DELTA_LINES,
+          ) &&
+          (sharedContentHits >= 1 || firstMeaningfulOverlap) &&
+          lostForwardPick.score >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+        const markerCatchupTarget = markerCatchupGateOk
+          ? Math.min(lostForwardPick.idx, cursorLine + DEFAULT_LOST_FORWARD_MARKER_CATCHUP_COMMIT_CAP_LINES)
+          : lostForwardPick.idx;
         const teleportGateOk = anchorTeleportGateOk || reseekTeleportGateOk || contentFallbackGateOk;
         const teleportNeed = anchorTeleportGateOk
           ? DEFAULT_LOST_FORWARD_MIN_SIM
@@ -8586,6 +8639,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
               );
             } catch {}
           }
+        } else if (markerCatchupGateOk) {
+          const before = rawIdx;
+          rawIdx = markerCatchupTarget;
+          conf = lostForwardPick.score;
+          effectiveThreshold = Math.min(effectiveThreshold, DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM);
+          outrunCommit = true;
+          forceReason = 'lost-forward';
+          emitHudStatus(
+            'lost_forward_catchup',
+            `Catch-up: +${Math.max(1, rawIdx - cursorLine)} lines (sim=${formatLogScore(conf)})`,
+          );
+          if (isDevMode()) {
+            try {
+              console.info(
+                `ASR_LOST_FORWARD_CATCHUP mode=marker stage=${lostForwardStage} window=+${lostForwardWindow} cap=+${lostForwardCap} marker=${cueSafeMarkerIdx} current=${cursorLine} best=${before} pick=${lostForwardPick.idx} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)} content=${sharedContentHits} firstOverlap=${firstMeaningfulOverlap ? 1 : 0} behindMarker=${behindMarker ? 1 : 0}`,
+              );
+            } catch {}
+          }
         } else {
           lostForwardGateRejected = true;
           warnGuard('lost_forward_gate', [
@@ -8604,6 +8675,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `competitive=${strongOrCompetitive ? 1 : 0}`,
             `competitiveForward=${competitiveForward ? 1 : 0}`,
             `contentFallback=${contentFallbackGateOk ? 1 : 0}`,
+            `behindMarker=${behindMarker ? 1 : 0}`,
+            `markerCatchup=${markerCatchupGateOk ? 1 : 0}`,
+            `marker=${cueSafeMarkerIdx}`,
             `window=${lostForwardWindow}`,
             `cap=${lostForwardCap}`,
             snippet ? `clue="${snippet}"` : '',
