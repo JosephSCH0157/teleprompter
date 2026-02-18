@@ -197,6 +197,8 @@ const DEFAULT_SAME_LINE_THROTTLE_MS = 90;
 const DEFAULT_CREEP_PX = 10;
 const DEFAULT_CREEP_NEAR_PX = 8;
 const DEFAULT_CREEP_BUDGET_PX = 56;
+const DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES = 3;
+const DEFAULT_SCROLL_TRUTH_MISMATCH_PX = 4;
 const DEFAULT_DEADBAND_PX = 32;
 const DEFAULT_MAX_VEL_PX_PER_SEC = 470;
 const DEFAULT_MAX_VEL_MED_PX_PER_SEC = 170;
@@ -1791,6 +1793,28 @@ function computeMarkerLineIndex(scroller: HTMLElement | null): number {
   }
 }
 
+function runAfterAnimationFrames(fn: () => void, frames = 1): void {
+  const count = Math.max(1, Math.floor(frames));
+  if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+    setTimeout(fn, 0);
+    return;
+  }
+  let remaining = count;
+  const step = () => {
+    if (remaining <= 0) {
+      fn();
+      return;
+    }
+    remaining -= 1;
+    window.requestAnimationFrame(step);
+  };
+  window.requestAnimationFrame(step);
+}
+
+async function waitAnimationFrames(frames = 1): Promise<void> {
+  await new Promise<void>((resolve) => runAfterAnimationFrames(resolve, frames));
+}
+
 function scheduleCommitTruthProbe(
   scroller: HTMLElement | null,
   payload: {
@@ -1822,11 +1846,7 @@ function scheduleCommitTruthProbe(
       // ignore
     }
   };
-  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
-    window.requestAnimationFrame(() => window.requestAnimationFrame(logFn));
-  } else {
-    setTimeout(logFn, 0);
-  }
+  runAfterAnimationFrames(logFn, DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES);
 }
 
 export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDriver {
@@ -5159,6 +5179,103 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     };
   };
 
+  let scrollContainerIdentityLogged = false;
+  const maybeLogScrollContainerIdentity = (
+    commitScroller: HTMLElement | null,
+    runtimeScroller: HTMLElement | null,
+  ) => {
+    if (!isDevMode() || scrollContainerIdentityLogged) return;
+    scrollContainerIdentityLogged = true;
+    try {
+      const viewerEl = getRuntimeScroller(resolveViewerRole());
+      console.log(
+        'SCROLL_CONTAINER',
+        commitScroller?.id || '(none)',
+        commitScroller === viewerEl,
+        {
+          role: resolveViewerRole(),
+          commit: describeElement(commitScroller),
+          runtime: describeElement(runtimeScroller),
+          viewer: describeElement(viewerEl),
+          commitEqRuntime: commitScroller === runtimeScroller,
+          runtimeEqViewer: runtimeScroller === viewerEl,
+        },
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const verifyWriterCommitTruth = async (
+    commitScroller: HTMLElement,
+    targetLine: number,
+    expectedTopHint: number,
+    fallbackLineEl: HTMLElement | null,
+  ): Promise<{ ok: boolean; actualTop: number; corrected: boolean }> => {
+    const firstScroller = getScroller() || commitScroller;
+    maybeLogScrollContainerIdentity(commitScroller, firstScroller);
+    const firstExpected = (() => {
+      const resolved = resolveTargetTop(firstScroller, targetLine);
+      if (Number.isFinite(resolved as number)) return Number(resolved);
+      if (Number.isFinite(expectedTopHint)) return Number(expectedTopHint);
+      return Number(firstScroller.scrollTop || 0);
+    })();
+    await waitAnimationFrames(DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES);
+    const settledScroller = getScroller() || commitScroller;
+    const settledTop = Number(settledScroller.scrollTop || 0);
+    if (Math.abs(settledTop - firstExpected) <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+      return { ok: true, actualTop: settledTop, corrected: false };
+    }
+
+    let targetEl = fallbackLineEl;
+    if (!targetEl || !targetEl.isConnected) {
+      targetEl = await findLineElWithRetry(settledScroller, targetLine, 1);
+    }
+    if (targetEl) {
+      try {
+        targetEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+      } catch {
+        // ignore
+      }
+      markProgrammaticScroll();
+      lastMoveAt = Date.now();
+    }
+
+    await waitAnimationFrames(DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES);
+    const finalScroller = getScroller() || commitScroller;
+    const finalExpected = (() => {
+      const resolved = resolveTargetTop(finalScroller, targetLine);
+      if (Number.isFinite(resolved as number)) return Number(resolved);
+      return firstExpected;
+    })();
+    const finalTop = Number(finalScroller.scrollTop || 0);
+    const finalErr = Math.abs(finalTop - finalExpected);
+    if (finalErr <= DEFAULT_SCROLL_TRUTH_MISMATCH_PX) {
+      return { ok: true, actualTop: finalTop, corrected: true };
+    }
+
+    warnGuard('scroll_desync', [
+      `line=${targetLine}`,
+      `expected=${Math.round(finalExpected)}`,
+      `actual=${Math.round(finalTop)}`,
+      `err=${Math.round(finalErr)}`,
+      `commitScroller=${describeElement(commitScroller)}`,
+      `runtimeScroller=${describeElement(finalScroller)}`,
+      `targetFound=${targetEl ? 1 : 0}`,
+    ]);
+    emitHudStatus('scroll_desync', 'Scroll desync: reseeking');
+    if (isDevMode()) {
+      try {
+        console.warn(
+          `[SCROLL_DESYNC] line=${targetLine} expected=${Math.round(finalExpected)} actual=${Math.round(finalTop)} err=${Math.round(finalErr)} commitScroller=${describeElement(commitScroller)} runtimeScroller=${describeElement(finalScroller)} targetFound=${targetEl ? 1 : 0}`,
+        );
+      } catch {
+        // ignore
+      }
+    }
+    return { ok: false, actualTop: finalTop, corrected: false };
+  };
+
   const schedulePending = () => {
     if (pendingRaf) return;
     pendingRaf = window.requestAnimationFrame(() => {
@@ -6206,6 +6323,33 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             postCommitReadabilityTimers.add(settleTimer);
           };
           scheduleSettleReadability(0, POST_COMMIT_WRITER_SETTLE_MS);
+        }
+        if (writerCommitted) {
+          const truth = await verifyWriterCommitTruth(
+            (scrollerForStamp || scroller),
+            targetLine,
+            commitAfterTop,
+            lineEl,
+          );
+          commitAfterTop = truth.actualTop;
+          lastKnownScrollTop = commitAfterTop;
+          writerNoMove =
+            Number.isFinite(commitAfterTop) &&
+            Number.isFinite(commitBeforeTop) &&
+            Math.abs(commitAfterTop - commitBeforeTop) < 1;
+          if (!truth.ok) {
+            const resyncAnchor = Math.max(0, Number.isFinite(lastLineIndex) ? Math.floor(lastLineIndex) : commitCursorLine);
+            stopGlide('scroll-desync');
+            pursuitTargetTop = null;
+            pursuitVel = 0;
+            pursuitActive = false;
+            microPursuitUntil = 0;
+            resetNoProgressStreak('scroll-desync', resyncAnchor);
+            clearEvidenceBuffer('scroll-desync');
+            activateStuckResync(resyncAnchor, now);
+            emitHudStatus('resync', 'Resyncing (scroll desync)...');
+            return;
+          }
         }
       } else if (!writerCommitted) {
         if (nextTargetTop > base) {
