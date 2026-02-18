@@ -1826,6 +1826,7 @@ function scheduleCommitTruthProbe(
     afterScrollTop: number;
     writerSeekLineIdx: number | null;
     commitLineIdx: number;
+    previousLineIdx: number;
   },
 ) {
   if (!isDevMode()) return;
@@ -1836,6 +1837,9 @@ function scheduleCommitTruthProbe(
     : 'na';
   const commitLineIdx = Number.isFinite(payload.commitLineIdx)
     ? Math.max(0, Math.floor(payload.commitLineIdx))
+    : 'na';
+  const previousLineIdx = Number.isFinite(payload.previousLineIdx)
+    ? Math.max(0, Math.floor(payload.previousLineIdx))
     : 'na';
   const logFn = () => {
     const postRafTopRaw = scroller?.scrollTop;
@@ -1848,6 +1852,20 @@ function scheduleCommitTruthProbe(
       );
     } catch {
       // ignore
+    }
+    if (
+      typeof before === 'number' &&
+      typeof after === 'number' &&
+      typeof commitLineIdx === 'number' &&
+      typeof previousLineIdx === 'number' &&
+      after === before &&
+      commitLineIdx > previousLineIdx
+    ) {
+      try {
+        console.log('[ASR_TERMINAL_SCROLL_CLAMP]', { line: commitLineIdx });
+      } catch {
+        // ignore
+      }
     }
   };
   runAfterAnimationFrames(logFn, DEFAULT_SCROLL_TRUTH_SETTLE_FRAMES);
@@ -6671,6 +6689,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         afterScrollTop: commitTopAfterForLogs,
         writerSeekLineIdx,
         commitLineIdx: targetLine,
+        previousLineIdx: prevLineIndex,
       });
       if (isDevMode()) {
         const writerSeekLineOut = Number.isFinite(writerSeekLineIdx as number)
