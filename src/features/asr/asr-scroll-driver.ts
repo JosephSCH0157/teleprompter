@@ -400,6 +400,7 @@ const DEFAULT_STUCK_WATCHDOG_NO_COMMIT_MS = 3600;
 const DEFAULT_STUCK_WATCHDOG_COOLDOWN_MS = 2500;
 const DEFAULT_STUCK_WATCHDOG_MAX_DELTA_LINES = 14;
 const DEFAULT_STUCK_WATCHDOG_FORWARD_FLOOR = 0.2;
+const DEFAULT_STUCK_WATCHDOG_COMMIT_CAP_LINES = 2;
 const DEFAULT_ALLOW_BEHIND_REANCHOR = false;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_EVENTS = 8;
 const DEFAULT_STUCK_WATCHDOG_INTERIM_RECENT_MS = 1500;
@@ -436,6 +437,8 @@ const DEFAULT_LOST_FORWARD_MIN_SIM = 0.45;
 const DEFAULT_LOST_HEALTHY_LOCK_SIM = 0.58;
 const DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM = 0.33;
 const DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS = 2;
+const DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MAX_DELTA_LINES = 3;
+const DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MIN_HITS = 2;
 const LOST_FORWARD_WINDOW_STEPS = [10, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES, 60] as const;
 const LOST_FORWARD_STAGE_STREAKS = [
   DEFAULT_NO_PROGRESS_STREAK_TRIGGER,
@@ -5494,16 +5497,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         targetLine > lastLineIndex &&
         targetLine - lastLineIndex <= DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES &&
         conf >= DEFAULT_HOLD_ANCHOR_MIN_SIM;
+      const watchdogClampEligible =
+        forceTag === 'watchdog' &&
+        targetLine > lastLineIndex &&
+        targetLine - lastLineIndex <= stuckWatchdogMaxDeltaLines &&
+        conf >= Math.max(stuckWatchdogForwardFloor, DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM);
       const effectiveClampDeltaLimit = holdAnchorClampEligible
         ? Math.max(clampDeltaLimit, DEFAULT_HOLD_ANCHOR_COMMIT_CAP_LINES)
         : (lostForwardClampEligible
-        ? Math.max(
-            clampDeltaLimit,
-            Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()),
-          )
-        : (cueBridgeClampEligible
-          ? cueBridgeDelta
-          : clampDeltaLimit));
+          ? Math.max(
+              clampDeltaLimit,
+              Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines()),
+            )
+          : (watchdogClampEligible
+            ? Math.max(clampDeltaLimit, DEFAULT_STUCK_WATCHDOG_COMMIT_CAP_LINES)
+            : (cueBridgeClampEligible
+              ? cueBridgeDelta
+              : clampDeltaLimit)));
       if (cueBridgeClampEligible && isDevMode()) {
         try {
           console.info(
@@ -5522,6 +5532,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try {
           console.info(
             `ASR_LOST_FORWARD_CLAMP carry=+${Math.min(getLostForwardLookaheadLines(), getLostForwardCommitCapLines())} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
+          );
+        } catch {}
+      }
+      if (watchdogClampEligible && isDevMode()) {
+        try {
+          console.info(
+            `ASR_WATCHDOG_CLAMP carry=+${DEFAULT_STUCK_WATCHDOG_COMMIT_CAP_LINES} clamp=${clampDeltaLimit}->${effectiveClampDeltaLimit} current=${lastLineIndex} target=${targetLine}`,
           );
         } catch {}
       }
@@ -8454,6 +8471,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const transcriptTokens = normTokens(transcriptComparable || bufferedText || compacted || text);
         const candidateLineTokens = normTokens(getLineTextAt(lostForwardPick.idx));
         const transcriptAnchorSet = getAnchorTokenSet(transcriptTokens);
+        const candidateAnchorSet = getAnchorTokenSet(candidateLineTokens);
         const transcriptContentSet = getContentTokenSet(transcriptTokens);
         let sharedAnchorHits = 0;
         if (transcriptAnchorSet.size > 0 && candidateLineTokens.length > 0) {
@@ -8475,6 +8493,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           )?.idx ?? null;
         const firstMeaningfulOverlap = firstMeaningfulForwardIdx != null && lostForwardPick.idx === firstMeaningfulForwardIdx;
         const neededAnchorHits = transcriptAnchorSet.size >= 2 ? 2 : 1;
+        const candidateAnchorCount = candidateAnchorSet.size;
         const longEnough = transcriptTokens.length >= DEFAULT_TELEPORT_MIN_TOKENS;
         const currentScoreForCompetition = Number.isFinite(arbitrationCurrentScore)
           ? arbitrationCurrentScore
@@ -8494,16 +8513,26 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const progressEvidenceOk =
           sharedContentHits >= DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS ||
           firstMeaningfulOverlap;
+        const contentFallbackGateOk =
+          longEnough &&
+          candidateAnchorCount === 0 &&
+          lostForwardPick.idx > cursorLine &&
+          (lostForwardPick.idx - cursorLine) <= DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MAX_DELTA_LINES &&
+          lostForwardPick.score >= DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM &&
+          sharedContentHits >= DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MIN_HITS &&
+          firstMeaningfulOverlap;
         const reseekTeleportGateOk =
           longEnough &&
           competitiveForward &&
           lostForwardPick.score >= DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM &&
           progressEvidenceOk;
-        const teleportGateOk = anchorTeleportGateOk || reseekTeleportGateOk;
+        const teleportGateOk = anchorTeleportGateOk || reseekTeleportGateOk || contentFallbackGateOk;
         const teleportNeed = anchorTeleportGateOk
           ? DEFAULT_LOST_FORWARD_MIN_SIM
           : DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM;
-        const teleportMode = anchorTeleportGateOk ? 'anchor' : 'reseek';
+        const teleportMode = anchorTeleportGateOk
+          ? 'anchor'
+          : (contentFallbackGateOk ? 'content' : 'reseek');
         if (teleportGateOk) {
           const before = rawIdx;
           rawIdx = lostForwardPick.idx;
@@ -8530,11 +8559,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `needReseek=${formatLogScore(DEFAULT_LOST_FORWARD_RESEEK_MIN_SIM)}`,
             `tokens=${transcriptTokens.length}`,
             `anchors=${sharedAnchorHits}/${neededAnchorHits}`,
+            `candidateAnchors=${candidateAnchorCount}`,
             `content=${sharedContentHits}`,
             `firstOverlap=${firstMeaningfulOverlap ? 1 : 0}`,
             `long=${longEnough ? 1 : 0}`,
             `competitive=${strongOrCompetitive ? 1 : 0}`,
             `competitiveForward=${competitiveForward ? 1 : 0}`,
+            `contentFallback=${contentFallbackGateOk ? 1 : 0}`,
             `window=${lostForwardWindow}`,
             `cap=${lostForwardCap}`,
             snippet ? `clue="${snippet}"` : '',
