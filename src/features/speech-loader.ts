@@ -270,6 +270,7 @@ let suppressAsrStallAutoRestartUntil = 0;
 let lastAsrStallRescueAt = 0;
 let lastMatcherStallCommitCount = -1;
 let lastMatcherStallCommitStableSince = 0;
+let lastAsrScriptEndStopKey = '';
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
@@ -2862,6 +2863,7 @@ function ensureAsrDriverLifecycleHooks(): void {
   const onSessionStart = () => {
     const session = getSession();
     const mode = getScrollMode();
+    lastAsrScriptEndStopKey = '';
     asrSessionIntentActive = true;
     if (session.asrDesired || isAsrLikeMode(mode)) {
       attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true });
@@ -2892,6 +2894,7 @@ function ensureAsrDriverLifecycleHooks(): void {
     }
   };
   const onSessionStop = () => {
+    lastAsrScriptEndStopKey = '';
     asrSessionIntentActive = false;
     resetAsrInterimStabilizer();
     clearAsrRunKey('lifecycle-session-stop');
@@ -2900,11 +2903,59 @@ function ensureAsrDriverLifecycleHooks(): void {
   const onSessionPhase = (event: Event) => {
     const phase = String((event as CustomEvent)?.detail?.phase || '').toLowerCase();
     if (phase === 'idle' || phase === 'wrap') {
+      lastAsrScriptEndStopKey = '';
       asrSessionIntentActive = false;
       resetAsrInterimStabilizer();
       clearAsrRunKey(`phase-${phase}`);
     }
     emitHudSnapshot(`session-phase:${phase || 'unknown'}`);
+  };
+  const onAsrScriptEnd = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const mode = String(detail.mode || getScrollMode() || '').toLowerCase();
+    const session = getSession();
+    if (session.phase !== 'live' || !isAsrLikeMode(mode)) return;
+    const lineIndexRaw = Number(detail.lineIndex);
+    const lastSpeakableLineIndexRaw = Number(detail.lastSpeakableLineIndex);
+    const lineIndex = Number.isFinite(lineIndexRaw) ? Math.max(0, Math.floor(lineIndexRaw)) : null;
+    const lastSpeakableLineIndex = Number.isFinite(lastSpeakableLineIndexRaw)
+      ? Math.max(0, Math.floor(lastSpeakableLineIndexRaw))
+      : null;
+    const runKey = String(detail.runKey || activeAsrRunKey || 'no-run');
+    const dedupeKey = `${runKey}|${lineIndex ?? 'na'}|${lastSpeakableLineIndex ?? 'na'}`;
+    if (dedupeKey === lastAsrScriptEndStopKey) return;
+    lastAsrScriptEndStopKey = dedupeKey;
+    const stopIntent = {
+      source: 'asr-script-end',
+      reason: 'script-end',
+      mode,
+      phase: session.phase,
+    };
+    dispatchSessionIntent(false, stopIntent);
+    try { setSessionPhase('wrap'); } catch {}
+    try {
+      window.dispatchEvent(
+        new CustomEvent('tp:session:stop', {
+          detail: {
+            ...stopIntent,
+            intentSource: 'asr-script-end',
+            lineIndex,
+            lastSpeakableLineIndex,
+          },
+        }),
+      );
+    } catch {}
+    emitHudSnapshot('script-end-stop', { force: true });
+    if (isDevMode() && shouldLogTag('ASR:script-end-stop', 2, 1000)) {
+      try {
+        console.info('[ASR] session stop at script end', {
+          mode,
+          lineIndex,
+          lastSpeakableLineIndex,
+          runKey,
+        });
+      } catch {}
+    }
   };
   const onSpeechHardReset = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
@@ -2917,20 +2968,16 @@ function ensureAsrDriverLifecycleHooks(): void {
     hardResetSpeechEngine(source);
   };
   window.addEventListener('tp:session:intent', onSessionIntent, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:session:intent', onSessionIntent as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:scroll:mode', onScrollMode, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:start', onSessionStart, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:stop', onSessionStop, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:phase', onSessionPhase, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:asr:script-end', onAsrScriptEnd, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:speech:hard-reset', onSpeechHardReset, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:speech:hard-reset', onSpeechHardReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:script:reset', onScriptReset, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:script:reset', onScriptReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:asr:blocks-ready', onBlocksReady, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:script-rendered', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:script-rendered', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:render:done', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:render:done', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   const initialMode = String(getScrollMode() || '').toLowerCase();
   const session = getSession();
   if (isAsrLikeMode(initialMode) || session.asrDesired) {

@@ -791,24 +791,22 @@ export function triggerWireAutoIntentListener(): void {
       try { console.warn('[AUTO_INTENT] TRIGGER step=3 wiring now'); } catch {}
       autoIntentListenerWired = true;
       window.addEventListener('tp:auto:intent', onAutoIntent as EventListener);
-      document.addEventListener('tp:auto:intent', onAutoIntent as EventListener);
     try {
-      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window+document' });
+      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window' });
     } catch {}
     try { console.warn('[AUTO_INTENT] TRIGGER step=4 wired ok'); } catch {}
     try {
       const counts = [
         (getEventListeners?.(window)?.['tp:auto:intent']?.length ?? 'noAPI'),
-        (getEventListeners?.(document)?.['tp:auto:intent']?.length ?? 'noAPI'),
       ];
-      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
+      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0] });
     } catch {}
     try {
       window.dispatchEvent(
         new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'wire-selftest' } }),
       );
     } catch {}
-    try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window+document)'); } catch {}
+    try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window)'); } catch {}
   }
   try {
     console.warn('[AUTO_INTENT] triggerWireAutoIntentListener EXIT', __AUTO_INTENT_WIRE_SENTINEL);

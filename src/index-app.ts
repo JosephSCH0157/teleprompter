@@ -943,7 +943,7 @@ function applyUiScrollMode(
       }
     } catch {}
     try {
-      document.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));
+      window.dispatchEvent(new CustomEvent('tp:auto:intent', { detail: { enabled: on, reason: 'user' } }));
     } catch {}
   };
   const setScrollModeFromUi = (next: UiScrollMode) => {
@@ -2097,11 +2097,6 @@ export async function boot() {
 									try {
 										window.addEventListener('tp:auto:intent', (e: any) => {
 											try { console.warn('[AUTO_INTENT] INLINE recv', e?.detail); } catch {}
-										});
-									} catch {}
-									try {
-										document.addEventListener('tp:auto:intent', (e: any) => {
-											try { console.warn('[AUTO_INTENT] INLINE recv (document)', e?.detail); } catch {}
 										});
 									} catch {}
 									try { console.warn('[AUTO_INTENT] INLINE_WIRE done'); } catch {}

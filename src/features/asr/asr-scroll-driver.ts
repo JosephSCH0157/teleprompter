@@ -1844,6 +1844,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   let lastCommitIndex: number | null = null;
   let lastKnownScrollTop = 0;
   let summaryEmitted = false;
+  let scriptEndEventEmitted = false;
   let lastStallLogAt = 0;
   let lastStarvationWarnAt = 0;
   let lastStarvationRelockAt = 0;
@@ -3706,6 +3707,45 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     }
   };
 
+  const findLastSpeakableLineIndex = (): number => {
+    const total = getTotalLines();
+    if (total <= 0) return -1;
+    for (let idx = total - 1; idx >= 0; idx -= 1) {
+      const lineText = getLineTextAt(idx);
+      if (!isIgnorableCueLineText(lineText)) {
+        return idx;
+      }
+    }
+    return -1;
+  };
+
+  const maybeEmitScriptEndEvent = (lineIndex: number, reason: string): void => {
+    if (disposed || scriptEndEventEmitted) return;
+    if (getScrollMode() !== 'asr') return;
+    if (!isSessionLivePhase() || !isSessionAsrArmed()) return;
+    if (!Number.isFinite(lineIndex)) return;
+    const normalizedLine = Math.max(0, Math.floor(lineIndex));
+    const lastSpeakableLineIndex = findLastSpeakableLineIndex();
+    if (lastSpeakableLineIndex < 0 || normalizedLine < lastSpeakableLineIndex) return;
+    scriptEndEventEmitted = true;
+    const payload = {
+      ts: Date.now(),
+      mode: getScrollMode() || 'unknown',
+      lineIndex: normalizedLine,
+      lastSpeakableLineIndex,
+      totalLines: getTotalLines(),
+      reason: String(reason || 'commit'),
+      runKey: summaryRunKey || null,
+      driverInstanceId,
+    };
+    try {
+      window.dispatchEvent(new CustomEvent('tp:asr:script-end', { detail: payload }));
+    } catch {}
+    if (isDevMode() && shouldLogTag('ASR_SCRIPT_END', 2, 1000)) {
+      try { console.info('[ASR_SCRIPT_END]', payload); } catch {}
+    }
+  };
+
   const findNextSpeakableWithinBridge = (
     cursorLine: number,
     maxLookahead = DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
@@ -4280,6 +4320,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const next = Number.isFinite(nextIndex) ? Math.max(0, Math.floor(nextIndex)) : -1;
     if (next > prev) {
       resetNoProgressStreak('forward-commit', next);
+    }
+    if (next >= 0) {
+      maybeEmitScriptEndEvent(next, 'commit');
     }
   };
 
@@ -7297,7 +7340,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return;
     }
     resetLagRelock('in-band');
-    if (isDevMode()) {
+    if (isDevMode() && shouldLogTag('ASR_DEBUG_COMPARISON', 2, 750)) {
       const currentIndex = cursorLine;
       const scriptLinesLength = getTotalLines();
       const scriptRaw = getLineTextAt(currentIndex);
@@ -9684,6 +9727,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
 
   const setLastLineIndex = (index: number) => {
     if (!Number.isFinite(index)) return;
+    scriptEndEventEmitted = false;
     lastLineIndex = Math.max(0, Math.floor(index));
     postCommitReadabilitySeq += 1;
     if (postCommitReadabilityTimers.size) {

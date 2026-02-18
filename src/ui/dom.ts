@@ -377,7 +377,7 @@ export function wireDisplayMirror() {
         renderPending = false;
       }
     };
-    document.addEventListener('tp:script-rendered', () => {
+    window.addEventListener('tp:script-rendered', () => {
       if (!renderPending) { renderPending = true; requestAnimationFrame(sendRender); }
     });
     try {
