@@ -33,6 +33,7 @@ When `scrollMode='asr'`:
 - After a successful ASR commit seek, enforce a post-commit readability pass so the active line stays near the marker band while forward readable lookahead remains visible.
 - Post-commit readability nudge must preserve a tight marker-centered active-line band with responsive same-line recentering; when forward readable lookahead is clipped, nudge should restore lookahead without forcing the active line above that band.
 - Post-commit readability should ensure immediate continuity: if the next speakable line is near bottom clipping (small guard margin), reveal it before chasing deeper lookahead.
+- Same-line recenter no-op is near-threshold only: when same-line marker delta is large, do not hard-noop; continue bounded recenter/creep handling.
 - Live ASR capture may force interim hypotheses on transport even when UI interim toggle is off; commit/movement remains gated by ASR commit logic.
 - Pixel `driveToLine` is fallback only when writer/block mapping is unavailable.
 - Strong small-delta forward/same matches (`delta>=0` within relaxed-small window) at/above required similarity must not be blocked solely for weak forward-evidence.
@@ -70,6 +71,7 @@ When `scrollMode='asr'`:
 - For bounded same-line final cue-bridge promotions, a small multi-jump floor epsilon (`<=0.08`) is allowed to avoid float-boundary stalls, only on `final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance` with valid cue-bridge pathing. Hard deny floor (`sim<0.30`) remains unchanged.
 - During live armed `speech_stall`, runtime may emit `tp:asr:rescue`; driver may synthesize a bounded cue-bridge forward commit (`forceReason='stall-rescue'`) only when skipped lines are cue/meta/blank and a speakable target exists within bridge cap (`+3`).
 - Auto cue-stall rescue follows the same bounded bridge but is cue-only at cursor: automatic stall rescue may run only when the current cursor line is cue/meta/blank; content-line stalls must not auto-bridge.
+- Rescue latch hygiene: `stallRescueRequested` should arm only when rescue scheduling succeeds; blocked content-line auto-stall checks must leave the latch false.
 - LOST_FORWARD may use bounded behind-marker catch-up when marker is ahead of cursor and forward content evidence exists: candidate window remains bounded (`<=+6`) and per-commit jump remains capped (`+2`) at progressive floor (`sim>=0.20`).
 - Cue-bridge nudge/confirm into content must require strong evidence (`strongSim`, or large sim-gap, or multi-event stability); low-sim nudges may not bridge into regular content lines.
 - Commit-time hard deny: forward jumps greater than `+1` line must clear multi-jump floor (`sim>=0.45`), and `sim<0.30` must never commit multi-line.

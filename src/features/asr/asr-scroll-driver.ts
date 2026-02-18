@@ -3670,11 +3670,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     clearEvidenceBuffer('script-reset');
   };
   const rescueHandler = (event?: Event) => {
-    stallRescueRequested = true;
     const source =
       String((event as CustomEvent | undefined)?.detail?.reason || '').trim() ||
       'signal';
-    try { maybeScheduleStallCueRescue(source); } catch {}
+    let scheduled = false;
+    try {
+      scheduled = maybeScheduleStallCueRescue(source);
+    } catch {
+      scheduled = false;
+    }
+    stallRescueRequested = scheduled;
   };
 
   try { window.addEventListener('tp:asr:silence', silenceHandler as EventListener); } catch {}
@@ -4291,6 +4296,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const cursorLineText = getLineTextAt(cursorLine);
     const cursorIsCueLine = isIgnorableCueLineText(cursorLineText);
     if (isAutoStallRescue && !cursorIsCueLine) {
+      stallRescueRequested = false;
       if (isDevMode()) {
         warnGuard('cue_stall_rescue_blocked', [
           `at=${cursorLine}`,
@@ -5876,114 +5882,96 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       if (targetLine <= lastLineIndex) {
         if (targetLine === lastLineIndex) {
-          if (deltaPx < 0) {
-            warnGuard('same_line_noop', [
-              `current=${lastLineIndex}`,
-              `best=${targetLine}`,
-              `deltaPx=${Math.round(deltaPx)}`,
-              `nearPx=${creepNearPx}`,
-              snippet ? `clue="${snippet}"` : '',
+          if (Math.abs(deltaPx) <= creepNearPx) {
+            return;
+          }
+          if (now - lastSameLineNudgeTs < sameLineThrottleMs) {
+            warnGuard('same_line_throttle', [
+              `line=${targetLine}`,
+              `since=${now - lastSameLineNudgeTs}`,
+              `throttle=${sameLineThrottleMs}`,
+            ]);
+            pushStrongHit(targetLine, conf, isFinal, now);
+            recordConsistencyEntry({
+              ts: now,
+              idx: targetLine,
+              delta: targetLine - lastLineIndex,
+              sim: conf,
+              nearMarker: true,
+              isFinal,
+            });
+            return;
+          }
+          const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+          const base = currentTop;
+          const desired = clamp(targetTop, 0, max);
+          const limitedTarget = clamp(desired, base - jumpCap, base + jumpCap);
+          const recenterDelta = limitedTarget - base;
+          if (Math.abs(recenterDelta) > 0.5) {
+            stopGlide('same-line-recenter');
+            pursuitTargetTop = limitedTarget;
+            lastSameLineNudgeTs = now;
+            lastEvidenceAt = now;
+            const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+            const microThresholdPx = lineHeightPx > 0
+              ? lineHeightPx * motionTuning.microDeltaLineRatio
+              : 0;
+            if (microThresholdPx > 0 && Math.abs(recenterDelta) <= microThresholdPx) {
+              armMicroPursuit(now, 'same-line-recenter');
+            }
+            ensurePursuitActive();
+            logDev('same-line recenter', { line: targetLine, px: Math.round(recenterDelta), conf });
+            emitHybridTargetHint(
+              limitedTarget,
+              isFinal ? 0.8 : 0.6,
+              'asr-same-line-center',
+              undefined,
+              targetLine,
+            );
+            updateDebugState('same-line-recenter');
+            return;
+          }
+          if (creepBudgetLine !== targetLine) {
+            creepBudgetLine = targetLine;
+            creepBudgetUsed = 0;
+          }
+          if (creepBudgetUsed >= creepBudgetPx) {
+            warnGuard('creep_budget', [
+              `line=${targetLine}`,
+              `used=${Math.round(creepBudgetUsed)}`,
+              `budget=${creepBudgetPx}`,
             ]);
             return;
           }
-            if (now - lastSameLineNudgeTs < sameLineThrottleMs) {
-              warnGuard('same_line_throttle', [
-                `line=${targetLine}`,
-                `since=${now - lastSameLineNudgeTs}`,
-                `throttle=${sameLineThrottleMs}`,
-              ]);
-              pushStrongHit(targetLine, conf, isFinal, now);
-              recordConsistencyEntry({
-                ts: now,
-                idx: targetLine,
-                delta: targetLine - lastLineIndex,
-                sim: conf,
-                nearMarker: true,
-                isFinal,
-              });
-              return;
+          const creepDirection = desired >= base ? 1 : -1;
+          const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed) * creepDirection;
+          const creepTarget = clamp(base + creepStep, 0, max);
+          const limitedCreepTarget = clamp(creepTarget, base - jumpCap, base + jumpCap);
+          const appliedCreepDelta = limitedCreepTarget - base;
+          if (Math.abs(appliedCreepDelta) > 0.5) {
+            stopGlide('same-line-creep');
+            pursuitTargetTop = limitedCreepTarget;
+            lastSameLineNudgeTs = now;
+            lastEvidenceAt = now;
+            creepBudgetUsed += Math.abs(appliedCreepDelta);
+            const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
+            const microThresholdPx = lineHeightPx > 0
+              ? lineHeightPx * motionTuning.microDeltaLineRatio
+              : 0;
+            if (microThresholdPx > 0 && Math.abs(appliedCreepDelta) <= microThresholdPx) {
+              armMicroPursuit(now, 'same-line-creep');
             }
-            if (deltaPx > creepNearPx) {
-              const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-              const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
-              const desired = clamp(targetTop, 0, max);
-              const limitedTarget = Math.min(desired, base + jumpCap);
-              if (limitedTarget > base) {
-                stopGlide('same-line-recenter');
-                pursuitTargetTop = limitedTarget;
-                lastSameLineNudgeTs = now;
-                lastEvidenceAt = now;
-                const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
-                const microThresholdPx = lineHeightPx > 0
-                  ? lineHeightPx * motionTuning.microDeltaLineRatio
-                  : 0;
-                if (microThresholdPx > 0 && (limitedTarget - base) <= microThresholdPx) {
-                  armMicroPursuit(now, 'same-line-recenter');
-                }
-                ensurePursuitActive();
-                logDev('same-line recenter', { line: targetLine, px: Math.round(limitedTarget - base), conf });
-                emitHybridTargetHint(
-                  limitedTarget,
-                  isFinal ? 0.8 : 0.6,
-                  'asr-same-line-center',
-                  undefined,
-                  targetLine,
-                );
-                updateDebugState('same-line-recenter');
-                return;
-              }
-            warnGuard('same_line_noop', [
-              `current=${lastLineIndex}`,
-              `best=${targetLine}`,
-              `deltaPx=${Math.round(deltaPx)}`,
-              `nearPx=${creepNearPx}`,
-              snippet ? `clue="${snippet}"` : '',
-            ]);
-            return;
+            ensurePursuitActive();
+            logDev('same-line creep', { line: targetLine, px: Math.round(appliedCreepDelta), conf });
+            emitHybridTargetHint(
+              limitedCreepTarget,
+              isFinal ? 0.8 : 0.6,
+              'asr-same-line-creep',
+              undefined,
+              targetLine,
+            );
+            updateDebugState('same-line-creep');
           }
-            if (now - lastSameLineNudgeTs >= sameLineThrottleMs) {
-              if (creepBudgetLine !== targetLine) {
-                creepBudgetLine = targetLine;
-                creepBudgetUsed = 0;
-              }
-              if (creepBudgetUsed >= creepBudgetPx) {
-              warnGuard('creep_budget', [
-                `line=${targetLine}`,
-                `used=${Math.round(creepBudgetUsed)}`,
-                `budget=${creepBudgetPx}`,
-              ]);
-              return;
-            }
-              const max = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-              const base = pursuitTargetTop == null ? currentTop : pursuitTargetTop;
-              const creepStep = Math.min(creepPx, creepBudgetPx - creepBudgetUsed);
-              const creepTarget = clamp(base + creepStep, 0, max);
-              const limitedTarget = Math.min(creepTarget, base + jumpCap);
-              if (limitedTarget > base) {
-                stopGlide('same-line-creep');
-                pursuitTargetTop = limitedTarget;
-                lastSameLineNudgeTs = now;
-                lastEvidenceAt = now;
-                creepBudgetUsed += Math.max(0, limitedTarget - base);
-                const lineHeightPx = lineEl?.offsetHeight || lineEl?.clientHeight || 0;
-                const microThresholdPx = lineHeightPx > 0
-                  ? lineHeightPx * motionTuning.microDeltaLineRatio
-                  : 0;
-                if (microThresholdPx > 0 && (limitedTarget - base) <= microThresholdPx) {
-                  armMicroPursuit(now, 'same-line-creep');
-                }
-                ensurePursuitActive();
-                logDev('same-line creep', { line: targetLine, px: creepStep, conf });
-                emitHybridTargetHint(
-                  limitedTarget,
-                  isFinal ? 0.8 : 0.6,
-                  'asr-same-line-creep',
-                  undefined,
-                  targetLine,
-                );
-                updateDebugState('same-line-creep');
-              }
-            }
           return;
         }
 
