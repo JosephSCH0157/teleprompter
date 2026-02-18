@@ -255,6 +255,7 @@ const DEFAULT_MIN_TOKEN_COUNT = 3;
 const DEFAULT_MIN_EVIDENCE_CHARS = 20;
 const DEFAULT_INTERIM_HYSTERESIS_BONUS = 0.15;
 const DEFAULT_INTERIM_STABLE_REPEATS = 1;
+const DEFAULT_SAME_LINE_LOW_SIM_RELAX = 0.04;
 const DEFAULT_FORWARD_TIE_EPS = 0.03;
 const DEFAULT_FORWARD_PROGRESS_WINDOW_MS = 4000;
 const DEFAULT_FORWARD_BIAS_RECENT_LINES = 6;
@@ -394,6 +395,7 @@ const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
 const POST_COMMIT_NEXT_LINE_VIS_GUARD_PX = 18;
 const POST_COMMIT_MIN_NUDGE_PX = 1;
+const POST_COMMIT_MAX_FORWARD_NUDGE_LINES = 1;
 const COMMIT_BAND_RESEED_BACK_LINES = 2;
 const COMMIT_BAND_RESEED_AHEAD_LINES = 60;
 const COMMIT_BAND_RESEED_TTL_MS = 2200;
@@ -443,7 +445,9 @@ const DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS = 2;
 const DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MAX_DELTA_LINES = 3;
 const DEFAULT_LOST_FORWARD_CONTENT_FALLBACK_MIN_HITS = 2;
 const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_MAX_DELTA_LINES = 6;
-const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_COMMIT_CAP_LINES = 2;
+const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_COMMIT_CAP_LINES = 1;
+const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_STRONG_COMMIT_CAP_LINES = 2;
+const DEFAULT_LOST_FORWARD_MARKER_CATCHUP_STRONG_MIN_SIM = 0.45;
 const LOST_FORWARD_WINDOW_STEPS = [10, DEFAULT_LOST_FORWARD_LOOKAHEAD_LINES, 60] as const;
 const LOST_FORWARD_STAGE_STREAKS = [
   DEFAULT_NO_PROGRESS_STREAK_TRIGGER,
@@ -4105,6 +4109,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       return {
         activeLineViewportRatio: null as number | null,
         activeCenterY: null as number | null,
+        activeLineHeightPx: 0,
         viewportTop: 0,
         viewportHeight: Math.max(1, scroller.clientHeight || 0),
         readableLinesBelowCount: 0,
@@ -4117,6 +4122,12 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const viewportBottom = scrollerRect.bottom;
     const viewportHeight = Math.max(1, scroller.clientHeight || scrollerRect.height || 0);
     const activeRect = activeLine.getBoundingClientRect();
+    const activeLineHeightPx = Math.max(
+      1,
+      Number.isFinite(activeRect.height) && activeRect.height > 0
+        ? activeRect.height
+        : (activeLine.offsetHeight || activeLine.clientHeight || 1),
+    );
     const activeCenterY = activeRect.top + activeRect.height * 0.5;
     const activeLineViewportRatio = clamp((activeCenterY - viewportTop) / viewportHeight, 0, 1);
     const visibleBottom = viewportBottom - POST_COMMIT_READABLE_BOTTOM_PAD_PX;
@@ -4153,6 +4164,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     return {
       activeLineViewportRatio,
       activeCenterY,
+      activeLineHeightPx,
       viewportTop,
       viewportHeight,
       readableLinesBelowCount,
@@ -4164,7 +4176,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const applyPostCommitReadabilityGuarantee = (
     scroller: HTMLElement,
     activeLineIndex: number,
-    opts?: { allowNudge?: boolean; forwardOnly?: boolean },
+    opts?: { allowNudge?: boolean; forwardOnly?: boolean; maxForwardLines?: number },
   ) => {
     const beforeTop = Number(scroller.scrollTop || 0);
     const beforeMetrics = measurePostCommitReadability(scroller, activeLineIndex);
@@ -4214,6 +4226,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       targetTop = beforeTop + clampedDeltaPx;
     }
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    const maxForwardLinesRaw = Number(opts?.maxForwardLines);
+    const maxForwardLines = Number.isFinite(maxForwardLinesRaw)
+      ? Math.max(0, maxForwardLinesRaw)
+      : POST_COMMIT_MAX_FORWARD_NUDGE_LINES;
+    if (maxForwardLines > 0 && targetTop > beforeTop) {
+      const lineH = Math.max(12, beforeMetrics.activeLineHeightPx || 0);
+      const maxForwardNudgePx = Math.max(1, lineH * maxForwardLines);
+      targetTop = Math.min(targetTop, beforeTop + maxForwardNudgePx);
+    }
     if (opts?.forwardOnly === true) {
       targetTop = clamp(Math.max(beforeTop, targetTop), 0, maxTop);
     } else {
@@ -4407,9 +4428,24 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     const isAutoStallRescue = reasonTag === 'auto-stall';
     const cursorLineText = getLineTextAt(cursorLine);
     const cursorIsCueLine = isIgnorableCueLineText(cursorLineText);
-    if (isAutoStallRescue && !cursorIsCueLine) {
+    const allowContentForwardRescue = isAutoStallRescue && !cursorIsCueLine;
+    const cueBridge = findNextSpeakableWithinBridge(
+      cursorLine,
+      DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
+    );
+    const targetLine = cueBridge.nextLine;
+    if (targetLine == null || targetLine <= cursorLine) return false;
+    const deltaLines = targetLine - cursorLine;
+    if (deltaLines <= 0 || deltaLines > DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES) return false;
+    const targetText = getLineTextAt(targetLine);
+    if (!targetText || isIgnorableCueLineText(targetText)) return false;
+    const directContentForwardRescue =
+      allowContentForwardRescue &&
+      deltaLines === 1 &&
+      cueBridge.skippedReasons.length === 0;
+    if (!cueBridge.skippedReasons.length && !directContentForwardRescue) {
       stallRescueRequested = false;
-      if (isDevMode()) {
+      if (isDevMode() && isAutoStallRescue) {
         warnGuard('cue_stall_rescue_blocked', [
           `at=${cursorLine}`,
           'reason=content-line',
@@ -4419,17 +4455,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       return false;
     }
-    const cueBridge = findNextSpeakableWithinBridge(
-      cursorLine,
-      DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES,
-    );
-    const targetLine = cueBridge.nextLine;
-    if (targetLine == null || targetLine <= cursorLine) return false;
-    if (!cueBridge.skippedReasons.length) return false;
-    const deltaLines = targetLine - cursorLine;
-    if (deltaLines <= 0 || deltaLines > DEFAULT_CUE_BOUNDARY_BRIDGE_MAX_DELTA_LINES) return false;
-    const targetText = getLineTextAt(targetLine);
-    if (!targetText || isIgnorableCueLineText(targetText)) return false;
     const rescueSim = Math.max(DEFAULT_STRONG_FORWARD_COMMIT_SIM, DEFAULT_MULTI_JUMP_MIN_SIM);
     const matchId = `stall-rescue-${Date.now().toString(36)}-${targetLine}`;
     adoptPendingMatch({
@@ -4450,17 +4475,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       lostMode: false,
       cueBridgeNudgeDelta: deltaLines,
     });
-    logCueBridgeUse(cursorLine, targetLine, cueBridge.skippedReasons, 'stall-rescue');
+    if (!directContentForwardRescue) {
+      logCueBridgeUse(cursorLine, targetLine, cueBridge.skippedReasons, 'stall-rescue');
+    }
     warnGuard('cue_stall_rescue', [
       `from=${cursorLine}`,
       `to=${targetLine}`,
       `delta=${deltaLines}`,
+      `mode=${directContentForwardRescue ? 'content-step' : 'cue-bridge'}`,
       reason ? `reason=${reason}` : '',
       `sim=${formatLogScore(rescueSim)}`,
       `skipped=[${cueBridge.skippedReasons.join(',')}]`,
       targetText ? `line="${formatLogSnippet(targetText, 56)}"` : '',
     ]);
-    emitHudStatus('cue_rescue', `Rescue: cue bridge +${deltaLines}`);
+    emitHudStatus(
+      'cue_rescue',
+      directContentForwardRescue ? 'Rescue: content +1' : `Rescue: cue bridge +${deltaLines}`,
+    );
     lastCueStallRescueAt = now;
     schedulePending();
     return true;
@@ -8857,8 +8888,15 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           ) &&
           (sharedContentHits >= 1 || firstMeaningfulOverlap) &&
           lostForwardPick.score >= DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM;
+        const markerCatchupStrongGateOk =
+          markerCatchupGateOk &&
+          lostForwardPick.score >= DEFAULT_LOST_FORWARD_MARKER_CATCHUP_STRONG_MIN_SIM &&
+          (sharedContentHits >= DEFAULT_LOST_FORWARD_RESEEK_MIN_CONTENT_HITS || firstMeaningfulOverlap);
+        const markerCatchupCommitCap = markerCatchupStrongGateOk
+          ? DEFAULT_LOST_FORWARD_MARKER_CATCHUP_STRONG_COMMIT_CAP_LINES
+          : DEFAULT_LOST_FORWARD_MARKER_CATCHUP_COMMIT_CAP_LINES;
         const markerCatchupTarget = markerCatchupGateOk
-          ? Math.min(lostForwardPick.idx, cursorLine + DEFAULT_LOST_FORWARD_MARKER_CATCHUP_COMMIT_CAP_LINES)
+          ? Math.min(lostForwardPick.idx, cursorLine + markerCatchupCommitCap)
           : lostForwardPick.idx;
         const teleportGateOk = anchorTeleportGateOk || reseekTeleportGateOk || contentFallbackGateOk;
         const teleportNeed = anchorTeleportGateOk
@@ -8896,7 +8934,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           if (isDevMode()) {
             try {
               console.info(
-                `ASR_LOST_FORWARD_CATCHUP mode=marker stage=${lostForwardStage} window=+${lostForwardWindow} cap=+${lostForwardCap} marker=${cueSafeMarkerIdx} current=${cursorLine} best=${before} pick=${lostForwardPick.idx} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)} content=${sharedContentHits} firstOverlap=${firstMeaningfulOverlap ? 1 : 0} behindMarker=${behindMarker ? 1 : 0}`,
+                `ASR_LOST_FORWARD_CATCHUP mode=marker stage=${lostForwardStage} window=+${lostForwardWindow} cap=+${lostForwardCap} markerCap=+${markerCatchupCommitCap} marker=${cueSafeMarkerIdx} current=${cursorLine} best=${before} pick=${lostForwardPick.idx} jump=${rawIdx} delta=${rawIdx - cursorLine} sim=${formatLogScore(conf)} need=${formatLogScore(DEFAULT_PROGRESSIVE_FORWARD_FLOOR_SIM)} content=${sharedContentHits} firstOverlap=${firstMeaningfulOverlap ? 1 : 0} behindMarker=${behindMarker ? 1 : 0}`,
               );
             } catch {}
           }
@@ -8920,6 +8958,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             `contentFallback=${contentFallbackGateOk ? 1 : 0}`,
             `behindMarker=${behindMarker ? 1 : 0}`,
             `markerCatchup=${markerCatchupGateOk ? 1 : 0}`,
+            `markerStrong=${markerCatchupStrongGateOk ? 1 : 0}`,
             `marker=${cueSafeMarkerIdx}`,
             `window=${lostForwardWindow}`,
             `cap=${lostForwardCap}`,
@@ -8989,6 +9028,31 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (earlyRelock?.applied) {
         lostForwardWallStreak = 0;
       }
+      const lowSimNeed =
+        rawIdx <= cursorLine
+          ? Math.max(
+              thresholds.candidateMinSim,
+              effectiveThreshold - DEFAULT_SAME_LINE_LOW_SIM_RELAX,
+            )
+          : effectiveThreshold;
+      if (conf >= lowSimNeed) {
+        const needBefore = effectiveThreshold;
+        effectiveThreshold = Math.min(effectiveThreshold, conf);
+        lostForwardWallStreak = 0;
+        if (isDevMode() && shouldLogLevel(2) && rawIdx <= cursorLine) {
+          try {
+            console.debug('[ASR] same-line low-sim relax pass', {
+              current: cursorLine,
+              best: rawIdx,
+              sim: Number(conf.toFixed(3)),
+              needBefore: Number(needBefore.toFixed(3)),
+              needAfter: Number(lowSimNeed.toFixed(3)),
+            });
+          } catch {
+            // ignore
+          }
+        }
+      } else {
       if (!relockModeActive) {
         if (rawIdx <= cursorLine && maybeSkipCueLine(cursorLine, now, 'low_sim_wait', snippet)) {
           return;
@@ -8999,7 +9063,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           microRelockCooldownReady &&
           rawIdx <= cursorLine &&
           cursorLine > 0 &&
-          conf < effectiveThreshold
+          conf < lowSimNeed
         ) {
           const prevLine = cursorLine - 1;
           const prevLineText = getLineTextAt(prevLine);
@@ -9038,7 +9102,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             const graceRollbackCoolingDown = now < graceRollbackCooldownUntil;
             if (
               !graceRollbackCoolingDown &&
-              prevSim >= effectiveThreshold &&
+              prevSim >= lowSimNeed &&
               prevSim - currentSim >= DEFAULT_MICRO_RELOCK_MARGIN
             ) {
               microRelockPreferredCursor = prevLine;
@@ -9049,7 +9113,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
                 `prefer=${prevLine}`,
                 `simPrev=${formatLogScore(prevSim)}`,
                 `simCur=${formatLogScore(currentSim)}`,
-                `need=${formatLogScore(effectiveThreshold)}`,
+                `need=${formatLogScore(lowSimNeed)}`,
                 `margin=${formatLogScore(prevSim - currentSim)}`,
                 snippet ? `clue="${snippet}"` : '',
               ]);
@@ -9067,7 +9131,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           `best=${rawIdx}`,
           `delta=${rawIdx - cursorLine}`,
           `sim=${formatLogScore(conf)}`,
-          `need=${formatLogScore(effectiveThreshold)}`,
+          `need=${formatLogScore(lowSimNeed)}`,
           `wall=${lostForwardWallStreak}`,
           earlyRelock ? `relock=${earlyRelock.reason}` : '',
           snippet ? `clue="${snippet}"` : '',
@@ -9081,7 +9145,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             sim: conf,
             inBand,
             requiredSim: requiredThreshold,
-            need: effectiveThreshold,
+            need: lowSimNeed,
             repeatCount: relockRepeatCount,
             bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
             overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
@@ -9103,7 +9167,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         `best=${rawIdx}`,
         `delta=${rawIdx - cursorLine}`,
         `sim=${formatLogScore(conf)}`,
-        `need=${formatLogScore(effectiveThreshold)}`,
+        `need=${formatLogScore(lowSimNeed)}`,
         `wall=${lostForwardWallStreak}`,
         earlyRelock ? `relock=${earlyRelock.reason}` : '',
         relockModeActive ? 'relock=1' : '',
@@ -9115,7 +9179,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       ]);
       emitHudStatus(
         'low_sim_ingest',
-        `Ignored: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(effectiveThreshold)})`,
+        `Ignored: low confidence (sim=${formatLogScore(conf)} < ${formatLogScore(lowSimNeed)})`,
       );
       if (!permissiveMatcher) {
         noteLowSimFreeze(now, {
@@ -9125,7 +9189,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           sim: conf,
           inBand,
           requiredSim: requiredThreshold,
-          need: effectiveThreshold,
+          need: lowSimNeed,
           repeatCount: relockRepeatCount,
           bestSpan: Number.isFinite(bestSpan) ? bestSpan : undefined,
           overlapRatio: Number.isFinite(bestOverlapRatio) ? bestOverlapRatio : undefined,
@@ -9139,6 +9203,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
       if (rawIdx >= cursorLine) {
         effectiveThreshold = Math.min(effectiveThreshold, Math.max(thresholds.candidateMinSim, conf));
+      }
       }
       }
     }
