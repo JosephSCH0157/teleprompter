@@ -394,9 +394,6 @@ const POST_COMMIT_READABILITY_LOOKAHEAD_LINES = 96;
 const POST_COMMIT_READABLE_BOTTOM_PAD_PX = 12;
 const POST_COMMIT_NEXT_LINE_VIS_GUARD_PX = 18;
 const POST_COMMIT_MIN_NUDGE_PX = 1;
-const POST_COMMIT_WRITER_SETTLE_MS = 140;
-const POST_COMMIT_WRITER_SETTLE_RETRY_MS = 70;
-const POST_COMMIT_WRITER_SETTLE_MAX_RETRIES = 12;
 const COMMIT_BAND_RESEED_BACK_LINES = 2;
 const COMMIT_BAND_RESEED_AHEAD_LINES = 60;
 const COMMIT_BAND_RESEED_TTL_MS = 2200;
@@ -2371,6 +2368,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     rawIdx: number,
     isFinal: boolean,
   ): boolean => {
+    if (isWriterCommitWindowActive()) return false;
     if (now - lastBehindRecoveryAt < BEHIND_RECOVERY_COOLDOWN_MS) return false;
     if (cursorLine - rawIdx < BEHIND_RECOVERY_MIN_DELTA) return false;
     const activeHits = behindRecoveryHits.filter((h) => now - h.ts <= BEHIND_RECOVERY_WINDOW_MS);
@@ -2446,6 +2444,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     matchId?: string,
     clue?: string,
   ): boolean => {
+    if (isWriterCommitWindowActive()) return false;
     if (!Number.isFinite(cursorLine) || !Number.isFinite(prevLine)) return false;
     if (getScrollMode() !== 'asr') return false;
     if (!isSessionLivePhase() || !isSessionAsrArmed()) return false;
@@ -2592,7 +2591,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     };
     let pendingRaf = 0;
     let postCommitReadabilitySeq = 0;
-    const postCommitReadabilityTimers = new Set<number>();
+    let commitWindowActive = false;
+    let commitWindowAuthority: 'writer' | null = null;
+    let commitWindowStartedAt = 0;
     let bootLogged = false;
     let forcedCooldownUntil = 0;
     const forcedCommitTimes: number[] = [];
@@ -2618,6 +2619,74 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       syntheticMatchIdSeq += 1;
       return `drv-${Date.now().toString(36)}-${syntheticMatchIdSeq}`;
     };
+  const nowMonotonicMs = () => {
+    if (typeof performance !== 'undefined' && Number.isFinite(performance.now())) {
+      return performance.now();
+    }
+    return Date.now();
+  };
+  const isWriterCommitWindowActive = () =>
+    commitWindowActive && commitWindowAuthority === 'writer';
+  const beginWriterCommitWindow = (startedAt: number) => {
+    commitWindowActive = true;
+    commitWindowAuthority = 'writer';
+    commitWindowStartedAt = Number.isFinite(startedAt) ? startedAt : nowMonotonicMs();
+    if (isDevMode() && shouldLogLevel(2)) {
+      try {
+        console.debug('[ASR_COMMIT_WINDOW] begin', {
+          authority: commitWindowAuthority,
+          startedAt: Math.round(commitWindowStartedAt),
+        });
+      } catch {
+        // ignore
+      }
+    }
+  };
+  const releaseCommitWindow = (reason: string) => {
+    if (!commitWindowActive) return;
+    if (isDevMode() && shouldLogLevel(2)) {
+      try {
+        console.debug('[ASR_COMMIT_WINDOW] end', {
+          reason,
+          authority: commitWindowAuthority,
+          durationMs:
+            commitWindowStartedAt > 0
+              ? Math.max(0, Math.round(nowMonotonicMs() - commitWindowStartedAt))
+              : null,
+        });
+      } catch {
+        // ignore
+      }
+    }
+    commitWindowActive = false;
+    commitWindowAuthority = null;
+    commitWindowStartedAt = 0;
+  };
+  const waitForWriterCommitWindowRelease = async (
+    commitStartedAt: number,
+  ): Promise<void> => {
+    if (!isWriterCommitWindowActive()) return;
+    const startedAt =
+      Number.isFinite(commitStartedAt) && commitStartedAt > 0
+        ? commitStartedAt
+        : (commitWindowStartedAt > 0 ? commitWindowStartedAt : nowMonotonicMs());
+    const minReleaseAt = startedAt + DEFAULT_SCROLL_TRUTH_GLIDE_SAFETY_MS;
+    const deadline = startedAt + DEFAULT_SCROLL_TRUTH_GLIDE_MAX_WAIT_MS;
+    while (isWriterCommitWindowActive()) {
+      const now = nowMonotonicMs();
+      const holdForSafety = now < minReleaseAt;
+      const seekActive = isSeekAnimationActive();
+      if (!holdForSafety && !seekActive) {
+        releaseCommitWindow('writer-glide-settled');
+        break;
+      }
+      if (now >= deadline) {
+        releaseCommitWindow(seekActive ? 'writer-glide-timeout-active' : 'writer-glide-timeout');
+        break;
+      }
+      await waitAnimationFrames(1);
+    }
+  };
   const resetAmbiguityHoldState = () => {
     ambiguityHoldActive = false;
     ambiguityHoldSince = 0;
@@ -3419,6 +3488,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const adoptManualAnchorTruth = (lineIndex: number, sim: number, scroller: HTMLElement | null) => {
     const normalized = Number.isFinite(lineIndex) ? Math.max(0, Math.floor(lineIndex)) : 0;
     const now = Date.now();
+    releaseCommitWindow('manual-adopt');
     manualAnchorPending = null;
     updateManualAnchorGlobalState();
     clearEvidenceBuffer('manual adopt');
@@ -4147,7 +4217,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     targetTop = clamp(Math.max(beforeTop, targetTop), 0, maxTop);
     let nudgeApplied = false;
     let afterTop = beforeTop;
-    if ((opts?.allowNudge ?? true) && Math.abs(targetTop - beforeTop) > POST_COMMIT_MIN_NUDGE_PX) {
+    const writeSuppressedByCommitWindow =
+      (opts?.allowNudge ?? true) && isWriterCommitWindowActive();
+    if (
+      (opts?.allowNudge ?? true) &&
+      !writeSuppressedByCommitWindow &&
+      Math.abs(targetTop - beforeTop) > POST_COMMIT_MIN_NUDGE_PX
+    ) {
       const applied = applyCanonicalScrollTop(targetTop, {
         scroller,
         reason: 'asr-post-commit-readability',
@@ -4167,6 +4243,16 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           reason: 'asr-post-commit-readability',
           lineIdx: activeLineIndex,
         });
+      }
+    } else if (writeSuppressedByCommitWindow && isDevMode() && shouldLogLevel(2)) {
+      try {
+        console.debug('[ASR_POST_COMMIT_READABILITY] write deferred (commit window active)', {
+          lineIdx: activeLineIndex,
+          beforeTop: Math.round(beforeTop),
+          targetTop: Math.round(targetTop),
+        });
+      } catch {
+        // ignore
       }
     }
     const afterMetrics = measurePostCommitReadability(scroller, activeLineIndex);
@@ -5215,7 +5301,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     fallbackLineEl: HTMLElement | null,
     commitStartedAt: number,
   ): Promise<{ ok: boolean; actualTop: number; corrected: boolean }> => {
-    const commitStartTs = Number.isFinite(commitStartedAt) ? commitStartedAt : Date.now();
+    const commitStartTs = Number.isFinite(commitStartedAt) ? commitStartedAt : nowMonotonicMs();
     const firstScroller = getScroller() || commitScroller;
     maybeLogScrollContainerIdentity(commitScroller, firstScroller);
     const resolveExpectedTop = (scrollerEl: HTMLElement, fallback: number) => {
@@ -5224,16 +5310,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       if (Number.isFinite(expectedTopHint)) return Number(expectedTopHint);
       return fallback;
     };
-
-    const minTruthCheckAt = commitStartTs + DEFAULT_SCROLL_TRUTH_GLIDE_SAFETY_MS;
-    while (Date.now() < minTruthCheckAt) {
-      await waitAnimationFrames(1);
-    }
-
-    const glideDeadline = commitStartTs + DEFAULT_SCROLL_TRUTH_GLIDE_MAX_WAIT_MS;
-    while (isSeekAnimationActive() && Date.now() < glideDeadline) {
-      await waitAnimationFrames(1);
-    }
+    await waitForWriterCommitWindowRelease(commitStartTs);
     if (isSeekAnimationActive()) {
       const activeScroller = getScroller() || commitScroller;
       const activeTop = Number(activeScroller.scrollTop || 0);
@@ -5241,7 +5318,7 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         try {
           console.debug('[ASR_TRUTH] deferred while glide active', {
             line: targetLine,
-            elapsedMs: Math.max(0, Date.now() - commitStartTs),
+            elapsedMs: Math.max(0, nowMonotonicMs() - commitStartTs),
             activeTop: Math.round(activeTop),
           });
         } catch {
@@ -5314,6 +5391,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         const pending = pendingMatch;
         if (!pending) return;
         pendingMatch = null;
+        if (isWriterCommitWindowActive()) {
+          adoptPendingMatch({ ...pending });
+          runAfterAnimationFrames(() => {
+            if (disposed) return;
+            schedulePending();
+          }, 1);
+          return;
+        }
 
       const scroller = getScroller();
       if (!scroller) {
@@ -6286,9 +6371,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       const scrollerForStamp: HTMLElement | null = scroller;
       const commitBeforeTop = currentTop;
       let commitAfterTop = currentTop;
-      let writerNoMove = false;
       if (modeNow === 'asr') {
-        const writerCommitStartedAt = Date.now();
+        const writerCommitStartedAt = nowMonotonicMs();
         const role = resolveViewerRole();
         const path = typeof window !== 'undefined' ? window.location?.pathname || '' : '';
         const commitMove = applyAsrCommitMovement(
@@ -6309,15 +6393,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
         );
         writerCommitted = commitMove.writerCommitted;
         commitAfterTop = commitMove.afterTop;
-        writerNoMove =
-          writerCommitted &&
-          Number.isFinite(commitAfterTop) &&
-          Number.isFinite(commitBeforeTop) &&
-          Math.abs(commitAfterTop - commitBeforeTop) < 1;
+        if (writerCommitted) {
+          beginWriterCommitWindow(writerCommitStartedAt);
+        }
         didGlide = false;
-        const readabilitySeq = ++postCommitReadabilitySeq;
+        postCommitReadabilitySeq += 1;
         const immediateReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
-          allowNudge: writerCommitted ? writerNoMove : false,
+          allowNudge: !writerCommitted,
         });
         logPostCommitReadabilityProbe(
           writerCommitted ? 'commit:writer-pending' : 'commit:immediate',
@@ -6325,35 +6407,23 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           writerCommitted,
           immediateReadability,
         );
-        if ((!writerCommitted || writerNoMove) && immediateReadability.nudgeApplied) {
+        if (!writerCommitted && immediateReadability.nudgeApplied) {
           commitAfterTop = immediateReadability.afterTop;
         }
-        if (writerCommitted && !writerNoMove) {
-          const scheduleSettleReadability = (attempt: number, delayMs: number) => {
-            const settleTimer = window.setTimeout(() => {
-              postCommitReadabilityTimers.delete(settleTimer);
-              if (disposed) return;
-              if (readabilitySeq !== postCommitReadabilitySeq) return;
-              if (getScrollMode() !== 'asr') return;
-              if (isSeekAnimationActive() && attempt < POST_COMMIT_WRITER_SETTLE_MAX_RETRIES) {
-                scheduleSettleReadability(attempt + 1, POST_COMMIT_WRITER_SETTLE_RETRY_MS);
-                return;
-              }
-              const settledReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
-                allowNudge: true,
-              });
-              logPostCommitReadabilityProbe(
-                'commit:writer-settle',
-                targetLine,
-                writerCommitted,
-                settledReadability,
-              );
-            }, delayMs);
-            postCommitReadabilityTimers.add(settleTimer);
-          };
-          scheduleSettleReadability(0, POST_COMMIT_WRITER_SETTLE_MS);
-        }
         if (writerCommitted) {
+          await waitForWriterCommitWindowRelease(writerCommitStartedAt);
+          const settledReadability = applyPostCommitReadabilityGuarantee(scroller, targetLine, {
+            allowNudge: true,
+          });
+          logPostCommitReadabilityProbe(
+            'commit:writer-settle',
+            targetLine,
+            writerCommitted,
+            settledReadability,
+          );
+          if (settledReadability.nudgeApplied) {
+            commitAfterTop = settledReadability.afterTop;
+          }
           const truth = await verifyWriterCommitTruth(
             (scrollerForStamp || scroller),
             targetLine,
@@ -6363,10 +6433,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
           );
           commitAfterTop = truth.actualTop;
           lastKnownScrollTop = commitAfterTop;
-          writerNoMove =
-            Number.isFinite(commitAfterTop) &&
-            Number.isFinite(commitBeforeTop) &&
-            Math.abs(commitAfterTop - commitBeforeTop) < 1;
           if (!truth.ok) {
             const resyncAnchor = Math.max(0, Number.isFinite(lastLineIndex) ? Math.floor(lastLineIndex) : commitCursorLine);
             stopGlide('scroll-desync');
@@ -6374,12 +6440,14 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
             pursuitVel = 0;
             pursuitActive = false;
             microPursuitUntil = 0;
+            releaseCommitWindow('scroll-desync');
             resetNoProgressStreak('scroll-desync', resyncAnchor);
             clearEvidenceBuffer('scroll-desync');
             activateStuckResync(resyncAnchor, now);
             emitHudStatus('resync', 'Resyncing (scroll desync)...');
             return;
           }
+          releaseCommitWindow('writer-commit-flush-complete');
         }
       } else if (!writerCommitted) {
         if (nextTargetTop > base) {
@@ -10033,13 +10101,8 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (disposed) return;
     emitSummary('dispose');
     disposed = true;
+    releaseCommitWindow('dispose');
     postCommitReadabilitySeq += 1;
-    if (postCommitReadabilityTimers.size) {
-      postCommitReadabilityTimers.forEach((timerId) => {
-        try { window.clearTimeout(timerId); } catch {}
-      });
-      postCommitReadabilityTimers.clear();
-    }
     try {
       unsubscribe();
     } catch {
@@ -10065,14 +10128,9 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
   const setLastLineIndex = (index: number) => {
     if (!Number.isFinite(index)) return;
     scriptEndEventEmitted = false;
+    releaseCommitWindow('setLastLineIndex');
     lastLineIndex = Math.max(0, Math.floor(index));
     postCommitReadabilitySeq += 1;
-    if (postCommitReadabilityTimers.size) {
-      postCommitReadabilityTimers.forEach((timerId) => {
-        try { window.clearTimeout(timerId); } catch {}
-      });
-      postCommitReadabilityTimers.clear();
-    }
     lastSeekTs = 0;
     lastSameLineNudgeTs = 0;
     lastMoveAt = 0;
