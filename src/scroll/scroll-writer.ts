@@ -250,11 +250,9 @@ function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrol
   const target = Math.max(0, Math.min(rawTop, maxTop));
   const delta = target - from;
   withWriteEnabled(reason, delta, () => {
-    if (typeof scroller.scrollTo === 'function') {
-      scroller.scrollTo({ top: target, behavior: 'auto' });
-    } else {
-      scroller.scrollTop = target;
-    }
+    // Use direct assignment for deterministic writes. `scrollTo({behavior:'auto'})`
+    // can still settle asynchronously in some browser/CSS combinations.
+    scroller.scrollTop = target;
   });
   const after = readScrollTop(scroller);
   logWriteMismatch(scroller, target, from, after, reason);

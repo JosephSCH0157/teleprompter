@@ -5340,12 +5340,13 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
     if (!targetEl || !targetEl.isConnected) {
       targetEl = await findLineElWithRetry(settledScroller, targetLine, 1);
     }
-    if (targetEl) {
-      try {
-        targetEl.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
-      } catch {
-        // ignore
-      }
+    const correctionTop = resolveExpectedTop(settledScroller, firstExpected);
+    if (Number.isFinite(correctionTop)) {
+      applyCanonicalScrollTop(correctionTop, {
+        scroller: settledScroller,
+        reason: 'asr-truth-correction',
+        source: 'asr-commit',
+      });
       markProgrammaticScroll();
       lastMoveAt = Date.now();
     }
