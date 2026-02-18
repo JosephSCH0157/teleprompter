@@ -4057,8 +4057,6 @@ export function createAsrScrollDriver(options: DriverOptions = {}): AsrScrollDri
       }
     }
     if (beforeMetrics.activeCenterY != null) {
-      const desiredCenter =
-        beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerTargetRatio;
       const minCenter =
         beforeMetrics.viewportTop + beforeMetrics.viewportHeight * markerBandMinRatio;
       const maxCenter =
