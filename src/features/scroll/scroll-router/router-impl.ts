@@ -1734,6 +1734,7 @@ function createAutoMotor() {
 
 const HYBRID_LOG_THROTTLE_MS = 500;
 const HYBRID_VERBOSE_FLAG = 'hybrid-dev';
+const HYBRID_TRACE_FLAG = 'hybridTrace';
 let lastHybridScaleLogAt = 0;
 let lastHybridPaceLogAt = 0;
 let lastHybridBrakeLogAt = 0;
@@ -1752,6 +1753,49 @@ const isHybridVerboseDevMode = (() => {
     return false;
   }
 })();
+const hybridTraceLastAt = new Map<string, number>();
+const hybridTraceLastSig = new Map<string, string>();
+
+function isHybridTraceEnabled() {
+  if (!isDevMode()) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__TP_HYBRID_TRACE === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get(HYBRID_TRACE_FLAG) === '1') return true;
+    if (window.localStorage?.getItem('tp_hybrid_trace') === '1') return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function logHybridTrace(
+  tag: string,
+  payload: Record<string, unknown>,
+  opts?: { throttleMs?: number; signature?: string },
+) {
+  if (!isHybridTraceEnabled()) return;
+  const throttleMs = Math.max(0, Number(opts?.throttleMs) || 0);
+  const signature = typeof opts?.signature === 'string' ? opts.signature : null;
+  const now = nowMs();
+  if (throttleMs > 0) {
+    const lastAt = hybridTraceLastAt.get(tag) ?? 0;
+    if (now - lastAt < throttleMs) return;
+    hybridTraceLastAt.set(tag, now);
+  }
+  if (signature) {
+    const lastSig = hybridTraceLastSig.get(tag);
+    if (lastSig === signature) return;
+    hybridTraceLastSig.set(tag, signature);
+  }
+  try {
+    console.info(`[HYBRID_TRACE] ${tag}`, payload);
+  } catch {
+    // ignore
+  }
+}
 
 function logHybridPaceTelemetry(payload: any) {
   if (!isDevMode()) return;
@@ -1865,6 +1909,23 @@ function logHybridVelocityEvent(payload: any) {
       lastHybridMotorVelocitySignature = signature;
       lastHybridMotorVelocityLogAt = now;
     }
+    if (evt === 'dt-clamp') {
+      const dtRaw = Number(data?.dtRaw ?? NaN);
+      const dtClamped = Number(data?.dtClamped ?? NaN);
+      if (Number.isFinite(dtRaw) && Number.isFinite(dtClamped)) {
+        logHybridTrace(
+          'motor_dt_clamp',
+          {
+            dtRaw: Number(dtRaw.toFixed(3)),
+            dtClamped: Number(dtClamped.toFixed(3)),
+          },
+          {
+            throttleMs: 250,
+            signature: `${dtRaw.toFixed(3)}|${dtClamped.toFixed(3)}`,
+          },
+        );
+      }
+    }
     try {
       console.debug('[HybridMotor]', evt, data);
     } catch {}
@@ -1879,6 +1940,21 @@ function convertWpmToPxPerSec(targetWpm: number) {
     const lineHeightPx = fsPx * lhScale;
     const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
     const pxPerSec = (targetWpm / 60 / wpl) * lineHeightPx;
+    logHybridTrace(
+      'base_speed_compute',
+      {
+        speedRaw: targetWpm,
+        unit: 'wpm',
+        wpm: targetWpm,
+        wpl,
+        lineHeightPx: Number(lineHeightPx.toFixed(2)),
+        basePxps: Number(pxPerSec.toFixed(2)),
+      },
+      {
+        throttleMs: 100,
+        signature: `${Number(targetWpm).toFixed(2)}|${Number(wpl).toFixed(2)}|${Number(lineHeightPx).toFixed(2)}|${Number(pxPerSec).toFixed(2)}`,
+      },
+    );
     try {
       console.info(
         `[WPM_CONVERT] ${JSON.stringify({
@@ -4362,6 +4438,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       lastOffScriptEvidenceTs = 0;
       setHybridScale(RECOVERY_SCALE);
+      logHybridTrace(
+        'evidence_counters',
+        {
+          source: 'good-match',
+          onScriptStreak,
+          offScriptEvidence,
+          offScriptActive: hybridSilence.offScriptActive,
+          bestSim,
+          noMatch: isNoMatch,
+          nextScale,
+        },
+        {
+          signature: `good|${onScriptStreak}|${offScriptEvidence}|${hybridSilence.offScriptActive ? 1 : 0}|${Number(bestSim ?? NaN).toFixed(2)}`,
+        },
+      );
       logHud();
       return;
     }
@@ -4384,6 +4475,22 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       setHybridScale(nextScale);
     }
+    logHybridTrace(
+      'evidence_counters',
+      {
+        source: 'offscript',
+        onScriptStreak,
+        offScriptEvidence,
+        offScriptActive: hybridSilence.offScriptActive,
+        bestSim,
+        noMatch: isNoMatch,
+        significantNoMatch,
+        nextScale,
+      },
+      {
+        signature: `off|${onScriptStreak}|${offScriptEvidence}|${hybridSilence.offScriptActive ? 1 : 0}|${Number(bestSim ?? NaN).toFixed(2)}|${significantNoMatch ? 1 : 0}`,
+      },
+    );
     logHud();
   }
   function handleTranscriptEvent(detail: {
@@ -4423,6 +4530,23 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     const currentIdx = Number.isFinite(Number(currentIdxRaw))
       ? Math.max(0, Math.floor(Number(currentIdxRaw)))
       : lastAsrMatch.currentIndex;
+    const speechPresentNow = isHybridSpeechPresent(now);
+    const ingressMatchState = getHybridMatchState();
+    logHybridTrace(
+      'transcript_ingress',
+      {
+        source: detail.source || 'speech-loader',
+        noMatch: isNoMatch,
+        bestIdx,
+        sim: Number.isFinite(inferredBestSim) ? Number(inferredBestSim.toFixed(3)) : null,
+        speechPresent: speechPresentNow,
+        hardNoMatch: ingressMatchState.hardNoMatch,
+      },
+      {
+        throttleMs: 60,
+        signature: `${isNoMatch ? 1 : 0}|${bestIdx}|${Number(inferredBestSim).toFixed(3)}|${speechPresentNow ? 1 : 0}|${ingressMatchState.hardNoMatch ? 1 : 0}`,
+      },
+    );
     if (!isNoMatch && bestIdx >= 0) {
       hybridMatchSeen = true;
       hybridLastMatch = {
@@ -4439,6 +4563,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       if (Number.isFinite(inferredBestSim) && inferredBestSim >= HYBRID_HARD_NOMATCH_SIM_MIN) {
         hybridLastNoMatch = false;
       }
+      logHybridTrace(
+        'match_latch',
+        {
+          latchedMatch: true,
+          bestIdx,
+          sim: Number.isFinite(inferredBestSim) ? Number(inferredBestSim.toFixed(3)) : null,
+          isFinal: Boolean(detail.isFinal ?? detail.final),
+          currentIdx,
+        },
+        {
+          signature: `${bestIdx}|${Number(inferredBestSim).toFixed(3)}|${Boolean(detail.isFinal ?? detail.final) ? 1 : 0}|${currentIdx}`,
+        },
+      );
     }
     const wasSilent = hybridSilence.pausedBySilence;
     hybridSilence.lastSpeechAtMs = now;
@@ -4895,6 +5032,47 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     speechPresent &&
     hardNoMatchEffective &&
     hardNoMatchAgeMs >= HYBRID_HARD_NOMATCH_OFFSCRIPT_GRACE_MS;
+  const traceClampStage = (
+    stage: string,
+    inPxps: number,
+    outPxps: number,
+    reason: string,
+    extra?: Record<string, unknown>,
+  ) => {
+    if (!Number.isFinite(inPxps) || !Number.isFinite(outPxps)) return;
+    const delta = Math.abs(outPxps - inPxps);
+    if (delta < 0.01) return;
+    const inRounded = Number(inPxps.toFixed(2));
+    const outRounded = Number(outPxps.toFixed(2));
+    logHybridTrace(
+      'clamp_stage',
+      {
+        stage,
+        inPxps: inRounded,
+        outPxps: outRounded,
+        reason,
+        ...extra,
+      },
+      {
+        signature: `${stage}|${inRounded.toFixed(2)}|${outRounded.toFixed(2)}|${reason}`,
+      },
+    );
+  };
+  logHybridTrace(
+    'clamp_input',
+    {
+      basePxps: Number(base.toFixed(2)),
+      speechPresent,
+      offScriptActive: hybridSilence.offScriptActive || hardNoMatchOffScriptActive,
+      hardNoMatch: hardNoMatchEffective,
+      sim: Number.isFinite(bestSim ?? NaN) ? Number((bestSim as number).toFixed(3)) : null,
+      blocksNotReadyHold,
+    },
+    {
+      throttleMs: 50,
+      signature: `${Number(base).toFixed(2)}|${speechPresent ? 1 : 0}|${(hybridSilence.offScriptActive || hardNoMatchOffScriptActive) ? 1 : 0}|${hardNoMatchEffective ? 1 : 0}|${Number(bestSim ?? NaN).toFixed(3)}|${blocksNotReadyHold ? 1 : 0}`,
+    },
+  );
   if (hardNoMatchOffScriptActive && !hybridSilence.offScriptActive) {
     setHybridScale(OFFSCRIPT_DEEP);
   }
@@ -4976,9 +5154,33 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       HYBRID_CTRL_MIN_MULT,
       1 - offScriptSeverity * HYBRID_CTRL_OFFSCRIPT_PENALTY,
     );
+    const preSilenceCapMult = appliedTargetMult;
     appliedTargetMult = Math.min(appliedTargetMult, silenceCap);
+    traceClampStage(
+      'silence_cap',
+      base * preSilenceCapMult,
+      base * appliedTargetMult,
+      'silenceCap',
+      { silenceCap: Number(silenceCap.toFixed(3)) },
+    );
+    const preOffScriptCapMult = appliedTargetMult;
     appliedTargetMult = Math.min(appliedTargetMult, offScriptCap);
+    traceClampStage(
+      'offscript_cap',
+      base * preOffScriptCapMult,
+      base * appliedTargetMult,
+      'offScriptCap',
+      { offScriptCap: Number(offScriptCap.toFixed(3)) },
+    );
+    const preMinMultClamp = appliedTargetMult;
     appliedTargetMult = Math.max(appliedTargetMult, HYBRID_CTRL_MIN_MULT);
+    traceClampStage(
+      'min_mult_floor',
+      base * preMinMultClamp,
+      base * appliedTargetMult,
+      'minMultFloor',
+      { minMult: Number(HYBRID_CTRL_MIN_MULT.toFixed(3)) },
+    );
     hybridCtrl.lastErrorPx = errorInfo?.errorPx ?? 0;
     hybridCtrl.lastAnchorTs = errorInfo?.anchorAgeMs ?? 0;
     hybridCtrl.lastTs = now;
@@ -5047,6 +5249,30 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     if ((aggro || commitBoost) && eligibleForAggro) {
       // Respect gating unless we’re in the post-commit permission window.
       const gatingOk = (aggro && commitBoost) || (conf >= confMin && sim >= simMin);
+      if (!gatingOk) {
+        const denyReasons: string[] = [];
+        if (conf < confMin) denyReasons.push('conf');
+        if (sim < simMin) denyReasons.push('sim');
+        logHybridTrace(
+          'catchup_gate_deny',
+          {
+            denied: true,
+            reason: denyReasons.length > 0 ? denyReasons.join('+') : 'threshold',
+            conf: Number(conf.toFixed(3)),
+            confMin: Number(confMin.toFixed(3)),
+            sim: Number(sim.toFixed(3)),
+            simMin: Number(simMin.toFixed(3)),
+            needCatchUp,
+            aggro,
+            commitBoost,
+            errorLines: Number(errorLinesRaw.toFixed(3)),
+          },
+          {
+            throttleMs: 80,
+            signature: `${denyReasons.join('+')}|${conf.toFixed(3)}|${sim.toFixed(3)}|${needCatchUp ? 1 : 0}|${aggro ? 1 : 0}|${commitBoost ? 1 : 0}`,
+          },
+        );
+      }
 
       if (gatingOk) {
         // Map distance behind (in lines) directly into a scale boost.
@@ -5144,13 +5370,31 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
     let policyMult = 1.0;
     if (pausedBySilence || reason === 'silence') {
+      const inScale = reactiveScale * policyMult;
       const silenceMult = aggro ? 0.75 : 0.85;
       policyMult *= silenceMult;
+      const outScale = reactiveScale * policyMult;
+      traceClampStage(
+        'silence_policy',
+        baseWithCorrection * inScale,
+        baseWithCorrection * outScale,
+        'silencePolicy',
+        { silenceMult: Number(silenceMult.toFixed(3)) },
+      );
       reasons.push('silence');
     }
     if (offScriptActive || reason === 'offscript') {
+      const inScale = reactiveScale * policyMult;
       const offscriptMult = aggro ? 0.80 : 0.90;
       policyMult *= offscriptMult;
+      const outScale = reactiveScale * policyMult;
+      traceClampStage(
+        'offscript_policy',
+        baseWithCorrection * inScale,
+        baseWithCorrection * outScale,
+        'offScriptPolicy',
+        { offscriptMult: Number(offscriptMult.toFixed(3)) },
+      );
       reasons.push('offscript');
     }
 
@@ -5158,7 +5402,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
     let scaleAfterBrake = preClampScale;
     if (brakeActive) {
+      const beforeBrake = scaleAfterBrake;
       scaleAfterBrake = Math.min(scaleAfterBrake, brakeFactor);
+      traceClampStage(
+        'brake_clamp',
+        baseWithCorrection * beforeBrake,
+        baseWithCorrection * scaleAfterBrake,
+        'brakeCap',
+        { brakeFactor: Number(brakeFactor.toFixed(3)) },
+      );
       reasons.push('brakeCap');
     }
 
@@ -5166,7 +5418,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const assistFloorScale = suppressAssistScale(rawAssist, baseWithCorrection);
     const assistEligible = assistActive && assistFloorScale > 0 && needCatchUp && conf >= confMin;
     if (assistEligible) {
+      const beforeAssistFloor = scaleAfterCaps;
       scaleAfterCaps = Math.max(scaleAfterCaps, assistFloorScale);
+      traceClampStage(
+        'assist_floor',
+        baseWithCorrection * beforeAssistFloor,
+        baseWithCorrection * scaleAfterCaps,
+        'assistFloor',
+        { assistFloorScale: Number(assistFloorScale.toFixed(3)) },
+      );
       reasons.push('assistFloor');
     }
 
@@ -5180,9 +5440,23 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     if (scaleAfterCaps > maxClampScale) {
       finalScale = maxClampScale;
       clampReason = 'maxClamp';
+      traceClampStage(
+        'max_clamp',
+        baseWithCorrection * scaleAfterCaps,
+        baseWithCorrection * finalScale,
+        'maxClamp',
+        { maxClampScale: Number(maxClampScale.toFixed(3)) },
+      );
     } else if (!clampOverride && scaleLimitedToMax < minScale) {
       finalScale = minScale;
       clampReason = 'minClamp';
+      traceClampStage(
+        'min_clamp',
+        baseWithCorrection * scaleLimitedToMax,
+        baseWithCorrection * finalScale,
+        'minClamp',
+        { minScale: Number(minScale.toFixed(3)) },
+      );
     }
     if (clampReason) {
       reasons.push(clampReason);
@@ -5198,11 +5472,30 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       distancePx <= HYBRID_CTRL_ON_TARGET_STABLE_PX &&
       Math.abs(deltaLines) <= HYBRID_CTRL_MODE_DEADBAND_LINES;
     if (stableOnTarget) {
+      const preStableClampScale = finalScale;
       finalScale = clamp(finalScale, HYBRID_CTRL_ON_TARGET_MULT_MIN, HYBRID_CTRL_ON_TARGET_MULT_MAX);
+      traceClampStage(
+        'on_target_clamp',
+        baseWithCorrection * preStableClampScale,
+        baseWithCorrection * finalScale,
+        'stableOnTarget',
+        {
+          min: Number(HYBRID_CTRL_ON_TARGET_MULT_MIN.toFixed(3)),
+          max: Number(HYBRID_CTRL_ON_TARGET_MULT_MAX.toFixed(3)),
+        },
+      );
     }
 
     if (offScriptMultiplier !== 1) {
+      const preOffScriptDecayScale = finalScale;
       finalScale *= offScriptMultiplier;
+      traceClampStage(
+        'offscript_decay',
+        baseWithCorrection * preOffScriptDecayScale,
+        baseWithCorrection * finalScale,
+        'offScriptDecay',
+        { offScriptMultiplier: Number(offScriptMultiplier.toFixed(3)) },
+      );
       reasons.push('offscriptDecay');
     }
 
@@ -5212,7 +5505,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
           ? HYBRID_CTRL_MIN_PXPS * HYBRID_OFFSCRIPT_SPEECH_FLOOR_MULT
           : 0
         : HYBRID_CTRL_MIN_PXPS;
-    const finalPxpsBase = Math.max(minPxps, baseWithCorrection * finalScale);
+    const unclampedPxpsBase = baseWithCorrection * finalScale;
+    const finalPxpsBase = Math.max(minPxps, unclampedPxpsBase);
+    traceClampStage(
+      'min_pxps_floor',
+      unclampedPxpsBase,
+      finalPxpsBase,
+      speechPresent ? 'speechFloor' : 'minPxps',
+      { minPxps: Number(minPxps.toFixed(2)) },
+    );
     const assistFloorBoostPx = assistEligible && isBehind ? base * HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC : 0;
     const finalPxps = finalPxpsBase + assistFloorBoostPx * offScriptMultiplier;
     const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
@@ -5459,6 +5760,21 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       } catch {}
     }
 
+    logHybridTrace(
+      'motor_velocity_set',
+      {
+        finalPxps: Number(finalPxps.toFixed(2)),
+        basePxps: Number(base.toFixed(2)),
+        finalScale: Number(finalScale.toFixed(3)),
+        speechPresent,
+        offScriptActive: offScriptActive || hardNoMatchOffScriptActive,
+        reason: finalReasons.join('|'),
+      },
+      {
+        throttleMs: 30,
+        signature: `${finalPxps.toFixed(2)}|${base.toFixed(2)}|${finalScale.toFixed(3)}|${speechPresent ? 1 : 0}|${(offScriptActive || hardNoMatchOffScriptActive) ? 1 : 0}|${finalReasons.join('|')}`,
+      },
+    );
     hybridMotor.setVelocityPxPerSec(finalPxps);
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
@@ -5988,6 +6304,25 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       blocksNotReadyHold ? "1" : "0",
     ];
     const gateFingerprint = fingerprintParts.join("|");
+    logHybridTrace(
+      'gate_decision',
+      {
+        shouldRunHybrid,
+        gateReason: hybridBlockedReason,
+        speechPresent,
+        holdMs: Math.round(speechHoldRemainingMs),
+        offScriptActive: gateEffectiveOffScript,
+        hardNoMatch: hardNoMatchEffective,
+        blocksNotReadyHold,
+        gateWanted,
+        gateSatisfied,
+        wantEnabled,
+        effectivePxps: Number(effectivePxPerSec.toFixed(2)),
+      },
+      {
+        signature: gateFingerprint,
+      },
+    );
     if (gateFingerprint !== lastHybridGateFingerprint) {
       lastHybridGateFingerprint = gateFingerprint;
       try {
