@@ -177,6 +177,7 @@ In `scrollMode='hybrid'`:
 - During active speech off-script decay, Hybrid velocity must keep a non-zero floor; hard stop is silence-grace owned only.
 - `tp:asr:guard` is structural commit-suppression telemetry (`commit suppressed`), not semantic off-script truth; Hybrid/router must not map guard events directly to off-script evidence or decay.
 - Matcher-unavailable fallback lanes must be neutral: emit `noMatch=true` with non-candidate index (`bestIdx<0`) and omit similarity (`sim`/`bestSim`) so Hybrid does not treat fallback as low-sim off-script evidence.
+- Catch Up manual action in Hybrid must stay usable even when ASR manual-anchor adopt is pending: pending-adopt hard-block applies to ASR mode only; Hybrid may proceed and can fall back to visual marker index when ASR anchor index is unavailable.
 
 ---
 

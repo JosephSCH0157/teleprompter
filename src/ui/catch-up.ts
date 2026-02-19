@@ -25,14 +25,25 @@ function elementTopRelativeTo(el: HTMLElement, scroller: HTMLElement): number {
   }
 }
 
+function getScrollMode(): string {
+  try {
+    const store = (window as any).__tpStore;
+    const raw = store?.get?.('scrollMode') ?? (window as any).__tpScrollMode?.getMode?.();
+    return String(raw || '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
 export function wireCatchUpButton(deps: CatchUpDeps): void {
   const btn = document.getElementById('catchUpBtn') as HTMLButtonElement | null;
   if (!btn || btn.dataset.wired) return;
   btn.dataset.wired = '1';
 
   btn.addEventListener('click', () => {
+    const mode = getScrollMode();
     const manualPending = (window as any).__tpAsrManualAnchorPending;
-    if (manualPending) {
+    if (manualPending && mode === 'asr') {
       deps.devLog?.('[catchup] manual anchor pending, skipping catch-up', manualPending);
       try {
         window.toast?.('Manual re-anchor pending — say a phrase to confirm your position.', { type: 'info' });
@@ -40,6 +51,9 @@ export function wireCatchUpButton(deps: CatchUpDeps): void {
         // ignore
       }
       return;
+    }
+    if (manualPending && mode === 'hybrid') {
+      deps.devLog?.('[catchup] manual anchor pending ignored in hybrid', manualPending);
     }
     const scroller = deps.getScroller();
     if (!scroller) return;
