@@ -107,8 +107,11 @@ When `scrollMode='asr'`:
 - `wpm`: wpm adapter/timed drive movement when `scrollEnabled=true`.
 - `hybrid`: motor + ASR correction lane (no ASR-only commit assertions).
 - `hybrid`: speech presence is activity-driven; `noMatch`/low-sim does not imply silence.
+- `hybrid`: speech presence includes a short cadence-safe hold window after speech activity so brief between-word gaps do not drop to silence.
 - `hybrid`: `tp:asr:silence` is structural input only; do not hard-stop on event receipt. Pause/stop only after configured silence grace.
 - `hybrid`: while speech is active, off-script/no-match applies bounded slowdown/decay instead of immediate stop.
+- `hybrid`: sustained `hardNoMatch` during active speech (after short grace) must activate off-script slowdown/decay.
+- `hybrid`: off-script decay while speech is active keeps a non-zero velocity floor; hard stop remains silence-grace driven.
 - `asr`: commit-driven seek only; no motor lane.
 - `step`: discrete manual stepping only.
 - `rehearsal`: no programmatic movement; clamp behavior only.

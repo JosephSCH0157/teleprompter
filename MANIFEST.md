@@ -1,5 +1,5 @@
 # Anvil Manifest (SSOT Map)
-Version: v1.8.7 (2026-02-18)
+Version: v1.8.8 (2026-02-19)
 
 This is the canonical manifest for Anvil's runtime architecture.
 Purpose: **one map, one truth** -- where state lives, who owns it, and which modules are allowed to publish globals.
@@ -167,8 +167,11 @@ In `scrollMode='hybrid'`:
 - When speech activity is present but blocks are not yet ready (`backendReady && !blocksReady && speechHeardRecently`), Hybrid must enter a temporary blocks-not-ready hold lane.
 - In that hold lane, no-match/off-script degradation is diagnostic-only (no hard off-script decay or hard-no-match gating), and velocity should remain in stable fallback/recovery behavior until blocks become ready.
 - Hybrid speech-presence ownership is activity-driven (recognizer/VAD traffic), not semantic match-driven (`noMatch`/low-sim must not be interpreted as silence).
+- Hybrid speech-presence uses a cadence-safe hysteresis hold (short post-activity window) so brief gaps between words do not flip to silence.
 - `tp:asr:silence` is structural telemetry and must not force immediate Hybrid pause/stop on receipt; pause/stop is grace-window/timer driven.
 - While speech is present, off-script/no-match behavior must run the slow/decay lane (bounded reduced speed) rather than a hard stop.
+- During active speech, sustained hard no-match (`hardNoMatch` beyond a short grace) must activate Hybrid off-script scaling/decay; hard no-match cannot remain semantic-noop.
+- During active speech off-script decay, Hybrid velocity must keep a non-zero floor; hard stop is silence-grace owned only.
 - `tp:asr:guard` is structural commit-suppression telemetry (`commit suppressed`), not semantic off-script truth; Hybrid/router must not map guard events directly to off-script evidence or decay.
 - Matcher-unavailable fallback lanes must be neutral: emit `noMatch=true` with non-candidate index (`bestIdx<0`) and omit similarity (`sim`/`bestSim`) so Hybrid does not treat fallback as low-sim off-script evidence.
 

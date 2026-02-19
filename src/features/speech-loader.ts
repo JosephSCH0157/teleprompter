@@ -3362,6 +3362,28 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycl
   };
 }
 
+function enforceRecognizerInterimCapture(mode: string, recognizer: unknown): void {
+  const normalizedMode = String(mode || '').toLowerCase();
+  if (normalizedMode !== 'asr' && normalizedMode !== 'hybrid') return;
+  if (!recognizer || (typeof recognizer !== 'object' && typeof recognizer !== 'function')) return;
+  const r = recognizer as any;
+  try { r.interimResults = true; } catch {}
+  try { r.interim = true; } catch {}
+  try { r.partialResults = true; } catch {}
+  try {
+    if (typeof r.setInterimResults === 'function') {
+      r.setInterimResults(true);
+    }
+  } catch {}
+  try {
+    if (typeof r.configure === 'function') {
+      r.configure({ interimResults: true, interim: true, partialResults: true });
+    } else if (typeof r.setConfig === 'function') {
+      r.setConfig({ interimResults: true, interim: true, partialResults: true });
+    }
+  } catch {}
+}
+
 async function startBackendForSession(mode: string, reason?: string): Promise<boolean> {
   const speechNs = getTpSpeechNamespace();
   const allowLegacyNs = isLegacySpeechNamespaceAllowed();
@@ -3392,6 +3414,7 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     if (window.__tpSpeechOrchestrator?.start) {
       const started = await window.__tpSpeechOrchestrator.start();
       rec = (started || null) as RecognizerLike | null;
+      enforceRecognizerInterimCapture(mode, rec);
       if (rec && typeof rec.on === 'function') {
         try { rec.on('final', (t: any) => routeRecognizerTranscript(t, true)); } catch {}
         try { rec.on('partial', (t: any) => routeRecognizerTranscript(t, false)); } catch {}
@@ -3449,6 +3472,7 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
   const sr = new SR();
   sr.interimResults = true;
   sr.continuous = true;
+  enforceRecognizerInterimCapture(mode, sr);
   let _lastInterimAt = 0;
   attachWebSpeechLifecycle(sr, {
     onResult: (e: any) => {
