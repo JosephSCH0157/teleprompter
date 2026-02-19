@@ -1,77 +1,8 @@
-// src/boot/scheduler.ts
-var writeQueue = [];
-var readQueue = [];
-var rafId = 0;
-function flush() {
-  rafId = 0;
-  const writes = writeQueue;
-  const reads = readQueue;
-  writeQueue = [];
-  readQueue = [];
-  for (const fn of writes) {
-    try {
-      fn();
-    } catch (e) {
-      try {
-        console.error("[scheduler] write error", e);
-      } catch {
-      }
-    }
-  }
-  for (const fn of reads) {
-    try {
-      fn();
-    } catch (e) {
-      try {
-        console.error("[scheduler] read error", e);
-      } catch {
-      }
-    }
-  }
-}
-function ensureRaf() {
-  if (rafId) return;
-  rafId = requestAnimationFrame(flush);
-}
-function requestWrite(fn) {
-  writeQueue.push(fn);
-  ensureRaf();
-}
-function requestRead(fn) {
-  readQueue.push(fn);
-  ensureRaf();
-}
-try {
-  const maybe = window.__tpScrollWrite;
-  if (typeof maybe === "function") {
-    window.__tpScrollWrite = {
-      scrollTo(y) {
-        try {
-          maybe(y);
-        } catch {
-        }
-      },
-      scrollBy(dy) {
-        try {
-          maybe((Number(dy) || 0) + 0);
-        } catch {
-        }
-      }
-    };
-  }
-} catch {
-}
-try {
-  if (typeof window !== "undefined") {
-    window.__tpRequestWrite = requestWrite;
-    window.__tpRequestRead = requestRead;
-  }
-} catch {
-}
-
-// src/scroll/scroll-helpers.ts
-var defaultViewer = () => document.getElementById("viewer") || document.querySelector('[data-role="viewer"]');
+// src/scroll/scroller.ts
+var displayScrollChannel = null;
+var scrollEventTrackerInstalled = false;
 function shouldLogScrollWrite() {
+  if (typeof window === "undefined") return false;
   try {
     const w = window;
     if (w.__tpScrollDebug === true) return true;
@@ -96,8 +27,9 @@ function readLineIndex(el) {
   if (m) return Math.max(0, Number(m[1]));
   return null;
 }
-function computeAnchorLineIndex(scroller = defaultViewer()) {
+function computeAnchorLineIndex(scroller) {
   if (!scroller) return null;
+  if (typeof document === "undefined" || typeof window === "undefined") return null;
   const rect = scroller.getBoundingClientRect();
   if (!rect.height || !rect.width) return null;
   const markerPct = typeof window.__TP_MARKER_PCT === "number" ? window.__TP_MARKER_PCT : 0.4;
@@ -122,10 +54,6 @@ function computeAnchorLineIndex(scroller = defaultViewer()) {
   }
   return bestIdx != null ? Math.max(0, Math.floor(bestIdx)) : null;
 }
-
-// src/scroll/scroller.ts
-var displayScrollChannel = null;
-var scrollEventTrackerInstalled = false;
 function isElementLike(node) {
   return !!node && typeof node === "object" && node.nodeType === 1;
 }
