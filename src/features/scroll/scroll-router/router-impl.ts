@@ -5905,6 +5905,33 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         applyHybridVelocityCore(safeSilence);
       } catch {}
       if (!hybridRunning) {
+        if (isDevMode()) {
+          try {
+            const sliderValue = (() => {
+              const slider = document.getElementById("wpmTarget") as HTMLInputElement | null;
+              if (!slider) return null;
+              const raw = Number(slider.value);
+              return Number.isFinite(raw) && raw > 0 ? raw : null;
+            })();
+            const storedValue = (() => {
+              const raw = Number(localStorage.getItem("tp_baseline_wpm"));
+              return Number.isFinite(raw) && raw > 0 ? raw : null;
+            })();
+            const clampReason = blocksNotReadyHold
+              ? "blocks-not-ready-hold"
+              : silencePaused
+              ? "silence"
+              : gateEffectiveOffScript
+              ? "offscript"
+              : hybridScaleDetail.reason || "none";
+            console.info("[HYBRID_SPEED]", {
+              sliderValue,
+              storedValue,
+              basePxpsComputed: Number(baseHybridPxPerSec.toFixed(2)),
+              clampReason,
+            });
+          } catch {}
+        }
         try {
           console.info('[HYBRID] shouldRun true starting motor', {
             isRunningBefore: hybridRunning,
@@ -6266,16 +6293,25 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         const perfNow = nowMs();
         const rawTs = typeof detail.ts === "number" ? detail.ts : perfNow;
         const normalizedTs = normalizePerfTimestamp(rawTs, perfNow);
-    if (silent) {
-      hybridSilence.lastSpeechAtMs = normalizedTs;
-      hybridSilence.pausedBySilence = true;
-      speechActive = false;
-      clearHybridSilenceTimer();
-      runHybridVelocity(hybridSilence);
-      armHybridSilenceTimer();
-    } else {
-      noteHybridSpeechActivity(normalizedTs, { source: "silence" });
-    }
+        if (silent) {
+          // Structural silence hint: do not force immediate pause.
+          // Let silence timeout apply pause/stop after grace duration.
+          speechActive = false;
+          if (!(hybridSilence.lastSpeechAtMs > 0)) {
+            hybridSilence.lastSpeechAtMs = normalizedTs;
+          }
+          if (hybridSilence.pausedBySilence) {
+            armHybridSilenceTimer();
+          } else {
+            const lastSpeechAtMs = hybridSilence.lastSpeechAtMs > 0 ? hybridSilence.lastSpeechAtMs : normalizedTs;
+            const silentForMs = Math.max(0, normalizedTs - lastSpeechAtMs);
+            const remainingMs = Math.max(1, computeHybridSilenceDelayMs() - silentForMs);
+            armHybridSilenceTimer(remainingMs);
+          }
+          try { applyGate(); } catch {}
+        } else {
+          noteHybridSpeechActivity(normalizedTs, { source: "silence" });
+        }
       } catch {}
     });
   } catch {
