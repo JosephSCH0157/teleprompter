@@ -2416,6 +2416,15 @@ const HYBRID_CTRL_ON_TARGET_VELOCITY_EPS = 12;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
 const HYBRID_CTRL_BASE_MAX_MULT = 2.8;
 const HYBRID_CTRL_AGGRO_MAX_MULT = 3.2;
+const HYBRID_CTRL_DYNAMIC_MAX_MULT = 6.0;
+const HYBRID_CTRL_DYNAMIC_MAX_MULT_AGGRO = 8.0;
+const HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS = 240;
+const HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS_AGGRO = 300;
+const HYBRID_CTRL_CTRL_MULT_MAX = 2.5;
+const HYBRID_CTRL_REACTIVE_MULT_MAX = 7.0;
+const HYBRID_CTRL_POLICY_MULT_MIN = 0.35;
+const HYBRID_CTRL_POLICY_MULT_MAX = 1.25;
+const HYBRID_CTRL_PRECLAMP_SCALE_MAX = 8.0;
 const HYBRID_REACTIVE_BEHIND_BASE = 0.55;
 const HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD = 2;
 const HYBRID_REACTIVE_BEHIND_ACC_BONUS = 0.25;
@@ -5054,9 +5063,38 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         ...extra,
       },
       {
-        signature: `${stage}|${inRounded.toFixed(2)}|${outRounded.toFixed(2)}|${reason}`,
+        signature: `${stage}|${inRounded.toFixed(2)}|${outRounded.toFixed(2)}|${reason}|${typeof extra?.reasonTag === 'string' ? extra.reasonTag : ''}`,
       },
     );
+  };
+  const boundMultiplier = (
+    name: string,
+    rawValue: number,
+    minValue: number,
+    maxValue: number,
+    reasonTag: string,
+    fallback = 1,
+  ): number => {
+    const finiteRaw = Number.isFinite(rawValue) ? rawValue : fallback;
+    const bounded = clamp(finiteRaw, minValue, maxValue);
+    if (bounded !== finiteRaw || !Number.isFinite(rawValue)) {
+      logHybridTrace(
+        'multiplier_cap',
+        {
+          name,
+          inMult: Number.isFinite(rawValue) ? Number(rawValue.toFixed(3)) : null,
+          fallback,
+          outMult: Number(bounded.toFixed(3)),
+          minMult: Number(minValue.toFixed(3)),
+          maxMult: Number(maxValue.toFixed(3)),
+          reasonTag,
+        },
+        {
+          signature: `${name}|${Number.isFinite(rawValue) ? Number(rawValue).toFixed(3) : 'nonfinite'}|${bounded.toFixed(3)}|${minValue.toFixed(3)}|${maxValue.toFixed(3)}|${reasonTag}`,
+        },
+      );
+    }
+    return bounded;
   };
   logHybridTrace(
     'clamp_input',
@@ -5188,7 +5226,30 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const devOverrideMult = getHybridCtrlDevOverride(now);
     const ctrlMultFinal = Number.isFinite(devOverrideMult) ? devOverrideMult : appliedTargetMult;
     hybridCtrl.mult = ctrlMultFinal;
-    const ctrlMultApplied = ctrlMultFinal;
+    const ctrlMultApplied = boundMultiplier(
+      'ctrl_mult',
+      ctrlMultFinal,
+      HYBRID_CTRL_MIN_MULT,
+      HYBRID_CTRL_CTRL_MULT_MAX,
+      'ctrlMult',
+    );
+    const baseWithCorrectionRaw = base * ctrlMultApplied;
+    const baseWithCorrection =
+      Number.isFinite(baseWithCorrectionRaw) && baseWithCorrectionRaw > 0 ? baseWithCorrectionRaw : base;
+    if (!(Number.isFinite(baseWithCorrectionRaw) && baseWithCorrectionRaw > 0)) {
+      logHybridTrace(
+        'multiplier_cap',
+        {
+          name: 'base_with_correction',
+          inPxps: Number.isFinite(baseWithCorrectionRaw) ? Number(baseWithCorrectionRaw.toFixed(2)) : null,
+          outPxps: Number(base.toFixed(2)),
+          reasonTag: 'baseWithCorrectionFallback',
+        },
+        {
+          signature: `base_with_correction|${Number.isFinite(baseWithCorrectionRaw) ? baseWithCorrectionRaw.toFixed(2) : 'nonfinite'}|${base.toFixed(2)}`,
+        },
+      );
+    }
     const hybridScaleDetail = computeEffectiveHybridScale(
       now,
       silence,
@@ -5223,7 +5284,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       offScriptActive && Number.isFinite(offScriptDecay) ? offScriptScale * offScriptDecay : 1;
 
     // Aggro tuning knobs (prove capability first; dial back later)
-    const maxScale = aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT;
+    const aggressiveCeiling = aggro || commitBoost;
+    const dynamicMaxMult = aggressiveCeiling
+      ? HYBRID_CTRL_DYNAMIC_MAX_MULT_AGGRO
+      : HYBRID_CTRL_DYNAMIC_MAX_MULT;
+    const dynamicMaxAbsMinPxps = aggressiveCeiling
+      ? HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS_AGGRO
+      : HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS;
+    const dynamicMaxAllowedPxps = Math.max(baseWithCorrection * dynamicMaxMult, dynamicMaxAbsMinPxps);
+    const dynamicMaxScale = dynamicMaxAllowedPxps / Math.max(baseWithCorrection, HYBRID_CTRL_MIN_PXPS);
+    const maxScale = Math.max(
+      aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT,
+      Number.isFinite(dynamicMaxScale) ? dynamicMaxScale : HYBRID_CTRL_BASE_MAX_MULT,
+    );
     const confMin = (aggro && commitBoost) ? 0.35 : 0.65;
     const simMin = (aggro && commitBoost) ? 0.45 : 0.55;
 
@@ -5344,7 +5417,6 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const suppressAssist = reason === 'silence' || effectiveScale <= OFFSCRIPT_SCALE || reason === 'grace';
     const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
-    const baseWithCorrection = base * ctrlMultApplied;
 
     const deltaLines = Number.isFinite(errorLinesRaw) ? errorLinesRaw : 0;
     const absDL = Math.abs(deltaLines);
@@ -5367,6 +5439,13 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     } else {
       reasons.push('deadband');
     }
+    reactiveScale = boundMultiplier(
+      'reactive_scale',
+      reactiveScale,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_REACTIVE_MULT_MAX,
+      'reactiveScale',
+    );
 
     let policyMult = 1.0;
     if (pausedBySilence || reason === 'silence') {
@@ -5397,8 +5476,21 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       );
       reasons.push('offscript');
     }
+    policyMult = boundMultiplier(
+      'policy_mult',
+      policyMult,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_POLICY_MULT_MAX,
+      'policyMult',
+    );
 
-    const preClampScale = reactiveScale * policyMult;
+    const preClampScale = boundMultiplier(
+      'preclamp_scale',
+      reactiveScale * policyMult,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_PRECLAMP_SCALE_MAX,
+      'preClampScale',
+    );
 
     let scaleAfterBrake = preClampScale;
     if (brakeActive) {
@@ -5415,7 +5507,14 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     }
 
     let scaleAfterCaps = scaleAfterBrake;
-    const assistFloorScale = suppressAssistScale(rawAssist, baseWithCorrection);
+    const assistFloorScale = boundMultiplier(
+      'assist_floor_scale',
+      suppressAssistScale(rawAssist, baseWithCorrection),
+      0,
+      2.5,
+      'assistFloor',
+      0,
+    );
     const assistEligible = assistActive && assistFloorScale > 0 && needCatchUp && conf >= confMin;
     if (assistEligible) {
       const beforeAssistFloor = scaleAfterCaps;
@@ -5429,6 +5528,13 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       );
       reasons.push('assistFloor');
     }
+    scaleAfterCaps = boundMultiplier(
+      'scale_after_caps',
+      scaleAfterCaps,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_PRECLAMP_SCALE_MAX,
+      'scaleAfterCaps',
+    );
 
     const minScale = HYBRID_CTRL_MIN_MULT;
     const maxClampScale = Math.max(maxScale, minScale);
@@ -5443,6 +5549,20 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       const inPxps = baseWithCorrection * scaleAfterCaps;
       const maxAllowedPxps = baseWithCorrection * maxClampScale;
       const outPxps = baseWithCorrection * finalScale;
+      let maxClampReasonTag = 'maxClamp';
+      if (assistEligible && scaleAfterCaps > scaleAfterBrake + 0.001) {
+        maxClampReasonTag = 'assistFloor';
+      } else if (reactiveScale >= HYBRID_CTRL_REACTIVE_MULT_MAX - 0.001) {
+        maxClampReasonTag = 'reactiveScaleCap';
+      } else if (policyMult >= HYBRID_CTRL_POLICY_MULT_MAX - 0.001) {
+        maxClampReasonTag = 'policyMultCap';
+      } else if (ctrlMultApplied >= HYBRID_CTRL_CTRL_MULT_MAX - 0.001) {
+        maxClampReasonTag = 'ctrlMultCap';
+      } else if (Math.abs(maxAllowedPxps - dynamicMaxAbsMinPxps) <= 0.5) {
+        maxClampReasonTag = 'dynamicAbsMinCeiling';
+      } else if (dynamicMaxAllowedPxps >= baseWithCorrection * dynamicMaxMult - 0.5) {
+        maxClampReasonTag = 'dynamicMultCeiling';
+      }
       traceClampStage(
         'max_clamp',
         inPxps,
@@ -5451,7 +5571,8 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         {
           maxClampScale: Number(maxClampScale.toFixed(3)),
           maxAllowedPxps: Number(maxAllowedPxps.toFixed(2)),
-          reasonTag: 'maxClamp',
+          inScale: Number(scaleAfterCaps.toFixed(3)),
+          reasonTag: maxClampReasonTag,
         },
       );
     } else if (!clampOverride && scaleLimitedToMax < minScale) {

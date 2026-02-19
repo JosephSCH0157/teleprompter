@@ -167,6 +167,8 @@ In `scrollMode='hybrid'`:
 - When speech activity is present but blocks are not yet ready (`backendReady && !blocksReady && speechHeardRecently`), Hybrid must enter a temporary blocks-not-ready hold lane.
 - In that hold lane, no-match/off-script degradation is diagnostic-only (no hard off-script decay or hard-no-match gating), and velocity should remain in stable fallback/recovery behavior until blocks become ready.
 - Hybrid speed setting unit is WPM (`wpmTarget` / `tp_baseline_wpm`); Hybrid base px/s is derived via runtime WPM conversion (`convertWpmToPxPerSec`), and timed/auto px/s is fallback seed only when no valid WPM source is available.
+- Hybrid pre-clamp velocity math must apply finite guards and bounded per-multiplier caps (reactive/policy/assist/correction factors) before composition; capped/non-finite multipliers are dev-traced for root-cause attribution.
+- Hybrid max velocity ceiling must be dynamic (`max(basePxps * K, ABS_MIN)` with policy-dependent `K`), so `max_clamp` remains a spike guard rather than the dominant steady-state limiter.
 - Hybrid speech-presence ownership is activity-driven (recognizer/VAD traffic), not semantic match-driven (`noMatch`/low-sim must not be interpreted as silence).
 - Hybrid speech-presence uses a cadence-safe hysteresis hold (short post-activity window) so brief gaps between words do not flip to silence.
 - `tp:asr:silence` is structural telemetry and must not force immediate Hybrid pause/stop on receipt; pause/stop is grace-window/timer driven.
