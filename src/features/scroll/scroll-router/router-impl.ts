@@ -2642,6 +2642,7 @@ let hybridTargetHintState:
       lineIndex?: number | null;
     }
   | null = null;
+let speechActive = false;
 
 // --- Hybrid commit boost window ---------------------------------------------
 let hybridCommitBoostUntilMs = 0;
@@ -3484,7 +3485,6 @@ function installScrollRouter(opts) {
   let dbGate = false;
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
-  let speechActive = false;
   let hardNoMatchSinceMs = 0;
   let lastHybridPolicyLogAt = 0;
   let sessionIntentOn = false;
@@ -5440,12 +5440,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     if (scaleAfterCaps > maxClampScale) {
       finalScale = maxClampScale;
       clampReason = 'maxClamp';
+      const inPxps = baseWithCorrection * scaleAfterCaps;
+      const maxAllowedPxps = baseWithCorrection * maxClampScale;
+      const outPxps = baseWithCorrection * finalScale;
       traceClampStage(
         'max_clamp',
-        baseWithCorrection * scaleAfterCaps,
-        baseWithCorrection * finalScale,
+        inPxps,
+        outPxps,
         'maxClamp',
-        { maxClampScale: Number(maxClampScale.toFixed(3)) },
+        {
+          maxClampScale: Number(maxClampScale.toFixed(3)),
+          maxAllowedPxps: Number(maxAllowedPxps.toFixed(2)),
+          reasonTag: 'maxClamp',
+        },
       );
     } else if (!clampOverride && scaleLimitedToMax < minScale) {
       finalScale = minScale;
