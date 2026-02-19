@@ -5439,11 +5439,15 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     } else {
       reasons.push('deadband');
     }
+    const reactiveScaleCap = Math.min(
+      HYBRID_CTRL_REACTIVE_MULT_MAX,
+      Math.max(HYBRID_CTRL_POLICY_MULT_MIN, maxScale),
+    );
     reactiveScale = boundMultiplier(
       'reactive_scale',
       reactiveScale,
       HYBRID_CTRL_POLICY_MULT_MIN,
-      HYBRID_CTRL_REACTIVE_MULT_MAX,
+      reactiveScaleCap,
       'reactiveScale',
     );
 
