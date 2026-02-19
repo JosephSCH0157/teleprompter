@@ -800,6 +800,26 @@ function getHybridSpeedSettingRaw(): number | null {
   return null;
 }
 
+function getHybridWpmCalibrationMultiplier(): number {
+  let raw: number | null = null;
+  try {
+    const overrideRaw = Number((window as any).__TP_HYBRID_WPM_CAL_MULT);
+    if (Number.isFinite(overrideRaw) && overrideRaw > 0) {
+      raw = overrideRaw;
+    }
+  } catch {}
+  if (raw == null) {
+    try {
+      const storedRaw = Number(localStorage.getItem('tp_hybrid_wpm_cal_mult'));
+      if (Number.isFinite(storedRaw) && storedRaw > 0) {
+        raw = storedRaw;
+      }
+    } catch {}
+  }
+  const resolved = raw ?? HYBRID_WPM_CAL_MULT_DEFAULT;
+  return Math.max(HYBRID_WPM_CAL_MULT_MIN, Math.min(HYBRID_WPM_CAL_MULT_MAX, resolved));
+}
+
 type HybridEligibility = { eligible: boolean; reason: string };
 
 function evaluateHybridEligibility(now = nowMs()): HybridEligibility {
@@ -1939,30 +1959,39 @@ function convertWpmToPxPerSec(targetWpm: number) {
     const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
     const lineHeightPx = fsPx * lhScale;
     const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-    const pxPerSec = (targetWpm / 60 / wpl) * lineHeightPx;
+    const basePxpsRaw = (targetWpm / 60 / wpl) * lineHeightPx;
+    const mode = getScrollMode();
+    const hybridWpmCalMult = mode === 'hybrid' ? getHybridWpmCalibrationMultiplier() : 1;
+    const pxPerSec = basePxpsRaw * hybridWpmCalMult;
     logHybridTrace(
       'base_speed_compute',
       {
         speedRaw: targetWpm,
         unit: 'wpm',
+        mode,
         wpm: targetWpm,
         wpl,
         lineHeightPx: Number(lineHeightPx.toFixed(2)),
+        basePxpsRaw: Number(basePxpsRaw.toFixed(2)),
+        hybridWpmCalMult: Number(hybridWpmCalMult.toFixed(3)),
         basePxps: Number(pxPerSec.toFixed(2)),
       },
       {
         throttleMs: 100,
-        signature: `${Number(targetWpm).toFixed(2)}|${Number(wpl).toFixed(2)}|${Number(lineHeightPx).toFixed(2)}|${Number(pxPerSec).toFixed(2)}`,
+        signature: `${mode}|${Number(targetWpm).toFixed(2)}|${Number(wpl).toFixed(2)}|${Number(lineHeightPx).toFixed(2)}|${Number(hybridWpmCalMult).toFixed(3)}|${Number(pxPerSec).toFixed(2)}`,
       },
     );
     try {
       console.info(
         `[WPM_CONVERT] ${JSON.stringify({
           targetWpm,
+          mode,
           fsPx,
           lhScale,
           lineHeightPx,
           wpl,
+          basePxpsRaw,
+          hybridWpmCalMult,
           pxPerSec,
         })}`,
       );
@@ -2336,6 +2365,9 @@ const PAUSE_LOOKAHEAD_LINES = 10;
 const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
 const GRACE_MIN_SCALE = 0.9;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
+const HYBRID_WPM_CAL_MULT_DEFAULT = 2.5;
+const HYBRID_WPM_CAL_MULT_MIN = 0.25;
+const HYBRID_WPM_CAL_MULT_MAX = 8;
 const HYBRID_ASSIST_CAP_FRAC = 0.35;
 const HYBRID_EVENT_TTL_MIN = 20;
 const HYBRID_EVENT_TTL_MAX = 2000;
