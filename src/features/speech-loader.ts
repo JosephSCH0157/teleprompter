@@ -1175,6 +1175,8 @@ function logTranscriptEmitDebug(payload: TranscriptPayload): void {
       ? Number(Number(topLevelBestSimRaw).toFixed(4))
       : null;
     const matchReason = typeof matchObj?.reason === 'string' ? matchObj.reason : null;
+    const matchVia = typeof matchObj?.via === 'string' ? matchObj.via : null;
+    const matchFallbackUsed = matchObj?.fallbackUsed === true;
     const blockSnapshot = getAsrBlockSnapshot();
     const scriptHash = (() => {
       try {
@@ -1192,6 +1194,8 @@ function logTranscriptEmitDebug(payload: TranscriptPayload): void {
       matchBestIdx,
       matchBestSim,
       matchReason,
+      matchVia,
+      matchFallbackUsed,
       topLevelBestIdx,
       topLevelBestSim,
       scriptHash,
@@ -1651,6 +1655,20 @@ function normalizeMatcherResult(input: unknown): Record<string, unknown> | null 
   return normalized;
 }
 
+function tagMatchResult(
+  result: Record<string, unknown> | null,
+  via: 'backend' | 'backend_stub' | 'local_fallback',
+): Record<string, unknown> | null {
+  if (!result) return null;
+  if (typeof result.via !== 'string' || !String(result.via)) {
+    result.via = via;
+  }
+  if (via === 'local_fallback') {
+    result.fallbackUsed = true;
+  }
+  return result;
+}
+
 function deriveDirectMatcherResult(
   transcript: string,
   speechStoreState?: any,
@@ -1658,10 +1676,17 @@ function deriveDirectMatcherResult(
   if (typeof window === 'undefined') return null;
   const spokenTokens = normTokens(String(transcript || ''));
   if (!spokenTokens.length) return null;
+  const blockSnapshot = getAsrBlockSnapshot();
+  if (!(blockSnapshot.ready && blockSnapshot.count > 0)) {
+    return null;
+  }
   const w = window as any;
   const scriptWords: string[] = Array.isArray(w.scriptWords) ? w.scriptWords : [];
   const paraIndex: Array<any> = Array.isArray(w.paraIndex) ? w.paraIndex : [];
   const vParaIndex: string[] | null = Array.isArray(w.__vParaIndex) ? w.__vParaIndex : null;
+  if (!scriptWords.length) {
+    return null;
+  }
   if (!paraIndex.length && !(Array.isArray(vParaIndex) && vParaIndex.length)) {
     return null;
   }
@@ -1695,7 +1720,7 @@ function deriveDirectMatcherResult(
     if (typeof normalized.reason !== 'string' || !normalized.reason) {
       normalized.reason = 'direct_matcher';
     }
-    return normalized;
+    return tagMatchResult(normalized, 'local_fallback');
   } catch {
     return null;
   }
@@ -1721,20 +1746,20 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
     try {
       const matchOne = speechNs?.matchOne;
       if (typeof matchOne === 'function') {
-        const result = normalizeMatcherResult(matchOne(transcript, finalFlag));
+        const result = tagMatchResult(normalizeMatcherResult(matchOne(transcript, finalFlag)), 'backend');
         if (result) {
           if (!isMatcherUnavailable(result)) return result;
-          unavailableResult = result;
+          unavailableResult = tagMatchResult(result, 'backend_stub');
         }
       }
     } catch {}
     try {
       const matchBatchFn = speechNs?.matchBatch;
       if (typeof matchBatchFn === 'function') {
-        const result = normalizeMatcherResult(matchBatchFn(transcript, finalFlag));
+        const result = tagMatchResult(normalizeMatcherResult(matchBatchFn(transcript, finalFlag)), 'backend');
         if (result) {
           if (!isMatcherUnavailable(result)) return result;
-          unavailableResult = result;
+          unavailableResult = tagMatchResult(result, 'backend_stub');
         }
       }
     } catch {}
