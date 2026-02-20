@@ -57,6 +57,31 @@
   status = 200
 
 [[redirects]]
+  from = "/sitemap"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/sitemap/"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/sitemap_index.xml"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/sitemap-index.xml"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/wp-sitemap.xml"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
   from = "/rss"
   to = "/atom.xml"
   status = 200
@@ -69,6 +94,46 @@
 [[redirects]]
   from = "/feed.xml"
   to = "/atom.xml"
+  status = 200
+
+[[redirects]]
+  from = "/feed"
+  to = "/atom.xml"
+  status = 200
+
+[[redirects]]
+  from = "/feed/"
+  to = "/atom.xml"
+  status = 200
+
+[[redirects]]
+  from = "/favicon.ico"
+  to = "/assets/anvil-favicon.png"
+  status = 200
+
+[[redirects]]
+  from = "/apple-touch-icon.png"
+  to = "/assets/anvil-favicon.png"
+  status = 200
+
+[[redirects]]
+  from = "/apple-touch-icon-precomposed.png"
+  to = "/assets/anvil-favicon.png"
+  status = 200
+
+[[redirects]]
+  from = "/manifest.webmanifest"
+  to = "/site.webmanifest"
+  status = 200
+
+[[redirects]]
+  from = "/robots"
+  to = "/robots.txt"
+  status = 200
+
+[[redirects]]
+  from = "/.well-known/security.txt"
+  to = "/security.txt"
   status = 200
 
 # If you ever add SPA routes later, keep this OFF for now unless you need it.

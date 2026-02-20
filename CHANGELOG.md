@@ -1,4 +1,12 @@
 # Teleprompter Pro — Changelog
+## [1.8.5] - 2026-02-20
+
+Release: v1.8.5
+
+### Changed
+
+- Version metadata bump for merge prep (`package.json`, `package-lock.json`, `VERSION.txt`, `README.md`, `MANIFEST.md`, and UI version headers/badges).
+
 ## [1.8.2] - 2026-02-06
 
 Release: v1.8.2

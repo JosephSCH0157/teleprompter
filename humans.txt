@@ -1,0 +1,8 @@
+/* TEAM */
+Product: Podcaster's Forge
+Primary Product: Anvil Teleprompter
+Contact: support@podcastersforge.com
+Site: https://podcastersforge.com/
+
+/* THANKS */
+Creators, testers, and the podcast community.

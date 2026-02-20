@@ -5,7 +5,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>Anvil v1.8.2</title>
+  <title>Anvil v1.8.5</title>
 
   <!-- Prefer color-scheme-aware theme colors; drop deprecated msapplication-navbutton-color -->
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f19" />
@@ -20,19 +20,21 @@
   <meta name="color-scheme" content="dark light" />
 
   <!-- Canonical helps SEO (avoid /index.html vs /) -->
-  <link rel="canonical" href="https://example.com/teleprompter/" />
+  <link rel="canonical" href="https://podcastersforge.com/" />
 
   <script>
     // BOOTSTRAP ONLY
-    try { window.APP_VERSION = '1.8.2'; window.__TP_TS_MODE = true; window.__TP_TS_OVERLAYS = true; } catch (err) { /* no-op */ }
+    try { window.APP_VERSION = '1.8.5'; window.__TP_TS_MODE = true; window.__TP_TS_OVERLAYS = true; } catch (err) { /* no-op */ }
     try { window.__TP_TS_OVERLAYS = true; } catch {}
   </script>
 
   <!-- Favicons -->
   <!-- Site icon (PNG). Place the provided anvil/mic image at assets/anvil-favicon.png -->
+  <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="512x512" href="assets/anvil-favicon.png">
   <!-- iOS home screen icon (falls back to same PNG) -->
   <link rel="apple-touch-icon" href="assets/anvil-favicon.png">
+  <link rel="manifest" href="/site.webmanifest">
 
   <!-- Resource Hints (warm up WS host + any assets host; keep http for dev) -->
   <!-- OBS preconnect removed to avoid stale IPs; configure via Settings -->
@@ -384,7 +386,7 @@
 <div id="tp_toast_container" class="tp-toast-container"></div>
 <div class="topbar">
   <strong>Anvil - Teleprompter</strong>
-    <span id="appVersion" class="version-badge" aria-label="App version">v1.8.2</span>
+    <span id="appVersion" class="version-badge" aria-label="App version">v1.8.5</span>
   <span class="chip" id="saveChip">Draft: -</span>
   <span class="chip" id="permChip" data-tp-mic-pill>Mic: unknown</span>
   <span class="chip" id="asrCalChip" data-tp-asr-cal-chip aria-live="polite" aria-atomic="true">ASR: No calibration</span>

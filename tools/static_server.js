@@ -42,11 +42,30 @@ function contentType(p) {
   if (p.endsWith('.js')) return 'application/javascript; charset=utf-8';
   if (p.endsWith('.css')) return 'text/css; charset=utf-8';
   if (p.endsWith('.json')) return 'application/json; charset=utf-8';
+  if (p.endsWith('.webmanifest')) return 'application/manifest+json; charset=utf-8';
+  if (p.endsWith('.xml')) return 'application/xml; charset=utf-8';
+  if (p.endsWith('.txt')) return 'text/plain; charset=utf-8';
+  if (p.endsWith('.ico')) return 'image/x-icon';
   if (p.endsWith('.png')) return 'image/png';
   if (p.endsWith('.jpg') || p.endsWith('.jpeg')) return 'image/jpeg';
   if (p.endsWith('.svg')) return 'image/svg+xml';
   return 'application/octet-stream';
 }
+
+const BOT_PATH_ALIASES = new Map([
+  ['/robots', '/robots.txt'],
+  ['/sitemap', '/sitemap.xml'],
+  ['/sitemap/', '/sitemap.xml'],
+  ['/favicon.ico', '/assets/anvil-favicon.png'],
+  ['/apple-touch-icon.png', '/assets/anvil-favicon.png'],
+  ['/apple-touch-icon-precomposed.png', '/assets/anvil-favicon.png'],
+  ['/manifest.webmanifest', '/site.webmanifest'],
+  ['/sitemap_index.xml', '/sitemap.xml'],
+  ['/sitemap-index.xml', '/sitemap.xml'],
+  ['/wp-sitemap.xml', '/sitemap.xml'],
+  ['/feed', '/atom.xml'],
+  ['/feed/', '/atom.xml'],
+]);
 
 const { createDisplayRelay } = (() => {
   try {
@@ -150,7 +169,8 @@ function getLanHostCandidate() {
 
 const server = http.createServer((req, res) => {
   try {
-    const basePath = (req.url || '/').split('?')[0];
+    const rawPath = (req.url || '/').split('?')[0];
+    const basePath = BOT_PATH_ALIASES.get(String(rawPath || '').toLowerCase()) || rawPath;
     if (basePath === '/display/host') {
       sendJson(res, 200, { host: getLanHostCandidate() });
       return;
