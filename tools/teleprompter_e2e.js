@@ -91,6 +91,13 @@ async function main() {
       return want ? lacks : !lacks;
     }, { timeout }, { sel, cls, want });
   }
+  async function waitMs(pageRef, ms) {
+    if (pageRef && typeof pageRef.waitForTimeout === 'function') {
+      await pageRef.waitForTimeout(ms);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, ms));
+  }
   async function waitAttr(sel, name, value, timeout = 1200) {
     const offAt = Date.now() + timeout;
     while (Date.now() < offAt) {
@@ -98,7 +105,7 @@ async function main() {
         const v = await page.evaluate((s, n) => document.querySelector(s)?.getAttribute(n) || '', sel, name);
         if (v === value) return true;
       } catch {}
-      await page.waitForTimeout(50);
+      await waitMs(page, 50);
     }
     return false;
   }
@@ -236,7 +243,7 @@ async function main() {
         } catch {}
       }).catch(() => {});
     });
-    await pageRef.waitForTimeout(200);
+    await waitMs(pageRef, 200);
 
     await pageRef.evaluate((key) => {
       let el = null;
@@ -256,7 +263,7 @@ async function main() {
       }
       try { el.appendChild(spacer); } catch {}
     }, scrollerKey);
-    await pageRef.waitForTimeout(100);
+    await waitMs(pageRef, 100);
 
     const beforeState = await pageRef.evaluate(readScrollState, scrollerKey);
     const before = Number(beforeState?.scrollTop || 0);
@@ -350,7 +357,7 @@ async function main() {
       }
     });
 
-    await pageRef.waitForTimeout(3000);
+    await waitMs(pageRef, 3000);
 
     const afterState = await pageRef.evaluate(readScrollState, scrollerKey);
     const after = Number(afterState?.scrollTop || 0);
@@ -514,7 +521,7 @@ async function main() {
     }, { timeout: 15000 });
 
     const beforeNoCommit = await pageRef.evaluate(readScrollState, scrollerKey);
-    await pageRef.waitForTimeout(2600);
+    await waitMs(pageRef, 2600);
     const afterNoCommit = await pageRef.evaluate(readScrollState, scrollerKey);
 
     if (Number(afterNoCommit?.scrollTop || 0) > Number(beforeNoCommit?.scrollTop || 0) + 3) {
