@@ -4,8 +4,9 @@
 User-agent: *
 Disallow: /beta/
 Disallow: /.netlify/
-Disallow: /.well-known/
 Disallow: /tools/
+Disallow: /.well-known/
+Allow: /.well-known/security.txt
 Allow: /
 
 # Block common AI / training / bulk scrapers (best-effort)
@@ -48,4 +49,5 @@ Disallow: /
 User-agent: DotBot
 Disallow: /
 
-Sitemap: /sitemap.xml
+Sitemap: https://podcastersforge.com/sitemap.xml
+Sitemap: https://podcastersforge.com/sitemaps.xml
