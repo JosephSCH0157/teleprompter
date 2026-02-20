@@ -57,6 +57,16 @@
   status = 200
 
 [[redirects]]
+  from = "/sitemap"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
+  from = "/sitemap/"
+  to = "/sitemap.xml"
+  status = 200
+
+[[redirects]]
   from = "/sitemap_index.xml"
   to = "/sitemap.xml"
   status = 200
@@ -114,6 +124,11 @@
 [[redirects]]
   from = "/manifest.webmanifest"
   to = "/site.webmanifest"
+  status = 200
+
+[[redirects]]
+  from = "/robots"
+  to = "/robots.txt"
   status = 200
 
 [[redirects]]
