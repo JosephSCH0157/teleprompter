@@ -1,5 +1,5 @@
 # Anvil Manifest (SSOT Map)
-Version: v1.8.2 (2026-02-12)
+Version: v1.8.9 (2026-02-19)
 
 This is the canonical manifest for Anvil's runtime architecture.
 Purpose: **one map, one truth** -- where state lives, who owns it, and which modules are allowed to publish globals.
@@ -59,16 +59,26 @@ Everything else (`auto`, `off`, `manual`) is a UI/legacy convenience state, not 
 In `scrollMode='asr'`:
 - Must not wire auto-intent listeners.
 - Must not start timed/hybrid/wpm motors.
+- Hybrid velocity refresh/apply paths must gate on effective SSOT mode (`scrollMode`) each tick; stale local router mode must never allow hybrid velocity math or motor activity while ASR is active.
 - Router auto-intent motor normalization is motorless in ASR: requested motor kinds are `auto|hybrid` only, and ASR gate blocking reason must remain `blocked:mode-asr-motorless` (no `asr` motor lane).
 - Must not use preroll to trigger any scrolling.
 - `session.scrollAutoOnLive` must not gate ASR startup/attach decisions.
 - ASR driver attach/readiness is independent from movement arming: mode selection with script blocks present should attach/create driver + ingest path before live.
 - `session.asrArmed` gates ASR movement permission only (commit may process bookkeeping while unarmed, but must not write scroll).
 - Must only move on ASR commit (`tp:asr:commit` or canonical equivalent).
+- ASR movement authority is single-lane: `speech-loader -> asr-scroll-driver` commit path owns movement in ASR mode.
+- Runtime auto-motor authority is single-lane: `scroll-router` owns `__tpAuto` enablement; ASR bridge helpers must not toggle auto enablement.
+- Legacy namespace recognizer backend (`window.__tpSpeech.startRecognizer`) is compatibility-only and opt-in (`window.__tpAllowLegacySpeechNamespace === true` or `?legacySpeechNs=1`).
+- Legacy `window.__tpAsrMode` runtime is compatibility-only and opt-in (`window.__tpAllowLegacyAsrMode === true` or `?legacyAsrMode=1`); default runtime must use speech-loader shim ownership.
+- Legacy ASR intent lane (`AsrMode` -> `tp:scroll:intent`) is compatibility-only and must not drive movement unless explicitly dev-overridden.
 - Must prefer `ScrollWriter.seekToBlockAnimated()` (writer-first) only when line-addressable commit anchors are present in meaningful quantity.
 - ASR commit movement is conditionally writer-first (`seekToBlockAnimated(...)`) with commit-target refinement: writer resolves block mapping first when the DOM is line-addressable; otherwise ASR must use the non-writer targetTop path (no free-running motor lane).
+- Pixel commit path is debug-only (`asr_pixel` / explicit override); dev mode must not implicitly force pixel commits.
 - After a successful ASR commit seek, run a post-commit readability guarantee: keep the active line near the marker band (not pinned at top) while preserving forward readable lines (minimum lookahead target) so commits remain readable without jumping ahead.
-- Post-commit readability nudges must preserve a marker-centered active-line band and may not push the active line above that band solely to satisfy lookahead.
+- Post-commit readability nudges must preserve a tight marker-centered active-line band (with responsive same-line recenter cadence), should prioritize restoring forward readable lookahead when it is clipped, and may not push the active line above that band solely to satisfy lookahead.
+- Post-commit readability must prioritize immediate continuity: when the next speakable line approaches clipping below the viewport (small guard margin), nudge to reveal it before deeper lookahead targets.
+- Post-commit readability nudge is bounded to roughly one line of forward movement per commit settle pass, preventing readability stacking from overshooting unspoken content.
+- Same-line recenter guard is proximity-only: `same_line_noop` applies only when marker delta is already near target; large same-line marker deltas must continue through bounded recenter/creep attempts (no hard noop veto).
 - Live ASR transport may force interim capture for responsiveness; movement remains commit-gated and thresholds still arbitrate advancement.
 - Forward-evidence gating must not block strong small-delta forward/same matches (`delta>=0` within relaxed-small window) when similarity is at or above required threshold.
 - Forward scan must evaluate speakable multi-line windows (next-line to small joined windows) instead of single-line-only probes so natural 2-4 line utterances can advance.
@@ -86,6 +96,7 @@ In `scrollMode='asr'`:
 - After forward/forced commit movement, reseed the forward match band around the committed index (small back tolerance + forward window) so stale pre-commit windows cannot trigger immediate `match_out_of_band` lockout.
 - If out-of-band guard blocks a candidate, it must be non-destructive (no evidence-buffer clear and no backward reseed/poisoning side effects); continue listening for in-band forward evidence.
 - Add a stuck watchdog fail-safe: in live armed ASR sessions, if commit count does not change for the watchdog window while transcript traffic continues (finals, or sustained interim bursts in long-endpoint sessions), attempt a bounded forward recovery commit from the forward scan at a low floor.
+- Watchdog recovery commit clamp is explicitly bounded: weak-confidence watchdog recovery may raise commit clamp only to a small cap (default `+2` lines), not an unbounded jump.
 - Watchdog forward recovery must be suppressed when a strong behind competitor is present (`idx<cursor` and `sim>=max(strongBackSim, requiredThreshold)`), so stale/lagging speech fragments cannot force a forward recovery commit.
 - When watchdog selects a forward recovery candidate in a growing interim stream, treat that candidate as forward-progress evidence: do not let `interim_unstable` re-block it, and carry watchdog floor into low-sim arbitration for that recovery attempt.
 - Add a progressive forward continuity floor for live armed ASR: after the first forward commit, when transcript evidence is still growing and best candidate is at/forward of cursor with no strong behind competitor, allow bounded forward continuity at a low floor (default `sim>=0.20`) without lowering global thresholds.
@@ -93,11 +104,22 @@ In `scrollMode='asr'`:
 - Same-line nudge/confirmation paths must apply a cue-boundary bridge: when immediate forward lines are skippable (`blank` or cue-only), allow advancing to the first speakable line within `+3` before declaring same-line/noop.
 - Cue-boundary bridge progression for multi-line advancement requires an actual bridge (`>=1` skipped skippable line). Same-line final confirmation may plain-advance only `+1` to the adjacent speakable line when confidence is strong (`sim>=0.82`); otherwise plain advancement without a bridge is disallowed.
 - Same-line strong-final plain `+1` nudge may bypass short-line ambiguity HOLD only when current-line lexical overlap is strong (high token hit count and ratio), with no bridge skip and adjacent speakable target only.
+- Same-line final forward promotion is commit-priority, not recenter-priority: bounded speakable advance may proceed even when current-line marker delta is outside recenter-near band, as long as commit clamps/floors are satisfied.
+- Strict matcher lane may apply a bounded final-forward fallback (`forceReason='final-forward-fallback'`) when same-line final confidence/overlap are strong but no forward pick survived nudge arbitration; fallback target remains cue-bridge bounded and speakable.
 - Dev tuning may run a permissive matcher lane (enabled by `__tpAsrPermissiveMatcher` / `asr_matcher=permissive`, default-on in dev): tie/low-sim/ambiguity guards log diagnostics but should not hard-stop forward commit selection.
+- In permissive matcher lane, same-line final completions may promote to bounded `+1` speakable advance (`forceReason='permissive-final-advance'`) and pending commit gating must honor that bypass at progressive floor.
+- Permissive same-line final forward promotion requires lexical overlap and marker-position consistency: bounded advance may proceed with meaningful overlap unless cursor has drifted materially ahead of marker; marker-ahead lag scenarios may still permissively advance.
+- Same-line final forward promotions (`final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance`) must propagate into pending gating so low-sim/tie arbitration cannot re-block bounded forward progress in live armed ASR.
+- Same-line final forward promotions that carry a valid cue-bridge delta (`+2..+3`) may raise commit clamp to that bounded cue-bridge cap so clamp does not demote the commit onto a cue-only line and trigger `cue_commit_blocked`.
+- In permissive matcher lane, ambiguity HOLD is diagnostic-only: active hold must not suppress bounded forward final advance when same-line final evidence is strong enough to progress.
 - Cue-boundary bridge widening applies to same-line confirm/nudge flow only; full commit target resolution remains bounded by the normal commit clamp window.
 - When same-line cue bridge selects a forward target, pending commit must carry the same bounded bridge delta (`<=+3`) through clamp arbitration; it must not clamp back to `+1` and re-block on an intermediate cue-only line.
 - Pending commit cue-bridge bypass must be true bridge-only: intermediate skipped lines must all be cue/blank/note/speaker skippable, capped to a small span (`<=2` skipped lines), and target must be speakable.
 - Multi-line cue-bridge commits must satisfy a stronger floor (`sim>=0.45`); low-floor (`~0.20`) bypass is not allowed for multi-line bridge jumps.
+- Bounded same-line final cue-bridge promotions may apply a small multi-jump floor epsilon (`<=0.08`) to prevent float-boundary stalls; this is limited to `final-forward-nudge` / `final-forward-fallback` / `permissive-final-advance` with valid cue-bridge pathing, and does not change the hard deny floor (`sim<0.30`).
+- Live armed ASR speech stalls may trigger `tp:asr:rescue`; driver may convert that into a bounded cue-bridge forward commit (`forceReason='stall-rescue'`) only when skipped lines are cue/meta/blank and the target speakable line is within the cue bridge cap (`+3`).
+- Live armed ASR cue-stall auto-rescue is bounded to conservative continuity: when commit progress stalls while transcript traffic continues, auto-stall rescue may only schedule direct content rescue (`+1` line) when both cursor and target are content lines; multi-line cue-bridge rescue remains explicit/manual (`tp:asr:rescue`) only.
+- Stall rescue request latching is schedule-bound: `stallRescueRequested` may arm only when a bounded rescue is actually scheduled; blocked content-line auto-stall probes must clear/leave latch false.
 - Cue-bridge nudge/confirm into speakable content requires strong evidence (`strongSim` or large sim-gap or multi-event stability); low-sim nudges must not bridge content lines.
 - Add progress-based LOST_FORWARD recovery with staged forward ramping: track a no-progress streak per ingest (reset when cursor advances). At streak `>=4`, enter LOST_FORWARD stage 0 (`+10` forward window), then stage 1 (`+25`) and stage 2 (`+60`) if no progress continues; exit/reset immediately on the next forward commit.
 - LOST streaking must not escalate while confidently locked on the current line: when `bestIndex===cursorLine` with healthy lock confidence (`sim>=~0.58`), treat as healthy lock and reset streak/LOST state.
@@ -105,14 +127,20 @@ In `scrollMode='asr'`:
 - Logical starvation recovery must trigger early (before time-based starvation): when `lost_forward_gate` rejects and low-sim arbitration blocks immediate continuation (`delta=0..+1`) for the configured consecutive wall streak (`>=3`), attempt the same bounded forward relock immediately.
 - Add controlled final-continuation leniency: for final transcripts only, when candidate continuity is same-line or immediate-forward (`delta=0..+1`) and similarity is within a tiny epsilon of commit need (`sim >= need - 0.02`), allow continuation pathing instead of low-sim rejection. This must not apply to larger forward jumps.
 - ASR token normalization must canonicalize number forms across script and ASR text: recombine split tens+ones number tokens (for example `60 8 -> 68`) and normalize `%` to `percent` so `68%` and `68 percent` share comparable tokens.
+- ASR line resolution and marker resolution must use indexed script lines only (`data-i|data-index|data-line(-idx)` / `tp-line-*` identity). Positional `.line` NodeList fallback is not allowed for ASR commit/index truth.
 - LOST_FORWARD teleport commits must be gated: long-enough phrase evidence and forward-only cap (`+25` unless deep-lost `+60`), with either (a) anchor-token overlap (numbers/rare tokens) at strong threshold, or (b) competitive read-ahead reseek evidence at lower floor (`sim>=~0.33`) backed by meaningful content-token overlap / earliest in-window overlap.
+- LOST_FORWARD may apply a bounded behind-marker catch-up when marker is ahead of cursor and forward content evidence exists: keep low floor (`sim>=0.20`), default cap progression per commit to `+1`, and allow `+2` only under strong evidence; keep candidate window bounded (`<=+6`).
 - In `low_sim_wait`, allow a bounded micro re-lock preference to `cursor-1` only when the previous line is speakable, in the same block, and clearly stronger (`simPrev >= need` and `simPrev - simCurrent >= margin`), with strict one-line scope and cooldown.
+- In same-line/behind low-sim states, apply a small relaxed threshold lane (bounded slack, still floor-clamped) so stable same-line evidence can continue recenter/progression without waiting for strict full-threshold confidence.
 - `Reset Script` must perform a hard ASR engine reset: stop+abort active recognizers, clear recognizer handlers/references, clear ASR runtime streak/interim state, detach/dispose ASR driver state, and require a fresh recognizer instance on the next start.
-- ASR commit target selection must never land on ignorable cue-only lines (`[pause]`, `[beat]`, blank/meta lines). If a commit target is cue-only, advance only to the next speakable line within the active forward clamp window; if none exists in-window, cancel the commit.
+- ASR commit target selection must never land on ignorable cue-only lines (`[pause]`, `[beat]`, blank/meta lines). If a commit target is cue-only, first advance to the next speakable line within the active forward clamp window; if none exists there, run a bounded cue-bridge scan from cursor (`+3`) and use that speakable target; only block commit when both fail.
 - Marker-derived ASR anchor block resolution must be cue-safe: if `computeMarkerLineIndex()` lands on an ignorable cue/meta/blank line, probe only within the bounded cue-bridge window (`+3`) for the next speakable line; if none exists, ignore marker anchoring and fall back to committed/corpus anchors.
 - Marker-based consistency gating (`nearMarker`) must use the same cue-safe marker index; when the marker lands on cue/meta/blank content and no speakable line exists within the bounded probe window (`+3`), disable near-marker rejection for that sample rather than rejecting forward spoken matches against a cue marker.
+- ASR writer-first commit eligibility is based on commit block mapping + line addressability; `__tpScrollWrite` bridge presence alone must not demote ASR commits to pixel fallback when `seekToBlockAnimated(...)` can execute.
+- ASR writer commits use a single-authority commit window: while writer glide/seek is active, writer is the only scroll authority and helper paths (readability nudge, truth-correction `scrollIntoView`, rollback helpers) are advisory/no-write; after writer release (`seek inactive` + safety window), run one deferred readability pass, then one truth check/correction pass; if mismatch persists, emit `scroll_desync` and enter bounded resync without advancing commit cursor state.
+- Commit settle in ASR is monotonic forward with bounded ahead tolerance: deferred readability and truth correction may move forward, but backward correction is skipped only for small ahead-of-target settle deltas (about one line). Larger ahead landings must be corrected back to prevent active-line off-screen drift.
 - Too-short interim fragments are noise-gated before matcher arbitration (default `<3` tokens and `<12` normalized chars): they must not run matcher arbitration or perturb forward-evidence/band state.
-- Commit-time safety clamp: before ASR writer/pixel commit finalization, bound forward index delta for all commits. If forward delta exceeds the clamp window (default `+1` line), allow the full jump only when confidence is strong (default `sim>=0.82`); otherwise clamp and emit a dev `ASR_CLAMP` line.
+- Commit-time safety clamp: before ASR writer/pixel commit finalization, bound forward index delta for all commits. Baseline clamp is `+1` line; force-qualified bounded paths (cue-bridge / lost-forward / hold-anchor / watchdog-recovery) may raise only to their capped windows. Outside those capped paths, allow full jump only when confidence is strong (default `sim>=0.82`); otherwise clamp and emit a dev `ASR_CLAMP` line.
 - Commit-time hard deny: any forward commit jump beyond `+1` line must satisfy multi-jump confidence floor (`sim>=0.45`), with a hard deny floor (`sim<0.30`) that never permits multi-line commit.
 - Ambiguity arbitration is hold-first: when near-line candidates are low-confidence, near-tied, or low-information weak matches, enter HOLD (no commit), keep ingesting, and only exit on resolved confidence or strong forward anchor relock.
 - Short-line ambiguity rule: when best candidate line is short (`<=7` content tokens), runner-up is nearby (`±1..2`) with a small sim gap (`<=0.08`), and confidence is weak/moderate, enter HOLD immediately (no commit, no cue-bridge) when overlap is sparse (`<=2`) or best/runner-up are near-duplicate in structure (shared start/end tokens or same-shape high-prefix match).
@@ -121,7 +149,8 @@ In `scrollMode='asr'`:
 - HOLD anchor rescue must stay bounded and strong: while HOLD is active, scan only the bounded forward window (`+8` lines) and relock only on long anchor evidence (long content line, strong similarity, meaningful shared content, and margin over runner-up).
 - LOST_FORWARD rescue must de-prioritize adjacent short-line tie pockets (`±1..2` short candidates with near-tied scores) and prefer bounded strong long-anchor relock when present.
 - AUTO_INTENT `reason='scriptEnd'` must never terminate live armed ASR sessions; router must ignore that stop-intent in `mode='asr' && phase='live' && session.asrArmed=true`.
-- Post-commit grace rollback is one-shot and bounded: within a short post-commit window, if `cursor-1` is decisively stronger than current evidence, allow a single one-line rollback correction and apply cooldown to prevent backstep oscillation.
+- End-of-script completion in live armed ASR is explicit and confirmation-gated: when commit lands on the last speakable line, driver emits one-shot `tp:asr:script-end` (arm). Runtime transitions session to `wrap` only after final transcript confirmation (route line at/after last speakable or last-line token overlap evidence), then dispatches session-intent stop (`active=false`) plus `tp:session:stop` to prevent EOF stall/restart loops and premature tail cutoff.
+- Post-commit grace rollback is one-shot, bounded, and final-only: within a short post-commit window, if `cursor-1` is decisively stronger than current final evidence, allow a single one-line rollback correction and apply cooldown to prevent backstep oscillation.
 - Same-line final confirmations must prefer the bounded nudge path over forced outrun escalation: when final best match equals cursor with sufficient confidence, suppress forced outrun arbitration and let nudge/select-forward logic decide the next line.
 - Scroll-event brake classification must treat recent ASR/writer programmatic scroll writes as `programmatic-writer` and must not emit `manual-scroll` brake reasons for those writes.
 - ASR guard profile defaults are relaxed for forward continuity: shorter same-line throttle, lower forced-evidence floors, and earlier watchdog recovery with a still-bounded forward window.
@@ -130,6 +159,25 @@ In `scrollMode='asr'`:
 - For short-final utterances inside the recent-forward window, strong forward candidates above floor may satisfy forced-evidence without requiring the general token/char minima.
 - Pixel `driveToLine` is fallback only when writer or block mapping is unavailable.
 - WebSpeech `onend` while ASR session is active must auto-restart recognizer; explicit stop must not auto-restart.
+
+### 1.4 Hybrid Mode Invariants (Matcher Readiness)
+
+In `scrollMode='hybrid'`:
+- Hybrid matcher/runtime readiness must resolve from the same ASR block SSOT used by ASR driver (`asr-block-store` metadata + runtime readiness globals), and diagnostics should include `blocksReady`, `blockCount`, matcher source feed, and current script hash/sig.
+- When speech activity is present but blocks are not yet ready (`backendReady && !blocksReady && speechHeardRecently`), Hybrid must enter a temporary blocks-not-ready hold lane.
+- In that hold lane, no-match/off-script degradation is diagnostic-only (no hard off-script decay or hard-no-match gating), and velocity should remain in stable fallback/recovery behavior until blocks become ready.
+- Hybrid speed setting unit is WPM (`wpmTarget` / `tp_baseline_wpm`); Hybrid base px/s is derived via runtime WPM conversion (`convertWpmToPxPerSec`) with a Hybrid-only calibration multiplier (`HYBRID_WPM_CAL_MULT`, default 2.5; optional override `tp_hybrid_wpm_cal_mult`), and timed/auto px/s is fallback seed only when no valid WPM source is available.
+- Hybrid pre-clamp velocity math must apply finite guards and bounded per-multiplier caps (reactive/policy/assist/correction factors) before composition; capped/non-finite multipliers are dev-traced for root-cause attribution.
+- Hybrid max velocity ceiling must be dynamic (`max(basePxps * K, ABS_MIN)` with policy-dependent `K`), so `max_clamp` remains a spike guard rather than the dominant steady-state limiter.
+- Hybrid speech-presence ownership is activity-driven (recognizer/VAD traffic), not semantic match-driven (`noMatch`/low-sim must not be interpreted as silence).
+- Hybrid speech-presence uses a cadence-safe hysteresis hold (short post-activity window) so brief gaps between words do not flip to silence.
+- `tp:asr:silence` is structural telemetry and must not force immediate Hybrid pause/stop on receipt; pause/stop is grace-window/timer driven.
+- While speech is present, off-script/no-match behavior must run the slow/decay lane (bounded reduced speed) rather than a hard stop.
+- During active speech, sustained hard no-match (`hardNoMatch` beyond a short grace) must activate Hybrid off-script scaling/decay; hard no-match cannot remain semantic-noop.
+- During active speech off-script decay, Hybrid velocity must keep a non-zero floor; hard stop is silence-grace owned only.
+- `tp:asr:guard` is structural commit-suppression telemetry (`commit suppressed`), not semantic off-script truth; Hybrid/router must not map guard events directly to off-script evidence or decay.
+- Matcher-unavailable fallback lanes must be neutral: emit `noMatch=true` with non-candidate index (`bestIdx<0`) and omit similarity (`sim`/`bestSim`) so Hybrid does not treat fallback as low-sim off-script evidence.
+- Catch Up manual action in Hybrid must stay usable even when ASR manual-anchor adopt is pending: pending-adopt hard-block applies to ASR mode only; Hybrid may proceed and can fall back to visual marker index when ASR anchor index is unavailable.
 
 ---
 

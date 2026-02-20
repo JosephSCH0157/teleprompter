@@ -32,13 +32,13 @@ let lastNonFiniteGuardAt = 0;
 const WRITE_MISMATCH_LOG_THROTTLE_MS = 2000;
 const WRITE_MISMATCH_EPSILON_PX = 1;
 const NON_FINITE_GUARD_THROTTLE_MS = 1000;
-const ASR_SEEK_DEFAULT_LINES_PER_SEC = 1;
-const ASR_SEEK_MIN_DURATION_MS = 280;
-const ASR_SEEK_MAX_DURATION_MS = 900;
+const ASR_SEEK_DEFAULT_LINES_PER_SEC = 2.8;
+const ASR_SEEK_MIN_DURATION_MS = 140;
+const ASR_SEEK_MAX_DURATION_MS = 560;
 const ASR_SEEK_EPSILON_PX = 0.5;
 const ASR_SEEK_MIN_PX_PER_SEC = 36;
-const ASR_SEEK_MAX_PX_PER_SEC = 280;
-const ASR_SEEK_MAX_VIEWPORTS_PER_SEC = 0.75;
+const ASR_SEEK_MAX_PX_PER_SEC = 420;
+const ASR_SEEK_MAX_VIEWPORTS_PER_SEC = 1.25;
 
 type SeekAnimationOptions = {
   targetTop?: number | null;
@@ -118,6 +118,14 @@ function markerOffsetPx(fallbackScroller: HTMLElement): number {
   const host = viewer || fallbackScroller;
   const h = host?.clientHeight || window.innerHeight || 0;
   return Math.max(0, Math.round(h * markerPct));
+}
+
+function easeInOutCubic(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
 function getScrollMode(): string {
@@ -242,11 +250,9 @@ function writeScrollTop(scroller: HTMLElement, top: number, reason = 'writeScrol
   const target = Math.max(0, Math.min(rawTop, maxTop));
   const delta = target - from;
   withWriteEnabled(reason, delta, () => {
-    if (typeof scroller.scrollTo === 'function') {
-      scroller.scrollTo({ top: target, behavior: 'auto' });
-    } else {
-      scroller.scrollTop = target;
-    }
+    // Use direct assignment for deterministic writes. `scrollTo({behavior:'auto'})`
+    // can still settle asynchronously in some browser/CSS combinations.
+    scroller.scrollTop = target;
   });
   const after = readScrollTop(scroller);
   logWriteMismatch(scroller, target, from, after, reason);
@@ -497,7 +503,7 @@ export function seekToBlockAnimated(blockIdx: number, reason: string, opts: Seek
     if (cancelled || runId !== activeSeekAnimRunId) return;
     const elapsed = now - start;
     const t = Math.max(0, Math.min(1, elapsed / durationMs));
-    const eased = 1 - Math.pow(1 - t, 3);
+    const eased = easeInOutCubic(t);
     const next = startTop + (targetTop - startTop) * eased;
     writeScrollTop(scroller, next, reason || 'seekToBlockAnimated');
     if (t < 1) {

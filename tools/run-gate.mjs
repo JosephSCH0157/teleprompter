@@ -4,6 +4,7 @@ const steps = [
   ['lint'],
   ['lint:badchars'],
   ['types'],
+  ['test:asr-smoke'],
   ['build:router'],
   ['smoke:strict'],
   ['smoke:rehearsal'],

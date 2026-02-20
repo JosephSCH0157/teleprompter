@@ -242,7 +242,7 @@ export function installGlobalIngestListener() {
       }
 
       // Signals for any legacy listeners
-      try { document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { name, length: text.length } })); } catch {}
+      try { window.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { name, length: text.length } })); } catch {}
       try { window.dispatchEvent(new CustomEvent('tp:script:rendered', { detail: { name, length: text.length } })); } catch {}
     } catch {}
   });

@@ -34,6 +34,13 @@ interface AsrDebugConfig {
 }
 
 const asrDebugState: { config: AsrDebugConfig | null } = { config: null };
+const ASR_DEBUG_NOISY_THROTTLE_MS = 750;
+const ASR_DEBUG_NOISY_LABELS = new Set([
+  '[ASR cfg]',
+  '[ASR event]',
+  '[ASR threshold] (mode-side diagnostic; not driver scorer)',
+]);
+const asrDebugLastAt = new Map<string, number>();
 
 function updateAsrDebugConfig(state: SpeechState): AsrDebugConfig {
   const snapshot: AsrDebugConfig = {
@@ -82,6 +89,14 @@ function isTpDevMode(): boolean {
 
 function logAsrDebug(label: string, data: unknown): void {
   if (!isTpDevMode()) return;
+  const key = String(label || '');
+  const throttleMs = ASR_DEBUG_NOISY_LABELS.has(key) ? ASR_DEBUG_NOISY_THROTTLE_MS : 0;
+  if (throttleMs > 0) {
+    const now = Date.now();
+    const last = asrDebugLastAt.get(key) ?? 0;
+    if (now - last < throttleMs) return;
+    asrDebugLastAt.set(key, now);
+  }
   try { console.log(label, data); } catch {}
 }
 

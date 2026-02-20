@@ -4,7 +4,7 @@ export {};
 import { getScrollWriter, seekToBlockAnimated } from '../../../scroll/scroll-writer';
 import { onScrollIntent } from '../../../scroll/scroll-intent-bus';
 import { getViewportMetrics, computeAnchorLineIndex } from '../../../scroll/scroll-helpers';
-import { getAsrBlockElements } from '../../../scroll/asr-block-store';
+import { getAsrBlockElements, getAsrBlockIndex } from '../../../scroll/asr-block-store';
 import { applyCanonicalScrollTop, getScrollerEl } from '../../../scroll/scroller';
 import {
   DEFAULT_COMPLETION_POLICY,
@@ -135,6 +135,7 @@ let pendingAutoIntentDetail: any | null = null;
 let scrollerEl: HTMLElement | null = null;
 let auto: any | null = null;
 let scrollIntentListenerWired = false;
+let legacyAsrIntentLaneBlockedLogged = false;
 const ASR_INTENT_DEBOUNCE_MS = 450;
 const ASR_INTENT_STABLE_MS = 250;
 const ASR_INTENT_FIRST_STABLE_MS = 600;
@@ -151,10 +152,16 @@ let lastCandidate = -1;
 let stableSince = 0;
 let asrMotorConflictLogged = false;
 let scrollWriteWarned = false;
-let markHybridOffScriptFn: (() => void) | null = null;
 let guardHandlerErrorLogged = false;
 let hybridScrollGraceListenerInstalled = false;
 let hybridModeMismatchLogged = false;
+function shouldBlockLegacyAsrIntentLane(): boolean {
+  try {
+    return (window as any).__tpAllowLegacyAsrIntent !== true;
+  } catch {
+    return true;
+  }
+}
 let recentAsrMatches: Array<{
   ts: number;
   blockIdx: number;
@@ -465,6 +472,8 @@ function recordAsrAccept(
 }
 const hybridSilence = {
   lastSpeechAtMs: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+  lastSpeechActivityAtMs: 0,
+  speechHoldUntilMs: 0,
   pausedBySilence: false,
   timeoutId: null as number | null,
   erroredOnce: false,
@@ -648,10 +657,13 @@ function resolveCurrentBlockIdx(): number | null {
 }
 
 function runHybridVelocity(silence = hybridSilence) {
-  if (state2.mode !== 'hybrid') {
+  const mode = getScrollMode();
+  if (mode !== 'hybrid') {
+    if (state2.mode !== mode) state2.mode = mode;
     assertHybridStoppedIfNotHybrid('runHybridVelocity');
     return;
   }
+  if (state2.mode !== 'hybrid') state2.mode = 'hybrid';
   const target = typeof window !== 'undefined' ? window : globalThis;
   const fn = (target as any).__tpApplyHybridVelocity;
   if (typeof fn === 'function') {
@@ -748,6 +760,64 @@ function computeHybridErrorPx(now = nowMs()) {
 function getSilenceMs(now = nowMs()) {
   const lastSpeech = hybridSilence.lastSpeechAtMs ?? now;
   return Math.max(0, now - lastSpeech);
+}
+
+function getHybridSpeechHoldRemainingMs(now = nowMs()) {
+  const holdUntil = Number(hybridSilence.speechHoldUntilMs);
+  if (!Number.isFinite(holdUntil) || holdUntil <= 0) return 0;
+  return Math.max(0, holdUntil - now);
+}
+
+function isHybridSpeechPresent(now = nowMs()) {
+  if (speechActive) return true;
+  if (getHybridSpeechHoldRemainingMs(now) > 0) return true;
+  if (!(hybridSilence.lastSpeechActivityAtMs > 0)) return false;
+  return Math.max(0, now - hybridSilence.lastSpeechActivityAtMs) <= HYBRID_SPEECH_PRESENT_HOLD_MS;
+}
+
+function markHybridSpeechPresent(now = nowMs()) {
+  hybridSilence.lastSpeechActivityAtMs = now;
+  hybridSilence.speechHoldUntilMs = Math.max(
+    hybridSilence.speechHoldUntilMs || 0,
+    now + HYBRID_SPEECH_PRESENT_HOLD_MS,
+  );
+}
+
+function getHybridSpeedSettingRaw(): number | null {
+  try {
+    const slider = document.getElementById("wpmTarget") as HTMLInputElement | null;
+    const sliderRaw = Number(slider?.value);
+    if (Number.isFinite(sliderRaw) && sliderRaw > 0) return sliderRaw;
+  } catch {}
+  try {
+    const storedRaw = Number(localStorage.getItem("tp_baseline_wpm"));
+    if (Number.isFinite(storedRaw) && storedRaw > 0) return storedRaw;
+  } catch {}
+  try {
+    const storeVal = Number(appStore.get("wpmTarget"));
+    if (Number.isFinite(storeVal) && storeVal > 0) return storeVal;
+  } catch {}
+  return null;
+}
+
+function getHybridWpmCalibrationMultiplier(): number {
+  let raw: number | null = null;
+  try {
+    const overrideRaw = Number((window as any).__TP_HYBRID_WPM_CAL_MULT);
+    if (Number.isFinite(overrideRaw) && overrideRaw > 0) {
+      raw = overrideRaw;
+    }
+  } catch {}
+  if (raw == null) {
+    try {
+      const storedRaw = Number(localStorage.getItem('tp_hybrid_wpm_cal_mult'));
+      if (Number.isFinite(storedRaw) && storedRaw > 0) {
+        raw = storedRaw;
+      }
+    } catch {}
+  }
+  const resolved = raw ?? HYBRID_WPM_CAL_MULT_DEFAULT;
+  return Math.max(HYBRID_WPM_CAL_MULT_MIN, Math.min(HYBRID_WPM_CAL_MULT_MAX, resolved));
 }
 
 type HybridEligibility = { eligible: boolean; reason: string };
@@ -1331,24 +1401,22 @@ export function triggerWireAutoIntentListener(): void {
       try { console.warn('[AUTO_INTENT] TRIGGER step=3 wiring now'); } catch {}
       autoIntentListenerWired = true;
       window.addEventListener('tp:auto:intent', onAutoIntent as EventListener);
-      document.addEventListener('tp:auto:intent', onAutoIntent as EventListener);
     try {
-      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window+document' });
+      console.log(`[AUTO_INTENT] listener wired ${AUTO_INTENT_WIRE_STAMP}`, { target: 'window' });
     } catch {}
     try { console.warn('[AUTO_INTENT] TRIGGER step=4 wired ok'); } catch {}
     try {
       const counts = [
         (getEventListeners?.(window)?.['tp:auto:intent']?.length ?? 'noAPI'),
-        (getEventListeners?.(document)?.['tp:auto:intent']?.length ?? 'noAPI'),
       ];
-      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0], doc: counts[1] });
+      console.warn('[AUTO_INTENT] TRIGGER step=5 post-wire sanity', { win: counts[0] });
     } catch {}
     try {
       window.dispatchEvent(
         new CustomEvent('tp:auto:intent', { detail: { enabled: false, reason: 'wire-selftest' } }),
       );
     } catch {}
-    try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window+document)'); } catch {}
+    try { console.warn('[AUTO_INTENT] TRIGGER wired listeners (window)'); } catch {}
   }
   try {
     console.warn('[AUTO_INTENT] triggerWireAutoIntentListener EXIT', __AUTO_INTENT_WIRE_SENTINEL);
@@ -1686,6 +1754,7 @@ function createAutoMotor() {
 
 const HYBRID_LOG_THROTTLE_MS = 500;
 const HYBRID_VERBOSE_FLAG = 'hybrid-dev';
+const HYBRID_TRACE_FLAG = 'hybridTrace';
 let lastHybridScaleLogAt = 0;
 let lastHybridPaceLogAt = 0;
 let lastHybridBrakeLogAt = 0;
@@ -1704,6 +1773,49 @@ const isHybridVerboseDevMode = (() => {
     return false;
   }
 })();
+const hybridTraceLastAt = new Map<string, number>();
+const hybridTraceLastSig = new Map<string, string>();
+
+function isHybridTraceEnabled() {
+  if (!isDevMode()) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const w = window as any;
+    if (w.__TP_HYBRID_TRACE === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get(HYBRID_TRACE_FLAG) === '1') return true;
+    if (window.localStorage?.getItem('tp_hybrid_trace') === '1') return true;
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+function logHybridTrace(
+  tag: string,
+  payload: Record<string, unknown>,
+  opts?: { throttleMs?: number; signature?: string },
+) {
+  if (!isHybridTraceEnabled()) return;
+  const throttleMs = Math.max(0, Number(opts?.throttleMs) || 0);
+  const signature = typeof opts?.signature === 'string' ? opts.signature : null;
+  const now = nowMs();
+  if (throttleMs > 0) {
+    const lastAt = hybridTraceLastAt.get(tag) ?? 0;
+    if (now - lastAt < throttleMs) return;
+    hybridTraceLastAt.set(tag, now);
+  }
+  if (signature) {
+    const lastSig = hybridTraceLastSig.get(tag);
+    if (lastSig === signature) return;
+    hybridTraceLastSig.set(tag, signature);
+  }
+  try {
+    console.info(`[HYBRID_TRACE] ${tag}`, payload);
+  } catch {
+    // ignore
+  }
+}
 
 function logHybridPaceTelemetry(payload: any) {
   if (!isDevMode()) return;
@@ -1817,6 +1929,23 @@ function logHybridVelocityEvent(payload: any) {
       lastHybridMotorVelocitySignature = signature;
       lastHybridMotorVelocityLogAt = now;
     }
+    if (evt === 'dt-clamp') {
+      const dtRaw = Number(data?.dtRaw ?? NaN);
+      const dtClamped = Number(data?.dtClamped ?? NaN);
+      if (Number.isFinite(dtRaw) && Number.isFinite(dtClamped)) {
+        logHybridTrace(
+          'motor_dt_clamp',
+          {
+            dtRaw: Number(dtRaw.toFixed(3)),
+            dtClamped: Number(dtClamped.toFixed(3)),
+          },
+          {
+            throttleMs: 250,
+            signature: `${dtRaw.toFixed(3)}|${dtClamped.toFixed(3)}`,
+          },
+        );
+      }
+    }
     try {
       console.debug('[HybridMotor]', evt, data);
     } catch {}
@@ -1830,15 +1959,39 @@ function convertWpmToPxPerSec(targetWpm: number) {
     const lhScale = parseFloat(cs.getPropertyValue("--tp-line-height")) || 1.4;
     const lineHeightPx = fsPx * lhScale;
     const wpl = parseFloat(localStorage.getItem("tp_wpl_hint") || "8") || 8;
-    const pxPerSec = (targetWpm / 60 / wpl) * lineHeightPx;
+    const basePxpsRaw = (targetWpm / 60 / wpl) * lineHeightPx;
+    const mode = getScrollMode();
+    const hybridWpmCalMult = mode === 'hybrid' ? getHybridWpmCalibrationMultiplier() : 1;
+    const pxPerSec = basePxpsRaw * hybridWpmCalMult;
+    logHybridTrace(
+      'base_speed_compute',
+      {
+        speedRaw: targetWpm,
+        unit: 'wpm',
+        mode,
+        wpm: targetWpm,
+        wpl,
+        lineHeightPx: Number(lineHeightPx.toFixed(2)),
+        basePxpsRaw: Number(basePxpsRaw.toFixed(2)),
+        hybridWpmCalMult: Number(hybridWpmCalMult.toFixed(3)),
+        basePxps: Number(pxPerSec.toFixed(2)),
+      },
+      {
+        throttleMs: 100,
+        signature: `${mode}|${Number(targetWpm).toFixed(2)}|${Number(wpl).toFixed(2)}|${Number(lineHeightPx).toFixed(2)}|${Number(hybridWpmCalMult).toFixed(3)}|${Number(pxPerSec).toFixed(2)}`,
+      },
+    );
     try {
       console.info(
         `[WPM_CONVERT] ${JSON.stringify({
           targetWpm,
+          mode,
           fsPx,
           lhScale,
           lineHeightPx,
           wpl,
+          basePxpsRaw,
+          hybridWpmCalMult,
           pxPerSec,
         })}`,
       );
@@ -2197,6 +2350,8 @@ const HYBRID_SILENCE_SOFT_MS = 3000;
 const HYBRID_PAUSE_SILENCE_SOFT_MS = 7500;
 const HYBRID_SILENCE_HARD_STOP_MS = 25000;
 const LIVE_GRACE_MS = 1800;
+const HYBRID_SPEECH_PRESENT_HOLD_MS = 1600;
+const HYBRID_HARD_NOMATCH_OFFSCRIPT_GRACE_MS = 420;
 const OFFSCRIPT_MILD = 0.75;
 const OFFSCRIPT_DEEP = 0.55;
 const RECOVERY_SCALE = 1;
@@ -2210,6 +2365,9 @@ const PAUSE_LOOKAHEAD_LINES = 10;
 const HYBRID_PAUSE_TOKENS = ['[pause]', '[beat]', '[reflective pause]'] as const;
 const GRACE_MIN_SCALE = 0.9;
 const HYBRID_BASELINE_FLOOR_PXPS = 24;
+const HYBRID_WPM_CAL_MULT_DEFAULT = 2.5;
+const HYBRID_WPM_CAL_MULT_MIN = 0.25;
+const HYBRID_WPM_CAL_MULT_MAX = 8;
 const HYBRID_ASSIST_CAP_FRAC = 0.35;
 const HYBRID_EVENT_TTL_MIN = 20;
 const HYBRID_EVENT_TTL_MAX = 2000;
@@ -2223,6 +2381,7 @@ const OFFSCRIPT_DECAY_T2_MS = 6000;
 const OFFSCRIPT_DECAY_T3_MS = 10000;
 const OFFSCRIPT_DECAY_T4_MS = 12000;
 const OFFSCRIPT_DECAY_CRAWL = 0.1;
+const HYBRID_OFFSCRIPT_SPEECH_FLOOR_MULT = 0.35;
 const ON_SCRIPT_LOCK_HOLD_MS = 1500;
 const PAUSE_ASSIST_TAIL_MS = 2000;
 const IGNORED_ASR_PURSUIT_LOG_THROTTLE_MS = 2000;
@@ -2289,12 +2448,22 @@ const HYBRID_CTRL_ON_TARGET_VELOCITY_EPS = 12;
 const HYBRID_CTRL_MODE_DEADBAND_LINES = 3;
 const HYBRID_CTRL_BASE_MAX_MULT = 2.8;
 const HYBRID_CTRL_AGGRO_MAX_MULT = 3.2;
+const HYBRID_CTRL_DYNAMIC_MAX_MULT = 6.0;
+const HYBRID_CTRL_DYNAMIC_MAX_MULT_AGGRO = 8.0;
+const HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS = 240;
+const HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS_AGGRO = 300;
+const HYBRID_CTRL_CTRL_MULT_MAX = 2.5;
+const HYBRID_CTRL_REACTIVE_MULT_MAX = 7.0;
+const HYBRID_CTRL_POLICY_MULT_MIN = 0.35;
+const HYBRID_CTRL_POLICY_MULT_MAX = 1.25;
+const HYBRID_CTRL_PRECLAMP_SCALE_MAX = 8.0;
 const HYBRID_REACTIVE_BEHIND_BASE = 0.55;
 const HYBRID_REACTIVE_BEHIND_ACC_THRESHOLD = 2;
 const HYBRID_REACTIVE_BEHIND_ACC_BONUS = 0.25;
 const HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC = 0.15;
 const HYBRID_ON_TARGET_LINES = 0.92;
 const HYBRID_MULT_DEBUG_THROTTLE_MS = 500;
+const HYBRID_POLICY_LOG_THROTTLE_MS = 700;
 const HYBRID_ONSCRIPT_SIM_MIN = 0.74;
 type HybridCtrlLineSource = 'lines' | 'px' | 'none';
 const HYBRID_CTRL_PARAM_ENABLED = (() => {
@@ -2342,7 +2511,110 @@ let lastAsrMatch = { currentIndex: -1, bestIndex: -1, bestSim: NaN };
 let hybridLastMatch: { bestIdx: number; bestSim: number; isFinal: boolean; ts: number } | null = null;
 let hybridMatchSeen = false;
 let hybridLastNoMatch: boolean | null = null;
+let hybridMatcherSource = 'unknown';
+let hybridMatcherSourceDetail = 'unknown';
+let lastHybridMatcherProbeAt = 0;
 const HYBRID_HARD_NOMATCH_SIM_MIN = 0.25;
+const HYBRID_MATCHER_PROBE_THROTTLE_MS = 350;
+const HYBRID_BLOCKS_NOT_READY_HOLD_MS = 3500;
+
+function isHybridBackendReady(): boolean {
+  try {
+    if ((window as any).__tpSpeechOrchestrator?.start) return true;
+  } catch {}
+  try {
+    if ((window as any).__tpSpeech?.startRecognizer) return true;
+  } catch {}
+  try {
+    if ((window as any).__tpSpeechCanDynImport === true) return true;
+  } catch {}
+  try {
+    if ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition) return true;
+  } catch {}
+  return false;
+}
+
+function computeAsrBlockScriptSig(meta: any): string | null {
+  if (!meta || !Array.isArray(meta.units) || !meta.units.length) return null;
+  try {
+    const units = meta.units;
+    const first = units[0];
+    const last = units[units.length - 1];
+    const sums = units.reduce(
+      (acc: { chars: number; sentences: number }, unit: any) => {
+        const chars = Number(unit?.charCount);
+        const sentences = Number(unit?.sentenceCount);
+        if (Number.isFinite(chars)) acc.chars += Math.max(0, Math.floor(chars));
+        if (Number.isFinite(sentences)) acc.sentences += Math.max(0, Math.floor(sentences));
+        return acc;
+      },
+      { chars: 0, sentences: 0 },
+    );
+    return [
+      units.length,
+      Number(first?.unitStart ?? -1),
+      Number(first?.unitEnd ?? -1),
+      Number(last?.unitStart ?? -1),
+      Number(last?.unitEnd ?? -1),
+      sums.sentences,
+      sums.chars,
+    ].join(':');
+  } catch {
+    return null;
+  }
+}
+
+function readHybridScriptHash(): string | null {
+  try {
+    const hash = String((window as any).__TP_LAST_APPLIED_HASH || '').trim();
+    return hash || null;
+  } catch {
+    return null;
+  }
+}
+
+function getHybridBlockRuntimeState() {
+  const blockEls = getAsrBlockElements();
+  const meta = getAsrBlockIndex() as any;
+  const storeCount = Array.isArray(blockEls) ? blockEls.length : 0;
+  let globalCount = 0;
+  let globalReady = false;
+  try {
+    const rawCount = Number((window as any).__tpAsrBlockCount);
+    globalCount = Number.isFinite(rawCount) ? Math.max(0, Math.floor(rawCount)) : 0;
+    globalReady = Boolean((window as any).__tpAsrBlocksReady);
+  } catch {}
+  const blockCount = Math.max(storeCount, globalCount);
+  const blocksReady = (globalReady || storeCount > 0) && blockCount > 0;
+  const scriptSig = computeAsrBlockScriptSig(meta);
+  return {
+    blocksReady,
+    blockCount,
+    blockSource: String(meta?.source || 'unknown'),
+    schemaVersion: Number.isFinite(Number(meta?.schemaVersion)) ? Number(meta?.schemaVersion) : null,
+    scriptSig,
+    scriptHash: readHybridScriptHash(),
+    backendReady: isHybridBackendReady(),
+    matcherSource: hybridMatcherSource,
+    matcherSourceDetail: hybridMatcherSourceDetail,
+  };
+}
+
+function isHybridBlocksNotReadyHold(now = nowMs(), runtime = getHybridBlockRuntimeState()): boolean {
+  if (!runtime.backendReady || runtime.blocksReady) return false;
+  const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
+  return isHybridSpeechPresent(now) || lastSpeechAgeMs <= HYBRID_BLOCKS_NOT_READY_HOLD_MS;
+}
+
+function logHybridMatcherProbe(reason: string, payload: Record<string, unknown>) {
+  if (!isDevMode()) return;
+  const now = nowMs();
+  if (now - lastHybridMatcherProbeAt < HYBRID_MATCHER_PROBE_THROTTLE_MS) return;
+  lastHybridMatcherProbeAt = now;
+  try {
+    console.info('[HYBRID_MATCHER_PROBE]', { reason, ...payload });
+  } catch {}
+}
 
 function getHybridMatchState() {
   const matchSim =
@@ -2411,6 +2683,7 @@ let hybridTargetHintState:
       lineIndex?: number | null;
     }
   | null = null;
+let speechActive = false;
 
 // --- Hybrid commit boost window ---------------------------------------------
 let hybridCommitBoostUntilMs = 0;
@@ -2545,7 +2818,7 @@ function scheduleHybridVelocityRefresh() {
   if (typeof window === "undefined") return;
   hybridVelocityRefreshRaf = window.requestAnimationFrame(() => {
     hybridVelocityRefreshRaf = null;
-    if (state2.mode !== "hybrid") return;
+    if (getScrollMode() !== "hybrid") return;
     const now = nowMs();
     if (!shouldHybridRefresh(now)) {
       stopHybridVelocityRefresh();
@@ -2589,7 +2862,12 @@ function stopHybridVelocityRefresh() {
 }
 
 function shouldHybridRefresh(now: number = nowMs()) {
-  if (state2.mode !== "hybrid") return false;
+  const mode = getScrollMode();
+  if (mode !== "hybrid") {
+    if (state2.mode !== mode) state2.mode = mode;
+    return false;
+  }
+  if (state2.mode !== "hybrid") state2.mode = "hybrid";
   if (hybridMotor.isRunning()) return true;
   if (isHybridGraceActive(now)) return true;
   const brakeActive = hybridBrakeState.expiresAt > now;
@@ -3248,7 +3526,8 @@ function installScrollRouter(opts) {
   let dbGate = false;
   let vadGate = false;
   let gatePref = getUiPrefs().hybridGate;
-  let speechActive = false;
+  let hardNoMatchSinceMs = 0;
+  let lastHybridPolicyLogAt = 0;
   let sessionIntentOn = false;
   let sessionPhase = 'idle';
   hybridSessionPhase = sessionPhase;
@@ -3278,15 +3557,22 @@ function installScrollRouter(opts) {
   }
   if (!scrollIntentListenerWired) {
     scrollIntentListenerWired = true;
-    // TODO (ARCHITECTURE):
-    // Forward ASR block commits must be gated on *block completion*, not mere detection.
-    // “Completion” is a semantic invariant (e.g. last-line confirmation, coverage threshold,
-    // boundary crossing, or post-line silence), not a heuristic.
-    // Until this is implemented, first ASR commits may feel eager but remain truthful.
-    // Do NOT implement completion logic in ASR; router is the commit authority (SSOT).
+    // Legacy compatibility lane for tp:scroll:intent('asr').
+    // Default runtime ownership is speech-loader -> asr-scroll-driver commit path.
+    // This listener remains behind a dev override for diagnostics only.
     onScrollIntent((intent) => {
       try {
         if (!intent || intent.source !== 'asr') return;
+        // Legacy ASR intent lane is disabled. Commit ownership lives in speech-loader -> asr-scroll-driver.
+        if (shouldBlockLegacyAsrIntentLane()) {
+          if (!legacyAsrIntentLaneBlockedLogged) {
+            legacyAsrIntentLaneBlockedLogged = true;
+            if (isDevMode()) {
+              try { console.info('[ASR] ignoring legacy tp:scroll:intent (driver-owned commit lane)'); } catch {}
+            }
+          }
+          return;
+        }
         const telemetry = getAsrTelemetry();
         const intentReason = typeof intent.reason === 'string' ? intent.reason : '';
         recordAsrIntentTelemetry(telemetry, intentReason);
@@ -4002,6 +4288,7 @@ function handleHybridSilenceTimeout() {
     }
     hybridSilence.pausedBySilence = false;
     speechActive = false;
+    hybridSilence.speechHoldUntilMs = now;
     emitHybridSafety();
     try { applyGate(); } catch {}
     return;
@@ -4014,6 +4301,7 @@ function handleHybridSilenceTimeout() {
     }
     hybridSilence.pausedBySilence = false;
     speechActive = false;
+    hybridSilence.speechHoldUntilMs = now;
     emitHybridSafety();
     try { applyGate(); } catch {}
     return;
@@ -4021,6 +4309,7 @@ function handleHybridSilenceTimeout() {
   if (!motorRunning) return;
   hybridSilence.pausedBySilence = true;
   speechActive = false;
+  hybridSilence.speechHoldUntilMs = now;
   runHybridVelocity(hybridSilence);
   emitHybridSafety();
   armHybridSilenceTimer(softDelayMs);
@@ -4085,6 +4374,7 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     }
     const wasSpeechActive = speechActive;
     speechActive = true;
+    markHybridSpeechPresent(now);
     hybridSilence.lastSpeechAtMs = now;
     setHybridSilence2(now);
     liveGraceWindowEndsAt = null;
@@ -4132,6 +4422,29 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   function updateHybridScaleFromDetail(detail: { bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
     if (state2.mode !== "hybrid" || !hybridWantedRunning) return;
     const now = nowMs();
+    const runtime = getHybridBlockRuntimeState();
+    const blocksNotReadyHold = isHybridBlocksNotReadyHold(now, runtime);
+    if (blocksNotReadyHold) {
+      offScriptEvidence = 0;
+      lastOffScriptEvidenceTs = 0;
+      if (hybridSilence.offScriptActive) {
+        hybridSilence.offScriptActive = false;
+      }
+      if (Number.isFinite(hybridScale) && hybridScale !== RECOVERY_SCALE) {
+        setHybridScale(RECOVERY_SCALE);
+      }
+      logHybridMatcherProbe('scale-hold:blocks-not-ready', {
+        blocksReady: runtime.blocksReady,
+        blockCount: runtime.blockCount,
+        blockSource: runtime.blockSource,
+        scriptHash: runtime.scriptHash,
+        scriptSig: runtime.scriptSig,
+        backendReady: runtime.backendReady,
+        matcherSource: runtime.matcherSource,
+        matcherSourceDetail: runtime.matcherSourceDetail,
+      });
+      return;
+    }
     const inBandValue = detail.inBand;
     const inBand = inBandValue === 1 || inBandValue === true || inBandValue === "1";
     const bestSimRaw = detail.bestSim ?? detail.sim ?? detail.score;
@@ -4166,6 +4479,21 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       lastOffScriptEvidenceTs = 0;
       setHybridScale(RECOVERY_SCALE);
+      logHybridTrace(
+        'evidence_counters',
+        {
+          source: 'good-match',
+          onScriptStreak,
+          offScriptEvidence,
+          offScriptActive: hybridSilence.offScriptActive,
+          bestSim,
+          noMatch: isNoMatch,
+          nextScale,
+        },
+        {
+          signature: `good|${onScriptStreak}|${offScriptEvidence}|${hybridSilence.offScriptActive ? 1 : 0}|${Number(bestSim ?? NaN).toFixed(2)}`,
+        },
+      );
       logHud();
       return;
     }
@@ -4188,13 +4516,108 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       offScriptEvidence = 0;
       setHybridScale(nextScale);
     }
+    logHybridTrace(
+      'evidence_counters',
+      {
+        source: 'offscript',
+        onScriptStreak,
+        offScriptEvidence,
+        offScriptActive: hybridSilence.offScriptActive,
+        bestSim,
+        noMatch: isNoMatch,
+        significantNoMatch,
+        nextScale,
+      },
+      {
+        signature: `off|${onScriptStreak}|${offScriptEvidence}|${hybridSilence.offScriptActive ? 1 : 0}|${Number(bestSim ?? NaN).toFixed(2)}|${significantNoMatch ? 1 : 0}`,
+      },
+    );
     logHud();
   }
-  function handleTranscriptEvent(detail: { timestamp?: number; source?: string; noMatch?: boolean; bestSim?: number; sim?: number; score?: number; inBand?: boolean | number }) {
+  function handleTranscriptEvent(detail: {
+    timestamp?: number;
+    source?: string;
+    noMatch?: boolean;
+    bestSim?: number;
+    sim?: number;
+    score?: number;
+    inBand?: boolean | number;
+    bestIdx?: number;
+    line?: number;
+    idx?: number;
+    currentIdx?: number;
+    final?: boolean;
+    isFinal?: boolean;
+    match?: {
+      bestIdx?: number;
+      bestSim?: number;
+      currentIdx?: number;
+    } | null;
+  }) {
     if (getScrollMode() !== "hybrid") return;
     const perfNow = nowMs();
     const now = normalizePerfTimestamp(detail.timestamp, perfNow);
+    hybridMatcherSource = 'tp:speech:transcript';
+    hybridMatcherSourceDetail = String(detail.source || 'speech-loader');
     const isNoMatch = detail.noMatch === true;
+    const inBand = detail.inBand === true || detail.inBand === 1 || (detail.inBand as unknown) === "1";
+    const bestIdxRaw = detail.bestIdx ?? detail.line ?? detail.idx ?? detail.match?.bestIdx;
+    const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.max(0, Math.floor(Number(bestIdxRaw))) : -1;
+    const simRaw = detail.bestSim ?? detail.sim ?? detail.score ?? detail.match?.bestSim;
+    const parsedBestSim = Number.isFinite(Number(simRaw)) ? Number(simRaw) : Number.NaN;
+    const inferredBestSim =
+      Number.isFinite(parsedBestSim) ? parsedBestSim : isNoMatch ? Number.NaN : inBand ? HYBRID_ON_SCRIPT_SIM : HYBRID_OFFSCRIPT_MILD_SIM;
+    const currentIdxRaw = detail.currentIdx ?? detail.match?.currentIdx ?? (window as any)?.currentIndex;
+    const currentIdx = Number.isFinite(Number(currentIdxRaw))
+      ? Math.max(0, Math.floor(Number(currentIdxRaw)))
+      : lastAsrMatch.currentIndex;
+    const speechPresentNow = isHybridSpeechPresent(now);
+    const ingressMatchState = getHybridMatchState();
+    logHybridTrace(
+      'transcript_ingress',
+      {
+        source: detail.source || 'speech-loader',
+        noMatch: isNoMatch,
+        bestIdx,
+        sim: Number.isFinite(inferredBestSim) ? Number(inferredBestSim.toFixed(3)) : null,
+        speechPresent: speechPresentNow,
+        hardNoMatch: ingressMatchState.hardNoMatch,
+      },
+      {
+        throttleMs: 60,
+        signature: `${isNoMatch ? 1 : 0}|${bestIdx}|${Number(inferredBestSim).toFixed(3)}|${speechPresentNow ? 1 : 0}|${ingressMatchState.hardNoMatch ? 1 : 0}`,
+      },
+    );
+    if (!isNoMatch && bestIdx >= 0) {
+      hybridMatchSeen = true;
+      hybridLastMatch = {
+        bestIdx,
+        bestSim: inferredBestSim,
+        isFinal: Boolean(detail.isFinal ?? detail.final),
+        ts: now,
+      };
+      lastAsrMatch = {
+        currentIndex: currentIdx,
+        bestIndex: bestIdx,
+        bestSim: inferredBestSim,
+      };
+      if (Number.isFinite(inferredBestSim) && inferredBestSim >= HYBRID_HARD_NOMATCH_SIM_MIN) {
+        hybridLastNoMatch = false;
+      }
+      logHybridTrace(
+        'match_latch',
+        {
+          latchedMatch: true,
+          bestIdx,
+          sim: Number.isFinite(inferredBestSim) ? Number(inferredBestSim.toFixed(3)) : null,
+          isFinal: Boolean(detail.isFinal ?? detail.final),
+          currentIdx,
+        },
+        {
+          signature: `${bestIdx}|${Number(inferredBestSim).toFixed(3)}|${Boolean(detail.isFinal ?? detail.final) ? 1 : 0}|${currentIdx}`,
+        },
+      );
+    }
     const wasSilent = hybridSilence.pausedBySilence;
     hybridSilence.lastSpeechAtMs = now;
     hybridSilence.pausedBySilence = false;
@@ -4230,8 +4653,11 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
       const detail = (ev as CustomEvent).detail || {};
       const ts = typeof detail.ts === "number" ? detail.ts : nowMs();
       if (getScrollMode() !== "hybrid") return;
+      hybridMatcherSource = 'tp:asr:sync';
+      hybridMatcherSourceDetail = String(detail.source || 'sync');
+      const noMatch = detail.noMatch === true;
       try {
-        noteHybridSpeechActivity(ts, { source: "sync", noMatch: detail.noMatch === true });
+        noteHybridSpeechActivity(ts, { source: "sync", noMatch });
       } catch (err) {
         handleHybridFatalOnce(err);
         return;
@@ -4268,9 +4694,19 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
     });
   } catch {}
   try {
-    window.addEventListener("tp:asr:guard", () => {
+    window.addEventListener("tp:asr:guard", (ev) => {
       try {
-        markHybridOffScriptFn?.();
+        if (getScrollMode() !== "hybrid") return;
+        const detail = (ev as CustomEvent).detail || {};
+        if (isDevMode()) {
+          try {
+            console.info("[HYBRID] structural guard (no offscript decay)", {
+              status: detail.status ?? null,
+              reason: detail.reason ?? null,
+              source: detail.source ?? null,
+            });
+          } catch {}
+        }
       } catch (err) {
         if (!guardHandlerErrorLogged) {
           guardHandlerErrorLogged = true;
@@ -4292,6 +4728,8 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   try {
     window.addEventListener("tp:hybrid:matchState", (ev) => {
       const detail = (ev as CustomEvent).detail || {};
+      hybridMatcherSource = 'tp:hybrid:matchState';
+      hybridMatcherSourceDetail = String(detail.source || detail.reason || 'match-state');
       const bestIdxRaw = detail.bestIdx;
       const bestSimRaw = detail.bestSim;
       const bestIdx = Number.isFinite(bestIdxRaw) ? bestIdxRaw : -1;
@@ -4594,15 +5032,124 @@ function armHybridSilenceTimer(delay: number = computeHybridSilenceDelayMs()) {
   }
 
 function applyHybridVelocityCore(silence = hybridSilence) {
+  const mode = getScrollMode();
+  if (mode !== "hybrid") {
+    if (state2.mode !== mode) state2.mode = mode;
+    assertHybridStoppedIfNotHybrid("applyHybridVelocityCore");
+    return;
+  }
+  if (state2.mode !== "hybrid") state2.mode = "hybrid";
   const candidateBase = Number.isFinite(hybridBasePxps) ? hybridBasePxps : 0;
   const base = candidateBase > 0 ? candidateBase : HYBRID_BASELINE_FLOOR_PXPS;
   const now = nowMs();
+  const runtime = getHybridBlockRuntimeState();
+  const blocksNotReadyHold = isHybridBlocksNotReadyHold(now, runtime);
+  if (blocksNotReadyHold) {
+    offScriptEvidence = 0;
+    offScriptStreak = 0;
+    lastOffScriptEvidenceTs = 0;
+    if (hybridSilence.offScriptActive) {
+      hybridSilence.offScriptActive = false;
+    }
+    if (Number.isFinite(hybridScale) && hybridScale !== RECOVERY_SCALE) {
+      setHybridScale(RECOVERY_SCALE);
+    }
+  }
   const matchState = getHybridMatchState();
   const { bestSim, sawNoMatch, weakMatch: baseWeakMatch, hardNoMatch } = matchState;
+  const sawNoMatchEffective = blocksNotReadyHold ? false : sawNoMatch;
+  const hardNoMatchEffective = blocksNotReadyHold ? false : hardNoMatch;
+  const speechPresent = isHybridSpeechPresent(now);
+  if (speechPresent && hardNoMatchEffective) {
+    if (!(hardNoMatchSinceMs > 0)) {
+      hardNoMatchSinceMs = now;
+    }
+  } else if (hardNoMatchSinceMs > 0) {
+    hardNoMatchSinceMs = 0;
+  }
+  const hardNoMatchAgeMs = hardNoMatchSinceMs > 0 ? Math.max(0, now - hardNoMatchSinceMs) : 0;
+  const hardNoMatchOffScriptActive =
+    !blocksNotReadyHold &&
+    speechPresent &&
+    hardNoMatchEffective &&
+    hardNoMatchAgeMs >= HYBRID_HARD_NOMATCH_OFFSCRIPT_GRACE_MS;
+  const traceClampStage = (
+    stage: string,
+    inPxps: number,
+    outPxps: number,
+    reason: string,
+    extra?: Record<string, unknown>,
+  ) => {
+    if (!Number.isFinite(inPxps) || !Number.isFinite(outPxps)) return;
+    const delta = Math.abs(outPxps - inPxps);
+    if (delta < 0.01) return;
+    const inRounded = Number(inPxps.toFixed(2));
+    const outRounded = Number(outPxps.toFixed(2));
+    logHybridTrace(
+      'clamp_stage',
+      {
+        stage,
+        inPxps: inRounded,
+        outPxps: outRounded,
+        reason,
+        ...extra,
+      },
+      {
+        signature: `${stage}|${inRounded.toFixed(2)}|${outRounded.toFixed(2)}|${reason}|${typeof extra?.reasonTag === 'string' ? extra.reasonTag : ''}`,
+      },
+    );
+  };
+  const boundMultiplier = (
+    name: string,
+    rawValue: number,
+    minValue: number,
+    maxValue: number,
+    reasonTag: string,
+    fallback = 1,
+  ): number => {
+    const finiteRaw = Number.isFinite(rawValue) ? rawValue : fallback;
+    const bounded = clamp(finiteRaw, minValue, maxValue);
+    if (bounded !== finiteRaw || !Number.isFinite(rawValue)) {
+      logHybridTrace(
+        'multiplier_cap',
+        {
+          name,
+          inMult: Number.isFinite(rawValue) ? Number(rawValue.toFixed(3)) : null,
+          fallback,
+          outMult: Number(bounded.toFixed(3)),
+          minMult: Number(minValue.toFixed(3)),
+          maxMult: Number(maxValue.toFixed(3)),
+          reasonTag,
+        },
+        {
+          signature: `${name}|${Number.isFinite(rawValue) ? Number(rawValue).toFixed(3) : 'nonfinite'}|${bounded.toFixed(3)}|${minValue.toFixed(3)}|${maxValue.toFixed(3)}|${reasonTag}`,
+        },
+      );
+    }
+    return bounded;
+  };
+  logHybridTrace(
+    'clamp_input',
+    {
+      basePxps: Number(base.toFixed(2)),
+      speechPresent,
+      offScriptActive: hybridSilence.offScriptActive || hardNoMatchOffScriptActive,
+      hardNoMatch: hardNoMatchEffective,
+      sim: Number.isFinite(bestSim ?? NaN) ? Number((bestSim as number).toFixed(3)) : null,
+      blocksNotReadyHold,
+    },
+    {
+      throttleMs: 50,
+      signature: `${Number(base).toFixed(2)}|${speechPresent ? 1 : 0}|${(hybridSilence.offScriptActive || hardNoMatchOffScriptActive) ? 1 : 0}|${hardNoMatchEffective ? 1 : 0}|${Number(bestSim ?? NaN).toFixed(3)}|${blocksNotReadyHold ? 1 : 0}`,
+    },
+  );
+  if (hardNoMatchOffScriptActive && !hybridSilence.offScriptActive) {
+    setHybridScale(OFFSCRIPT_DEEP);
+  }
   const matchSimValue =
     Number.isFinite(bestSim ?? NaN) && bestSim != null ? (bestSim as number) : null;
   const matchKnown =
-    hybridMatchSeen && matchSimValue != null && matchSimValue > 0 && !sawNoMatch;
+    hybridMatchSeen && matchSimValue != null && matchSimValue > 0 && !sawNoMatchEffective;
   const matchReason = matchKnown
     ? hybridLastMatch?.isFinal
       ? 'asr-final'
@@ -4619,7 +5166,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const silenceMs = getSilenceMs(now);
     const errorInfo = computeHybridErrorPx(now);
     const driftWeakMatch = isHybridDriftWeak(errorInfo);
-    const weakMatch = baseWeakMatch || driftWeakMatch;
+    const weakMatch = blocksNotReadyHold ? false : (baseWeakMatch || driftWeakMatch);
     const eligibility = evaluateHybridEligibility(now);
     const eligible = eligibility.eligible;
     const eligibleReason = eligibility.reason;
@@ -4672,14 +5219,38 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         : 0;
     const lineMult = updateHybridLineMult(candidateTargetMult, dtMs, errorLinesRaw > 0);
     let appliedTargetMult = Number.isFinite(lineMult) ? lineMult : 1;
-    const offScriptSeverity = computeOffScriptSeverity();
+    const offScriptSeverity = blocksNotReadyHold ? 0 : computeOffScriptSeverity();
     const offScriptCap = Math.max(
       HYBRID_CTRL_MIN_MULT,
       1 - offScriptSeverity * HYBRID_CTRL_OFFSCRIPT_PENALTY,
     );
+    const preSilenceCapMult = appliedTargetMult;
     appliedTargetMult = Math.min(appliedTargetMult, silenceCap);
+    traceClampStage(
+      'silence_cap',
+      base * preSilenceCapMult,
+      base * appliedTargetMult,
+      'silenceCap',
+      { silenceCap: Number(silenceCap.toFixed(3)) },
+    );
+    const preOffScriptCapMult = appliedTargetMult;
     appliedTargetMult = Math.min(appliedTargetMult, offScriptCap);
+    traceClampStage(
+      'offscript_cap',
+      base * preOffScriptCapMult,
+      base * appliedTargetMult,
+      'offScriptCap',
+      { offScriptCap: Number(offScriptCap.toFixed(3)) },
+    );
+    const preMinMultClamp = appliedTargetMult;
     appliedTargetMult = Math.max(appliedTargetMult, HYBRID_CTRL_MIN_MULT);
+    traceClampStage(
+      'min_mult_floor',
+      base * preMinMultClamp,
+      base * appliedTargetMult,
+      'minMultFloor',
+      { minMult: Number(HYBRID_CTRL_MIN_MULT.toFixed(3)) },
+    );
     hybridCtrl.lastErrorPx = errorInfo?.errorPx ?? 0;
     hybridCtrl.lastAnchorTs = errorInfo?.anchorAgeMs ?? 0;
     hybridCtrl.lastTs = now;
@@ -4687,12 +5258,35 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const devOverrideMult = getHybridCtrlDevOverride(now);
     const ctrlMultFinal = Number.isFinite(devOverrideMult) ? devOverrideMult : appliedTargetMult;
     hybridCtrl.mult = ctrlMultFinal;
-    const ctrlMultApplied = ctrlMultFinal;
+    const ctrlMultApplied = boundMultiplier(
+      'ctrl_mult',
+      ctrlMultFinal,
+      HYBRID_CTRL_MIN_MULT,
+      HYBRID_CTRL_CTRL_MULT_MAX,
+      'ctrlMult',
+    );
+    const baseWithCorrectionRaw = base * ctrlMultApplied;
+    const baseWithCorrection =
+      Number.isFinite(baseWithCorrectionRaw) && baseWithCorrectionRaw > 0 ? baseWithCorrectionRaw : base;
+    if (!(Number.isFinite(baseWithCorrectionRaw) && baseWithCorrectionRaw > 0)) {
+      logHybridTrace(
+        'multiplier_cap',
+        {
+          name: 'base_with_correction',
+          inPxps: Number.isFinite(baseWithCorrectionRaw) ? Number(baseWithCorrectionRaw.toFixed(2)) : null,
+          outPxps: Number(base.toFixed(2)),
+          reasonTag: 'baseWithCorrectionFallback',
+        },
+        {
+          signature: `base_with_correction|${Number.isFinite(baseWithCorrectionRaw) ? baseWithCorrectionRaw.toFixed(2) : 'nonfinite'}|${base.toFixed(2)}`,
+        },
+      );
+    }
     const hybridScaleDetail = computeEffectiveHybridScale(
       now,
       silence,
       undefined,
-      weakMatch,
+      weakMatch || hardNoMatchOffScriptActive,
       effectiveErrorLines,
       weakMatch,
     );
@@ -4722,7 +5316,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       offScriptActive && Number.isFinite(offScriptDecay) ? offScriptScale * offScriptDecay : 1;
 
     // Aggro tuning knobs (prove capability first; dial back later)
-    const maxScale = aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT;
+    const aggressiveCeiling = aggro || commitBoost;
+    const dynamicMaxMult = aggressiveCeiling
+      ? HYBRID_CTRL_DYNAMIC_MAX_MULT_AGGRO
+      : HYBRID_CTRL_DYNAMIC_MAX_MULT;
+    const dynamicMaxAbsMinPxps = aggressiveCeiling
+      ? HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS_AGGRO
+      : HYBRID_CTRL_DYNAMIC_MAX_ABS_MIN_PXPS;
+    const dynamicMaxAllowedPxps = Math.max(baseWithCorrection * dynamicMaxMult, dynamicMaxAbsMinPxps);
+    const dynamicMaxScale = dynamicMaxAllowedPxps / Math.max(baseWithCorrection, HYBRID_CTRL_MIN_PXPS);
+    const maxScale = Math.max(
+      aggro ? HYBRID_CTRL_AGGRO_MAX_MULT : HYBRID_CTRL_BASE_MAX_MULT,
+      Number.isFinite(dynamicMaxScale) ? dynamicMaxScale : HYBRID_CTRL_BASE_MAX_MULT,
+    );
     const confMin = (aggro && commitBoost) ? 0.35 : 0.65;
     const simMin = (aggro && commitBoost) ? 0.45 : 0.55;
 
@@ -4748,6 +5354,30 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     if ((aggro || commitBoost) && eligibleForAggro) {
       // Respect gating unless we’re in the post-commit permission window.
       const gatingOk = (aggro && commitBoost) || (conf >= confMin && sim >= simMin);
+      if (!gatingOk) {
+        const denyReasons: string[] = [];
+        if (conf < confMin) denyReasons.push('conf');
+        if (sim < simMin) denyReasons.push('sim');
+        logHybridTrace(
+          'catchup_gate_deny',
+          {
+            denied: true,
+            reason: denyReasons.length > 0 ? denyReasons.join('+') : 'threshold',
+            conf: Number(conf.toFixed(3)),
+            confMin: Number(confMin.toFixed(3)),
+            sim: Number(sim.toFixed(3)),
+            simMin: Number(simMin.toFixed(3)),
+            needCatchUp,
+            aggro,
+            commitBoost,
+            errorLines: Number(errorLinesRaw.toFixed(3)),
+          },
+          {
+            throttleMs: 80,
+            signature: `${denyReasons.join('+')}|${conf.toFixed(3)}|${sim.toFixed(3)}|${needCatchUp ? 1 : 0}|${aggro ? 1 : 0}|${commitBoost ? 1 : 0}`,
+          },
+        );
+      }
 
       if (gatingOk) {
         // Map distance behind (in lines) directly into a scale boost.
@@ -4819,7 +5449,6 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const suppressAssist = reason === 'silence' || effectiveScale <= OFFSCRIPT_SCALE || reason === 'grace';
     const assistCap = Math.max(0, base * HYBRID_ASSIST_CAP_FRAC);
     const assistBoost = suppressAssist ? 0 : Math.min(rawAssist, assistCap);
-    const baseWithCorrection = base * ctrlMultApplied;
 
     const deltaLines = Number.isFinite(errorLinesRaw) ? errorLinesRaw : 0;
     const absDL = Math.abs(deltaLines);
@@ -4842,34 +5471,106 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     } else {
       reasons.push('deadband');
     }
+    const reactiveScaleCap = Math.min(
+      HYBRID_CTRL_REACTIVE_MULT_MAX,
+      Math.max(HYBRID_CTRL_POLICY_MULT_MIN, maxScale),
+    );
+    reactiveScale = boundMultiplier(
+      'reactive_scale',
+      reactiveScale,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      reactiveScaleCap,
+      'reactiveScale',
+    );
 
     let policyMult = 1.0;
     if (pausedBySilence || reason === 'silence') {
+      const inScale = reactiveScale * policyMult;
       const silenceMult = aggro ? 0.75 : 0.85;
       policyMult *= silenceMult;
+      const outScale = reactiveScale * policyMult;
+      traceClampStage(
+        'silence_policy',
+        baseWithCorrection * inScale,
+        baseWithCorrection * outScale,
+        'silencePolicy',
+        { silenceMult: Number(silenceMult.toFixed(3)) },
+      );
       reasons.push('silence');
     }
     if (offScriptActive || reason === 'offscript') {
+      const inScale = reactiveScale * policyMult;
       const offscriptMult = aggro ? 0.80 : 0.90;
       policyMult *= offscriptMult;
+      const outScale = reactiveScale * policyMult;
+      traceClampStage(
+        'offscript_policy',
+        baseWithCorrection * inScale,
+        baseWithCorrection * outScale,
+        'offScriptPolicy',
+        { offscriptMult: Number(offscriptMult.toFixed(3)) },
+      );
       reasons.push('offscript');
     }
+    policyMult = boundMultiplier(
+      'policy_mult',
+      policyMult,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_POLICY_MULT_MAX,
+      'policyMult',
+    );
 
-    const preClampScale = reactiveScale * policyMult;
+    const preClampScale = boundMultiplier(
+      'preclamp_scale',
+      reactiveScale * policyMult,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_PRECLAMP_SCALE_MAX,
+      'preClampScale',
+    );
 
     let scaleAfterBrake = preClampScale;
     if (brakeActive) {
+      const beforeBrake = scaleAfterBrake;
       scaleAfterBrake = Math.min(scaleAfterBrake, brakeFactor);
+      traceClampStage(
+        'brake_clamp',
+        baseWithCorrection * beforeBrake,
+        baseWithCorrection * scaleAfterBrake,
+        'brakeCap',
+        { brakeFactor: Number(brakeFactor.toFixed(3)) },
+      );
       reasons.push('brakeCap');
     }
 
     let scaleAfterCaps = scaleAfterBrake;
-    const assistFloorScale = suppressAssistScale(rawAssist, baseWithCorrection);
+    const assistFloorScale = boundMultiplier(
+      'assist_floor_scale',
+      suppressAssistScale(rawAssist, baseWithCorrection),
+      0,
+      2.5,
+      'assistFloor',
+      0,
+    );
     const assistEligible = assistActive && assistFloorScale > 0 && needCatchUp && conf >= confMin;
     if (assistEligible) {
+      const beforeAssistFloor = scaleAfterCaps;
       scaleAfterCaps = Math.max(scaleAfterCaps, assistFloorScale);
+      traceClampStage(
+        'assist_floor',
+        baseWithCorrection * beforeAssistFloor,
+        baseWithCorrection * scaleAfterCaps,
+        'assistFloor',
+        { assistFloorScale: Number(assistFloorScale.toFixed(3)) },
+      );
       reasons.push('assistFloor');
     }
+    scaleAfterCaps = boundMultiplier(
+      'scale_after_caps',
+      scaleAfterCaps,
+      HYBRID_CTRL_POLICY_MULT_MIN,
+      HYBRID_CTRL_PRECLAMP_SCALE_MAX,
+      'scaleAfterCaps',
+    );
 
     const minScale = HYBRID_CTRL_MIN_MULT;
     const maxClampScale = Math.max(maxScale, minScale);
@@ -4881,9 +5582,45 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     if (scaleAfterCaps > maxClampScale) {
       finalScale = maxClampScale;
       clampReason = 'maxClamp';
+      const inPxps = baseWithCorrection * scaleAfterCaps;
+      const maxAllowedPxps = baseWithCorrection * maxClampScale;
+      const outPxps = baseWithCorrection * finalScale;
+      let maxClampReasonTag = 'maxClamp';
+      if (assistEligible && scaleAfterCaps > scaleAfterBrake + 0.001) {
+        maxClampReasonTag = 'assistFloor';
+      } else if (reactiveScale >= HYBRID_CTRL_REACTIVE_MULT_MAX - 0.001) {
+        maxClampReasonTag = 'reactiveScaleCap';
+      } else if (policyMult >= HYBRID_CTRL_POLICY_MULT_MAX - 0.001) {
+        maxClampReasonTag = 'policyMultCap';
+      } else if (ctrlMultApplied >= HYBRID_CTRL_CTRL_MULT_MAX - 0.001) {
+        maxClampReasonTag = 'ctrlMultCap';
+      } else if (Math.abs(maxAllowedPxps - dynamicMaxAbsMinPxps) <= 0.5) {
+        maxClampReasonTag = 'dynamicAbsMinCeiling';
+      } else if (dynamicMaxAllowedPxps >= baseWithCorrection * dynamicMaxMult - 0.5) {
+        maxClampReasonTag = 'dynamicMultCeiling';
+      }
+      traceClampStage(
+        'max_clamp',
+        inPxps,
+        outPxps,
+        'maxClamp',
+        {
+          maxClampScale: Number(maxClampScale.toFixed(3)),
+          maxAllowedPxps: Number(maxAllowedPxps.toFixed(2)),
+          inScale: Number(scaleAfterCaps.toFixed(3)),
+          reasonTag: maxClampReasonTag,
+        },
+      );
     } else if (!clampOverride && scaleLimitedToMax < minScale) {
       finalScale = minScale;
       clampReason = 'minClamp';
+      traceClampStage(
+        'min_clamp',
+        baseWithCorrection * scaleLimitedToMax,
+        baseWithCorrection * finalScale,
+        'minClamp',
+        { minScale: Number(minScale.toFixed(3)) },
+      );
     }
     if (clampReason) {
       reasons.push(clampReason);
@@ -4899,16 +5636,48 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       distancePx <= HYBRID_CTRL_ON_TARGET_STABLE_PX &&
       Math.abs(deltaLines) <= HYBRID_CTRL_MODE_DEADBAND_LINES;
     if (stableOnTarget) {
+      const preStableClampScale = finalScale;
       finalScale = clamp(finalScale, HYBRID_CTRL_ON_TARGET_MULT_MIN, HYBRID_CTRL_ON_TARGET_MULT_MAX);
+      traceClampStage(
+        'on_target_clamp',
+        baseWithCorrection * preStableClampScale,
+        baseWithCorrection * finalScale,
+        'stableOnTarget',
+        {
+          min: Number(HYBRID_CTRL_ON_TARGET_MULT_MIN.toFixed(3)),
+          max: Number(HYBRID_CTRL_ON_TARGET_MULT_MAX.toFixed(3)),
+        },
+      );
     }
 
     if (offScriptMultiplier !== 1) {
+      const preOffScriptDecayScale = finalScale;
       finalScale *= offScriptMultiplier;
+      traceClampStage(
+        'offscript_decay',
+        baseWithCorrection * preOffScriptDecayScale,
+        baseWithCorrection * finalScale,
+        'offScriptDecay',
+        { offScriptMultiplier: Number(offScriptMultiplier.toFixed(3)) },
+      );
       reasons.push('offscriptDecay');
     }
 
-    const minPxps = offScriptMultiplier < 1 ? 0 : HYBRID_CTRL_MIN_PXPS;
-    const finalPxpsBase = Math.max(minPxps, baseWithCorrection * finalScale);
+    const minPxps =
+      offScriptMultiplier < 1
+        ? speechPresent
+          ? HYBRID_CTRL_MIN_PXPS * HYBRID_OFFSCRIPT_SPEECH_FLOOR_MULT
+          : 0
+        : HYBRID_CTRL_MIN_PXPS;
+    const unclampedPxpsBase = baseWithCorrection * finalScale;
+    const finalPxpsBase = Math.max(minPxps, unclampedPxpsBase);
+    traceClampStage(
+      'min_pxps_floor',
+      unclampedPxpsBase,
+      finalPxpsBase,
+      speechPresent ? 'speechFloor' : 'minPxps',
+      { minPxps: Number(minPxps.toFixed(2)) },
+    );
     const assistFloorBoostPx = assistEligible && isBehind ? base * HYBRID_CTRL_ASSIST_BEHIND_BOOST_FRAC : 0;
     const finalPxps = finalPxpsBase + assistFloorBoostPx * offScriptMultiplier;
     const velocityPxps = Number.isFinite(finalPxps) ? Math.abs(finalPxps) : 0;
@@ -4939,6 +5708,24 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         : finalReasons.includes('offscript')
         ? 'offscript'
         : undefined;
+    if (isDevMode() && now - lastHybridPolicyLogAt >= HYBRID_POLICY_LOG_THROTTLE_MS) {
+      lastHybridPolicyLogAt = now;
+      const speedSettingRaw = getHybridSpeedSettingRaw();
+      try {
+        console.info('[HYBRID_POLICY]', {
+          speechPresent,
+          speechHoldRemainingMs: Math.round(getHybridSpeechHoldRemainingMs(now)),
+          hardNoMatch: hardNoMatchEffective,
+          hardNoMatchAgeMs: Math.round(hardNoMatchAgeMs),
+          offScriptActive: offScriptActive || hardNoMatchOffScriptActive,
+          policyMult: Number(policyMult.toFixed(3)),
+          basePxps: Number(base.toFixed(2)),
+          finalPxps: Number(finalPxps.toFixed(2)),
+          speedSettingRaw,
+          speedUnit: 'wpm',
+        });
+      } catch {}
+    }
 
     logHybridMultDebug({
       basePxps: base,
@@ -5033,8 +5820,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       lineMult,
       capReason,
       scaleReason: hybridScaleDetail.reason,
-      sawNoMatch,
-      hardNoMatch,
+      noMatch: sawNoMatchEffective || !matchKnown,
+      sawNoMatch: sawNoMatchEffective,
+      hardNoMatch: hardNoMatchEffective,
       offScriptActive: hybridScaleDetail.offScriptActive,
       bestSim,
       weakMatch,
@@ -5073,9 +5861,10 @@ function applyHybridVelocityCore(silence = hybridSilence) {
 
         const matchSimLog = matchKnown ? matchSimValue : null;
         const stateParts = [
-          `noMatch=${sawNoMatch || !matchKnown}`,
+          `noMatch=${sawNoMatchEffective || !matchKnown}`,
+          `sawNoMatch=${sawNoMatchEffective}`,
           `weakMatch=${weakMatch}`,
-          `hardNoMatch=${hardNoMatch}`,
+          `hardNoMatch=${hardNoMatchEffective}`,
           `offScriptActive=${offScriptActive}`,
           `reason=${reason}`,
           `conf=${conf.toFixed(2)}`,
@@ -5083,8 +5872,39 @@ function applyHybridVelocityCore(silence = hybridSilence) {
           `matchSim=${matchSimLog != null ? matchSimLog.toFixed(2) : "null"}`,
           `matchReason=${matchReason}`,
           `targetTopSrc=${matchKnown ? errorInfo?.targetTopSource ?? "unknown" : "unknown"}`,
+          `blocksReady=${runtime.blocksReady}`,
+          `blockCount=${runtime.blockCount}`,
+          `blockSource=${runtime.blockSource}`,
+          `backendReady=${runtime.backendReady}`,
+          `blocksHold=${blocksNotReadyHold}`,
+          `scriptHash=${runtime.scriptHash ?? "null"}`,
+          `scriptSig=${runtime.scriptSig ?? "null"}`,
+          `matcherSource=${runtime.matcherSource}`,
+          `matcherFeed=${runtime.matcherSourceDetail}`,
         ];
         console.info("[HYBRID_FINAL_MILE_STATE]", stateParts.join(" "));
+        if (blocksNotReadyHold || sawNoMatchEffective || offScriptActive || hardNoMatchEffective) {
+          logHybridMatcherProbe('final-mile', {
+            noMatch: sawNoMatchEffective || !matchKnown,
+            sawNoMatch: sawNoMatchEffective,
+            weakMatch,
+            hardNoMatch: hardNoMatchEffective,
+            hardNoMatchAgeMs: Math.round(hardNoMatchAgeMs),
+            hardNoMatchOffScriptActive,
+            offScriptActive,
+            bestSim: matchSimLog,
+            reason,
+            blocksReady: runtime.blocksReady,
+            blockCount: runtime.blockCount,
+            blockSource: runtime.blockSource,
+            scriptHash: runtime.scriptHash,
+            scriptSig: runtime.scriptSig,
+            matcherSource: runtime.matcherSource,
+            matcherSourceDetail: runtime.matcherSourceDetail,
+            backendReady: runtime.backendReady,
+            blocksNotReadyHold,
+          });
+        }
       } catch {}
     }
     if (wantedPxps !== sentPxps) {
@@ -5104,6 +5924,21 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       } catch {}
     }
 
+    logHybridTrace(
+      'motor_velocity_set',
+      {
+        finalPxps: Number(finalPxps.toFixed(2)),
+        basePxps: Number(base.toFixed(2)),
+        finalScale: Number(finalScale.toFixed(3)),
+        speechPresent,
+        offScriptActive: offScriptActive || hardNoMatchOffScriptActive,
+        reason: finalReasons.join('|'),
+      },
+      {
+        throttleMs: 30,
+        signature: `${finalPxps.toFixed(2)}|${base.toFixed(2)}|${finalScale.toFixed(3)}|${speechPresent ? 1 : 0}|${(offScriptActive || hardNoMatchOffScriptActive) ? 1 : 0}|${finalReasons.join('|')}`,
+      },
+    );
     hybridMotor.setVelocityPxPerSec(finalPxps);
     emitHybridSafety();
     scheduleHybridVelocityRefresh();
@@ -5112,13 +5947,6 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const target = typeof window !== 'undefined' ? window : globalThis;
     (target as any).__tpApplyHybridVelocity = applyHybridVelocityCore;
   } catch {}
-
-  function _markHybridOffScript() {
-    if (state2.mode !== "hybrid") return;
-    const changed = setHybridScale(OFFSCRIPT_DEEP);
-    if (!changed) emitHybridSafety();
-  }
-  markHybridOffScriptFn = _markHybridOffScript;
   function suppressAssistScale(boost: number, base: number) {
     if (!Number.isFinite(boost) || boost <= 0) return 0;
     if (!Number.isFinite(base) || base <= 0) return 0;
@@ -5448,13 +6276,18 @@ function applyHybridVelocityCore(silence = hybridSilence) {
     const now = nowMs();
     const gateWanted = computeGateWanted();
     const phaseAllowed = canRunHybridMotor();
+    const runtime = getHybridBlockRuntimeState();
     const baseHybridPxPerSec = Number.isFinite(hybridBasePxps) ? Math.max(0, hybridBasePxps) : 0;
     const lastSpeechAgeMs = Math.max(0, now - hybridSilence.lastSpeechAtMs);
+    const speechPresent = isHybridSpeechPresent(now);
+    const speechHoldRemainingMs = getHybridSpeechHoldRemainingMs(now);
+    const speechHeardRecently = speechPresent || lastSpeechAgeMs <= HYBRID_BLOCKS_NOT_READY_HOLD_MS;
+    const blocksNotReadyHold = runtime.backendReady && !runtime.blocksReady && speechHeardRecently;
     const liveGraceActive = isLiveGraceActive(now);
     const errorInfo = computeHybridErrorPx(now);
     const silenceStopMs = computeHybridSilenceDelayMs();
     const isSilent = !liveGraceActive && lastSpeechAgeMs >= silenceStopMs;
-    const speechAllowed = !isSilent;
+    const speechAllowed = !isSilent || blocksNotReadyHold;
     const gateSatisfied = isHybridBypass() ? true : gateWanted;
     const wantEnabled =
       hybridWantedRunning &&
@@ -5487,9 +6320,28 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         offScriptActive: false,
       };
     const matchState = getHybridMatchState();
+    const hardNoMatchEffective = blocksNotReadyHold ? false : matchState.hardNoMatch;
+    if (speechPresent && hardNoMatchEffective) {
+      if (!(hardNoMatchSinceMs > 0)) {
+        hardNoMatchSinceMs = now;
+      }
+    } else if (hardNoMatchSinceMs > 0) {
+      hardNoMatchSinceMs = 0;
+    }
+    const hardNoMatchAgeMs = hardNoMatchSinceMs > 0 ? Math.max(0, now - hardNoMatchSinceMs) : 0;
+    const hardNoMatchOffScriptActive =
+      !blocksNotReadyHold &&
+      speechPresent &&
+      hardNoMatchEffective &&
+      hardNoMatchAgeMs >= HYBRID_HARD_NOMATCH_OFFSCRIPT_GRACE_MS;
+    if (hardNoMatchOffScriptActive && !hybridSilence.offScriptActive) {
+      setHybridScale(OFFSCRIPT_DEEP);
+    }
     const driftWeakMatch = isHybridDriftWeak(errorInfo);
-    const gateWeakMatch = matchState.weakMatch || driftWeakMatch;
-    const gateEffectiveOffScript = (safeSilence.offScriptActive ?? false) || gateWeakMatch;
+    const gateWeakMatch = blocksNotReadyHold ? false : (matchState.weakMatch || driftWeakMatch);
+    const gateEffectiveOffScript = blocksNotReadyHold
+      ? false
+      : ((safeSilence.offScriptActive ?? false) || gateWeakMatch || hardNoMatchOffScriptActive);
     const hybridScaleDetail = computeEffectiveHybridScale(
       now,
       safeSilence,
@@ -5554,7 +6406,9 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       mode: state2.mode,
       phase: sessionPhase,
       hybridWantedRunning,
-      asrEnabled: speechActive,
+      asrEnabled: speechPresent,
+      speechPresent,
+      speechHoldRemainingMs: Math.round(speechHoldRemainingMs),
       lastSpeechAgeMs,
       liveGraceActive,
       isSilent,
@@ -5569,6 +6423,19 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       gateWanted,
       phaseAllowed,
       blocked: hybridBlockedReason,
+      blocksReady: runtime.blocksReady,
+      blockCount: runtime.blockCount,
+      blockSource: runtime.blockSource,
+      blockSchemaVersion: runtime.schemaVersion,
+      scriptHash: runtime.scriptHash,
+      scriptSig: runtime.scriptSig,
+      matcherSource: runtime.matcherSource,
+      matcherSourceDetail: runtime.matcherSourceDetail,
+      backendReady: runtime.backendReady,
+      blocksNotReadyHold,
+      hardNoMatch: hardNoMatchEffective,
+      hardNoMatchAgeMs: Math.round(hardNoMatchAgeMs),
+      hardNoMatchOffScriptActive,
       viewer: {
         has: !!viewerEl,
         top: viewerEl?.scrollTop ?? -1,
@@ -5587,7 +6454,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       sessionPhase,
       hybridWantedRunning ? "1" : "0",
       userEnabled ? "1" : "0",
-      speechActive ? "1" : "0",
+      speechPresent ? "1" : "0",
       gatePref,
       gateWanted ? "1" : "0",
       phaseAllowed ? "1" : "0",
@@ -5597,13 +6464,54 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       shouldRunHybrid ? "1" : "0",
       Number.isFinite(effectivePxPerSec) ? effectivePxPerSec.toFixed(1) : "0",
       Number.isFinite(hybridBasePxps) ? hybridBasePxps.toFixed(0) : "0",
+      runtime.blocksReady ? "1" : "0",
+      blocksNotReadyHold ? "1" : "0",
     ];
     const gateFingerprint = fingerprintParts.join("|");
+    logHybridTrace(
+      'gate_decision',
+      {
+        shouldRunHybrid,
+        gateReason: hybridBlockedReason,
+        speechPresent,
+        holdMs: Math.round(speechHoldRemainingMs),
+        offScriptActive: gateEffectiveOffScript,
+        hardNoMatch: hardNoMatchEffective,
+        blocksNotReadyHold,
+        gateWanted,
+        gateSatisfied,
+        wantEnabled,
+        effectivePxps: Number(effectivePxPerSec.toFixed(2)),
+      },
+      {
+        signature: gateFingerprint,
+      },
+    );
     if (gateFingerprint !== lastHybridGateFingerprint) {
       lastHybridGateFingerprint = gateFingerprint;
       try {
         console.warn("[HYBRID] gate", snap);
       } catch {}
+    }
+    if (blocksNotReadyHold || gateEffectiveOffScript || matchState.hardNoMatch) {
+      logHybridMatcherProbe('gate', {
+        blocksReady: runtime.blocksReady,
+        blockCount: runtime.blockCount,
+        blockSource: runtime.blockSource,
+        scriptHash: runtime.scriptHash,
+        scriptSig: runtime.scriptSig,
+        matcherSource: runtime.matcherSource,
+        matcherSourceDetail: runtime.matcherSourceDetail,
+        backendReady: runtime.backendReady,
+        blocksNotReadyHold,
+        hardNoMatch: hardNoMatchEffective,
+        hardNoMatchAgeMs: Math.round(hardNoMatchAgeMs),
+        hardNoMatchOffScriptActive,
+        weakMatch: gateWeakMatch,
+        offScriptActive: gateEffectiveOffScript,
+        speechActive: speechPresent,
+        lastSpeechAgeMs: Math.round(lastSpeechAgeMs),
+      });
     }
     if (shouldRunHybrid) {
       if (silenceTimer) {
@@ -5614,6 +6522,36 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         applyHybridVelocityCore(safeSilence);
       } catch {}
       if (!hybridRunning) {
+        if (isDevMode()) {
+          try {
+            const sliderValue = (() => {
+              const slider = document.getElementById("wpmTarget") as HTMLInputElement | null;
+              if (!slider) return null;
+              const raw = Number(slider.value);
+              return Number.isFinite(raw) && raw > 0 ? raw : null;
+            })();
+            const storedValue = (() => {
+              const raw = Number(localStorage.getItem("tp_baseline_wpm"));
+              return Number.isFinite(raw) && raw > 0 ? raw : null;
+            })();
+            const clampReason = blocksNotReadyHold
+              ? "blocks-not-ready-hold"
+              : silencePaused
+              ? "silence"
+              : gateEffectiveOffScript
+              ? "offscript"
+              : hybridScaleDetail.reason || "none";
+            const speedSettingRaw = getHybridSpeedSettingRaw();
+            console.info("[HYBRID_SPEED]", {
+              sliderValue: speedSettingRaw ?? sliderValue,
+              storedValue,
+              speedSettingRaw,
+              speedUnit: "wpm",
+              basePxpsComputed: Number(baseHybridPxPerSec.toFixed(2)),
+              clampReason,
+            });
+          } catch {}
+        }
         try {
           console.info('[HYBRID] shouldRun true starting motor', {
             isRunningBefore: hybridRunning,
@@ -5643,7 +6581,7 @@ function applyHybridVelocityCore(silence = hybridSilence) {
       emitMotorState("hybridWpm", false);
       clearHybridSilenceTimer();
     }
-    const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Phase:${phaseAllowed ? "live" : "blocked"} \u2022 Speech:${speechActive ? "1" : "0"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
+    const detail = `Mode: Hybrid \u2022 Pref: ${gatePref} \u2022 User: ${userEnabled ? "On" : "Off"} \u2022 Phase:${phaseAllowed ? "live" : "blocked"} \u2022 Speech:${speechPresent ? "1" : "0"} \u2022 dB:${dbGate ? "1" : "0"} \u2022 VAD:${vadGate ? "1" : "0"}`;
     const chipState = userEnabled ? (hybridMotor.isRunning() ? "on" : "paused") : "manual";
     setAutoChip(chipState, detail, "Motor");
     emitMotorState("hybridWpm", hybridMotor.isRunning());
@@ -5975,16 +6913,25 @@ function applyHybridVelocityCore(silence = hybridSilence) {
         const perfNow = nowMs();
         const rawTs = typeof detail.ts === "number" ? detail.ts : perfNow;
         const normalizedTs = normalizePerfTimestamp(rawTs, perfNow);
-    if (silent) {
-      hybridSilence.lastSpeechAtMs = normalizedTs;
-      hybridSilence.pausedBySilence = true;
-      speechActive = false;
-      clearHybridSilenceTimer();
-      runHybridVelocity(hybridSilence);
-      armHybridSilenceTimer();
-    } else {
-      noteHybridSpeechActivity(normalizedTs, { source: "silence" });
-    }
+        if (silent) {
+          // Structural silence hint: do not force immediate pause.
+          // Let silence timeout apply pause/stop after grace duration.
+          speechActive = false;
+          if (!(hybridSilence.lastSpeechAtMs > 0)) {
+            hybridSilence.lastSpeechAtMs = normalizedTs;
+          }
+          if (hybridSilence.pausedBySilence) {
+            armHybridSilenceTimer();
+          } else {
+            const lastSpeechAtMs = hybridSilence.lastSpeechAtMs > 0 ? hybridSilence.lastSpeechAtMs : normalizedTs;
+            const silentForMs = Math.max(0, normalizedTs - lastSpeechAtMs);
+            const remainingMs = Math.max(1, computeHybridSilenceDelayMs() - silentForMs);
+            armHybridSilenceTimer(remainingMs);
+          }
+          try { applyGate(); } catch {}
+        } else {
+          noteHybridSpeechActivity(normalizedTs, { source: "silence" });
+        }
       } catch {}
     });
   } catch {

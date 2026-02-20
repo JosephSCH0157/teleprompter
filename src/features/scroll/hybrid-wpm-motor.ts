@@ -23,8 +23,10 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
   let warnedNoOverflow = false;
   let loggedFirstMove = false;
   let lastMoveAtMs = 0;
+  let lastDtClampLogAtMs = 0;
   let posFloat: number | null = null;
   const TICK_LOG_INTERVAL_MS = 1000;
+  const DT_CLAMP_LOG_INTERVAL_MS = 250;
 
   const now = deps.now ?? (() => performance.now());
   const raf = deps.raf ?? ((cb: FrameRequestCallback) => window.requestAnimationFrame(cb));
@@ -54,6 +56,15 @@ export function createHybridWpmMotor(deps: HybridWpmMotorDeps): Motor {
     const prev = lastNow ?? current;
     const deltaMs = current - prev;
     const dt = clamp(deltaMs / 1000, 0, 0.2);
+    if (deltaMs > 200) {
+      if (current - lastDtClampLogAtMs >= DT_CLAMP_LOG_INTERVAL_MS) {
+        lastDtClampLogAtMs = current;
+        log('dt-clamp', {
+          dtRaw: deltaMs / 1000,
+          dtClamped: dt,
+        });
+      }
+    }
     lastNow = current;
 
     if (velocityPxPerSec !== 0) {

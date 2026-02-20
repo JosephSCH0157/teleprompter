@@ -513,16 +513,16 @@ export function renderScript(text: string, container?: HTMLElement | null): void
   } catch {}
 
   try {
-    const evt = new CustomEvent('tp:render:done', { detail: { lineCount: renderedLineIndex } });
-    root.dispatchEvent(evt);
-    document.dispatchEvent(evt);
+    const detail = { lineCount: renderedLineIndex };
+    root.dispatchEvent(new CustomEvent('tp:render:done', { detail }));
+    window.dispatchEvent(new CustomEvent('tp:render:done', { detail }));
   } catch {
     // ignore
   }
 
   // Notify observers (e.g., display mirror) that content changed
   try {
-    document.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { lineCount: renderedLineIndex } }));
+    window.dispatchEvent(new CustomEvent('tp:script-rendered', { detail: { lineCount: renderedLineIndex } }));
   } catch {}
   // Notify listeners (e.g., display sync) that script content changed
   try { window.dispatchEvent(new CustomEvent('tp:scriptChanged', { detail: { lineCount: renderedLineIndex } })); } catch {}

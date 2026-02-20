@@ -377,7 +377,7 @@ export function wireDisplayMirror() {
         renderPending = false;
       }
     };
-    document.addEventListener('tp:script-rendered', () => {
+    window.addEventListener('tp:script-rendered', () => {
       if (!renderPending) { renderPending = true; requestAnimationFrame(sendRender); }
     });
     try {
@@ -1158,14 +1158,24 @@ export function bindStaticDom() {
         const idxRaw = Number((window as any).currentIndex ?? -1);
         return Number.isFinite(idxRaw) && idxRaw >= 0 ? Math.max(0, Math.floor(idxRaw)) : null;
       };
-      const getMarkerLineIndex = () => {
-        const mode = getScrollMode();
-        if (mode === 'asr' || mode === 'hybrid') {
-          return getAsrAnchorIndex();
-        }
+      const getVisualMarkerLineIndex = () => {
         const scroller = resolveCatchUpScroller();
         const idx = scroller ? computeAnchorLineIndex(scroller) : computeAnchorLineIndex();
         return Number.isFinite(idx as number) ? (idx as number) : null;
+      };
+      const getMarkerLineIndex = () => {
+        const mode = getScrollMode();
+        if (mode === 'asr') {
+          return getAsrAnchorIndex();
+        }
+        if (mode === 'hybrid') {
+          const asrIdx = getAsrAnchorIndex();
+          if (Number.isFinite(asrIdx as number) && (asrIdx as number) >= 0) {
+            return Math.max(0, Math.floor(asrIdx as number));
+          }
+          return getVisualMarkerLineIndex();
+        }
+        return getVisualMarkerLineIndex();
       };
       wireCatchUpButton({
         getScroller: resolveCatchUpScroller,
@@ -1195,6 +1205,8 @@ export function bindStaticDom() {
                   driver.setLastLineIndex(prevIndex);
                 }
               } catch {}
+            } else if (mode === 'hybrid' && prevIndex != null) {
+              try { (window as any).currentIndex = prevIndex; } catch {}
             }
             const verify = () => {
               const nextIndex = getAsrAnchorIndex();

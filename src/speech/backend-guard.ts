@@ -1,4 +1,9 @@
-const matchBatchStub = () => ({ bestIdx: 0, bestSim: 0, topScores: [] } as const);
+const matchBatchStub = () => ({
+  noMatch: true,
+  bestIdx: -1,
+  topScores: [],
+  reason: 'matcher_unavailable',
+} as const);
 const noop = () => undefined;
 
 function hasSearchFlag(name: string, aliases: string[] = []): boolean {

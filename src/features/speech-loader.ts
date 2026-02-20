@@ -21,7 +21,7 @@ import {
   resolveActiveScroller,
 } from '../scroll/scroller';
 import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
-import { normTokens } from '../speech/matcher';
+import { matchBatch as runMatcherBatch, normTokens, type MatchConfig } from '../speech/matcher';
 import { stopAsrRuntime } from '../speech/runtime-control';
 import type { AppStore } from '../state/app-store';
 import { getSession, setSessionPhase } from '../state/session';
@@ -163,6 +163,16 @@ type AsrStallAutoRestartPayload = {
   restarted: boolean;
 };
 
+type PendingAsrScriptEndStop = {
+  dedupeKey: string;
+  runKey: string;
+  mode: string;
+  lineIndex: number | null;
+  lastSpeakableLineIndex: number | null;
+  armedAt: number;
+  targetLineTokens: string[];
+};
+
 declare global {
   interface Window {
     __tpBus?: { emit?: AnyFn };
@@ -267,8 +277,11 @@ let asrStallAttemptCountThisEpisode = 0;
 let lastAsrStallEpisodeClass: AsrStallClass = 'unknown';
 let lastAsrStallAutoRestartAt = 0;
 let suppressAsrStallAutoRestartUntil = 0;
+let lastAsrStallRescueAt = 0;
 let lastMatcherStallCommitCount = -1;
 let lastMatcherStallCommitStableSince = 0;
+let lastAsrScriptEndStopKey = '';
+let pendingAsrScriptEndStop: PendingAsrScriptEndStop | null = null;
 
 const WATCHDOG_INTERVAL_MS = 5000;
 const WATCHDOG_THRESHOLD_MS = 15000;
@@ -280,9 +293,43 @@ const ASR_STALL_MATCHER_THRESHOLD_MS = 4500;
 const ASR_STALL_MATCHER_STABLE_COMMIT_MS = 1500;
 const ASR_STALL_AUTORESTART_COOLDOWN_MS = 15000;
 const ASR_STALL_AUTORESTART_SUPPRESS_MS = 30000;
+const ASR_STALL_RESCUE_COOLDOWN_MS = 2000;
 const LIFECYCLE_RESTART_DELAY_MS = 120;
 const LIFECYCLE_RESTART_COOLDOWN_MS = 350;
 const HUD_SNAPSHOT_THROTTLE_MS = 120;
+const ASR_SCRIPT_END_CONFIRM_MAX_WAIT_MS = 15000;
+const ASR_SCRIPT_END_CONFIRM_MIN_SHARED_MEANINGFUL_TOKENS = 1;
+const ASR_SCRIPT_END_CONFIRM_MIN_SHARED_TOKENS = 2;
+const ASR_SCRIPT_END_STOPWORDS = new Set([
+  'the',
+  'and',
+  'that',
+  'this',
+  'with',
+  'from',
+  'your',
+  'you',
+  'for',
+  'are',
+  'was',
+  'were',
+  'have',
+  'has',
+  'had',
+  'into',
+  'onto',
+  'then',
+  'than',
+  'but',
+  'not',
+  'its',
+  'it',
+  'they',
+  'them',
+  'their',
+  'there',
+  'here',
+]);
 
 function inRehearsal(): boolean {
   try { return !!document.body?.classList?.contains('mode-rehearsal'); } catch { return false; }
@@ -375,6 +422,16 @@ function getTpSpeechNamespace(): any {
   return ns;
 }
 
+function isLegacySpeechNamespaceAllowed(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    if ((window as any).__tpAllowLegacySpeechNamespace === true) return true;
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('legacySpeechNs') === '1') return true;
+  } catch {}
+  return false;
+}
+
 function getTpSpeechStoreSnapshot(): any {
   try {
     const ns = getTpSpeechNamespace();
@@ -422,6 +479,172 @@ function syncAsrDriverStats(driverRef?: any): void {
   lastAsrIngestTs = Math.max(lastAsrIngestTs, stats.lastIngestAt);
   lastAsrCommitTs = Math.max(lastAsrCommitTs, stats.lastCommitAt);
   lastAsrCommitCount = Math.max(lastAsrCommitCount, stats.commitCount);
+}
+
+function normalizeLineIndex(value: unknown): number | null {
+  const raw = Number(value);
+  if (!Number.isFinite(raw)) return null;
+  return Math.max(0, Math.floor(raw));
+}
+
+function resolveRuntimeAsrLineIndex(): number | null {
+  const driverRef = resolveAsrDriverRef();
+  const fromDriver = normalizeLineIndex(driverRef?.getLastLineIndex?.());
+  if (fromDriver != null) return fromDriver;
+  try {
+    return normalizeLineIndex((window as any)?.currentIndex);
+  } catch {
+    return null;
+  }
+}
+
+function countTokenOverlap(
+  transcriptTokens: string[],
+  targetTokens: string[],
+): { sharedAny: number; sharedMeaningful: number } {
+  if (!transcriptTokens.length || !targetTokens.length) {
+    return { sharedAny: 0, sharedMeaningful: 0 };
+  }
+  const transcriptSet = new Set(transcriptTokens);
+  let sharedAny = 0;
+  let sharedMeaningful = 0;
+  for (const token of targetTokens) {
+    if (!transcriptSet.has(token)) continue;
+    sharedAny += 1;
+    if (token.length >= 4 && !ASR_SCRIPT_END_STOPWORDS.has(token)) {
+      sharedMeaningful += 1;
+    }
+  }
+  return { sharedAny, sharedMeaningful };
+}
+
+function clearPendingAsrScriptEnd(reason: string): void {
+  if (!pendingAsrScriptEndStop) return;
+  if (isDevMode() && shouldLogTag('ASR:script-end-pending-clear', 2, 250)) {
+    try {
+      console.info('[ASR] script-end pending cleared', {
+        reason,
+        dedupeKey: pendingAsrScriptEndStop.dedupeKey,
+      });
+    } catch {}
+  }
+  pendingAsrScriptEndStop = null;
+}
+
+function finalizePendingAsrScriptEndStop(
+  pending: PendingAsrScriptEndStop,
+  evidence: {
+    source: 'route-line' | 'token-overlap';
+    matchedLine: number | null;
+    sharedAny: number;
+    sharedMeaningful: number;
+    overlapRatio: number;
+  },
+): void {
+  const session = getSession();
+  const mode = String(pending.mode || getScrollMode() || '').toLowerCase();
+  if (session.phase !== 'live' || !isAsrLikeMode(mode)) {
+    clearPendingAsrScriptEnd('session-not-live');
+    return;
+  }
+  lastAsrScriptEndStopKey = pending.dedupeKey;
+  pendingAsrScriptEndStop = null;
+  const stopIntent = {
+    source: 'asr-script-end',
+    reason: 'script-end',
+    mode,
+    phase: session.phase,
+  };
+  dispatchSessionIntent(false, stopIntent);
+  try { setSessionPhase('wrap'); } catch {}
+  try {
+    window.dispatchEvent(
+      new CustomEvent('tp:session:stop', {
+        detail: {
+          ...stopIntent,
+          intentSource: 'asr-script-end',
+          lineIndex: pending.lineIndex,
+          lastSpeakableLineIndex: pending.lastSpeakableLineIndex,
+          confirmSource: evidence.source,
+          confirmMatchedLine: evidence.matchedLine,
+          confirmSharedTokens: evidence.sharedAny,
+          confirmSharedMeaningfulTokens: evidence.sharedMeaningful,
+          confirmOverlapRatio: evidence.overlapRatio,
+        },
+      }),
+    );
+  } catch {}
+  emitHudSnapshot('script-end-stop', { force: true });
+  if (isDevMode() && shouldLogTag('ASR:script-end-stop', 2, 1000)) {
+    try {
+      console.info('[ASR] session stop at script end', {
+        mode,
+        lineIndex: pending.lineIndex,
+        lastSpeakableLineIndex: pending.lastSpeakableLineIndex,
+        runKey: pending.runKey,
+        confirmSource: evidence.source,
+        confirmMatchedLine: evidence.matchedLine,
+        sharedTokens: evidence.sharedAny,
+        sharedMeaningfulTokens: evidence.sharedMeaningful,
+        overlapRatio: Number(evidence.overlapRatio.toFixed(3)),
+      });
+    } catch {}
+  }
+}
+
+function maybeConfirmPendingAsrScriptEnd(
+  text: string,
+  isFinal: boolean,
+  detail?: Partial<TranscriptPayload>,
+): void {
+  const pending = pendingAsrScriptEndStop;
+  if (!pending) return;
+  const now = Date.now();
+  if (now - pending.armedAt > ASR_SCRIPT_END_CONFIRM_MAX_WAIT_MS) {
+    clearPendingAsrScriptEnd('timeout');
+    return;
+  }
+  if (!isFinal) return;
+  const mode = String(detail?.mode || pending.mode || getScrollMode() || '').toLowerCase();
+  const session = getSession();
+  if (session.phase !== 'live' || !isAsrLikeMode(mode)) {
+    clearPendingAsrScriptEnd('mode-or-phase-change');
+    return;
+  }
+  const targetLine = pending.lastSpeakableLineIndex ?? pending.lineIndex;
+  const runtimeLine = resolveRuntimeAsrLineIndex();
+  if (targetLine != null && runtimeLine != null && runtimeLine < targetLine) return;
+
+  const matchedLine =
+    normalizeLineIndex(detail?.line) ??
+    normalizeLineIndex(detail?.currentIdx);
+  if (targetLine != null && matchedLine != null && matchedLine >= targetLine) {
+    finalizePendingAsrScriptEndStop(pending, {
+      source: 'route-line',
+      matchedLine,
+      sharedAny: 0,
+      sharedMeaningful: 0,
+      overlapRatio: 0,
+    });
+    return;
+  }
+
+  const transcriptTokens = normTokens(String(text || ''));
+  const targetTokens = pending.targetLineTokens;
+  const { sharedAny, sharedMeaningful } = countTokenOverlap(transcriptTokens, targetTokens);
+  const overlapRatio = targetTokens.length > 0 ? sharedAny / targetTokens.length : 0;
+  const hasTokenEvidence =
+    (sharedMeaningful >= ASR_SCRIPT_END_CONFIRM_MIN_SHARED_MEANINGFUL_TOKENS &&
+      sharedAny >= ASR_SCRIPT_END_CONFIRM_MIN_SHARED_TOKENS) ||
+    (targetTokens.length > 0 && overlapRatio >= 0.5);
+  if (!hasTokenEvidence) return;
+  finalizePendingAsrScriptEndStop(pending, {
+    source: 'token-overlap',
+    matchedLine,
+    sharedAny,
+    sharedMeaningful,
+    overlapRatio,
+  });
 }
 
 function toMaybeTimestamp(ts: number): number | null {
@@ -529,7 +752,7 @@ function maybeLogLiveArmedDetachedInvariant(reason: string): void {
   const phase = String(session.phase || '').toLowerCase();
   if (!isLiveArmedAsr(mode, phase, !!session.asrArmed)) return;
   if (shouldLogTag('ASR:invariant:live-armed-detached', 2, 1000)) {
-    try { console.warn('[ASR_INVARIANT_BROKEN] live+armed but no recognizer attached'); } catch {}
+    try { console.warn('[ASR_INVARIANT_BROKEN] live+armed but no recognizer attached', { reason }); } catch {}
   }
 }
 
@@ -624,6 +847,7 @@ function resetAsrStallAutoRestartEpisode(reason?: string): void {
   asrStallEpisodeRestarted = false;
   asrStallAttemptCountThisEpisode = 0;
   lastAsrStallEpisodeClass = 'unknown';
+  lastAsrStallRescueAt = 0;
   lastMatcherStallCommitCount = -1;
   lastMatcherStallCommitStableSince = 0;
   if (isDevMode() && shouldLogTag('ASR_STALL_AUTORESTART_RESET', 2, 1000)) {
@@ -654,6 +878,27 @@ function emitAsrStallAutoRestart(payload: AsrStallAutoRestartPayload): void {
   try { document.dispatchEvent(new CustomEvent('tp:asr:stall-autorestart', { detail: payload })); } catch {}
   if (isDevMode()) {
     try { console.warn('[ASR_STALL_AUTORESTART]', payload); } catch {}
+  }
+}
+
+function emitAsrStallRescue(reason: string, stall: AsrStallPayload): void {
+  if (typeof window === 'undefined') return;
+  const payload = {
+    reason: String(reason || 'stall:speech_stall'),
+    ts: Date.now(),
+    scrollMode: stall.scrollMode,
+    sessionPhase: stall.sessionPhase,
+    asrArmed: stall.asrArmed,
+    stallClass: stall.stallClass,
+    sinceOnResultMs: stall.sinceOnResultMs,
+    sinceCommitMs: stall.sinceCommitMs,
+    commitCount: stall.commitCount,
+  };
+  try { window.__tpBus?.emit?.('tp:asr:rescue', payload); } catch {}
+  try { window.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: payload })); } catch {}
+  try { document.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: payload })); } catch {}
+  if (isDevMode() && shouldLogTag('ASR_STALL_RESCUE', 2, 1000)) {
+    try { console.info('[ASR_STALL_RESCUE]', payload); } catch {}
   }
 }
 
@@ -690,6 +935,16 @@ function maybeAutoRestartSpeechStall(stallPayload: AsrStallPayload): void {
     !stallPayload.recognizerAttached ||
     !stallPayload.speechRunningActual ||
     deafRecognizerLane;
+  if (liveArmedAsr && recognizerLaneDied) {
+    const rescueCooldownRemainingMs = Math.max(
+      0,
+      ASR_STALL_RESCUE_COOLDOWN_MS - (now - lastAsrStallRescueAt),
+    );
+    if (rescueCooldownRemainingMs <= 0) {
+      lastAsrStallRescueAt = now;
+      emitAsrStallRescue('stall:speech_stall', stallPayload);
+    }
+  }
   if (!inAsrMode || !asrArmed) {
     asrStallEpisodeRestarted = false;
     asrStallAttemptCountThisEpisode = 0;
@@ -887,6 +1142,70 @@ function isAutoRestartEnabled(): boolean {
 function emitTranscriptEvent(payload: TranscriptPayload): void {
   try { window.__tpBus?.emit?.('tp:speech:transcript', payload); } catch {}
   try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
+}
+
+function logTranscriptEmitDebug(payload: TranscriptPayload): void {
+  try {
+    const textRaw = typeof payload.text === 'string' ? payload.text : '';
+    const textPreview = textRaw.replace(/\s+/g, ' ').trim().slice(0, 60);
+    const matchObj =
+      payload.match && typeof payload.match === 'object'
+        ? (payload.match as Record<string, unknown>)
+        : null;
+    const matchBestIdxRaw =
+      (matchObj?.bestIdx as unknown) ??
+      (matchObj?.line as unknown) ??
+      (matchObj?.lineIdx as unknown);
+    const matchBestSimRaw =
+      (matchObj?.bestSim as unknown) ??
+      (matchObj?.sim as unknown) ??
+      (matchObj?.score as unknown);
+    const topLevelBestIdxRaw = (payload as any)?.bestIdx ?? payload.line;
+    const topLevelBestSimRaw = (payload as any)?.bestSim ?? payload.sim;
+    const matchBestIdx = Number.isFinite(Number(matchBestIdxRaw))
+      ? Math.floor(Number(matchBestIdxRaw))
+      : null;
+    const matchBestSim = Number.isFinite(Number(matchBestSimRaw))
+      ? Number(Number(matchBestSimRaw).toFixed(4))
+      : null;
+    const topLevelBestIdx = Number.isFinite(Number(topLevelBestIdxRaw))
+      ? Math.floor(Number(topLevelBestIdxRaw))
+      : null;
+    const topLevelBestSim = Number.isFinite(Number(topLevelBestSimRaw))
+      ? Number(Number(topLevelBestSimRaw).toFixed(4))
+      : null;
+    const matchReason = typeof matchObj?.reason === 'string' ? matchObj.reason : null;
+    const matchVia = typeof matchObj?.via === 'string' ? matchObj.via : null;
+    const matchFallbackUsed = matchObj?.fallbackUsed === true;
+    const blockSnapshot = getAsrBlockSnapshot();
+    const scriptHash = (() => {
+      try {
+        const raw = (window as any).__TP_LAST_APPLIED_HASH;
+        return typeof raw === 'string' && raw ? raw : null;
+      } catch {
+        return null;
+      }
+    })();
+    const summary = {
+      textLen: textRaw.length,
+      textPreview,
+      noMatch: payload.noMatch === true,
+      matchId: payload.matchId ?? null,
+      matchBestIdx,
+      matchBestSim,
+      matchReason,
+      matchVia,
+      matchFallbackUsed,
+      topLevelBestIdx,
+      topLevelBestSim,
+      scriptHash,
+      scriptSig: blockSnapshot.scriptSig ?? null,
+      blockCount: blockSnapshot.count,
+      blockSource: blockSnapshot.source ?? null,
+      blockSchemaVersion: blockSnapshot.schemaVersion ?? null,
+    };
+    console.info('[speech-loader] tp:speech:transcript emit summary', JSON.stringify(summary));
+  } catch {}
 }
 
 function markResultTimestamp(): void {
@@ -1315,17 +1634,96 @@ function normalizeMatcherResult(input: unknown): Record<string, unknown> | null 
   const bestIdxRaw = raw.bestIdx ?? raw.idx;
   const bestSimRaw = raw.bestSim ?? raw.sim;
   const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
-  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const explicitNoMatch = raw.noMatch === true;
+  const noMatch = explicitNoMatch || bestIdx < 0;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : undefined;
   const topScores = Array.isArray(raw.topScores)
     ? raw.topScores
     : (Array.isArray(raw.candidates) ? raw.candidates : []);
-  return {
+  const normalized: Record<string, unknown> = {
     ...raw,
-    bestIdx,
-    bestSim,
+    bestIdx: noMatch ? -1 : bestIdx,
     topScores,
-    noMatch: typeof raw.noMatch === 'boolean' ? raw.noMatch : bestIdx < 0,
+    noMatch,
   };
+  if (!noMatch && Number.isFinite(bestSim)) {
+    normalized.bestSim = Number(bestSim);
+  } else {
+    delete normalized.bestSim;
+    delete normalized.sim;
+  }
+  return normalized;
+}
+
+function tagMatchResult(
+  result: Record<string, unknown> | null,
+  via: 'backend' | 'backend_stub' | 'local_fallback',
+): Record<string, unknown> | null {
+  if (!result) return null;
+  if (typeof result.via !== 'string' || !String(result.via)) {
+    result.via = via;
+  }
+  if (via === 'local_fallback') {
+    result.fallbackUsed = true;
+  }
+  return result;
+}
+
+function deriveDirectMatcherResult(
+  transcript: string,
+  speechStoreState?: any,
+): Record<string, unknown> | null {
+  if (typeof window === 'undefined') return null;
+  const spokenTokens = normTokens(String(transcript || ''));
+  if (!spokenTokens.length) return null;
+  const blockSnapshot = getAsrBlockSnapshot();
+  if (!(blockSnapshot.ready && blockSnapshot.count > 0)) {
+    return null;
+  }
+  const w = window as any;
+  const scriptWords: string[] = Array.isArray(w.scriptWords) ? w.scriptWords : [];
+  const paraIndex: Array<any> = Array.isArray(w.paraIndex) ? w.paraIndex : [];
+  const vParaIndex: string[] | null = Array.isArray(w.__vParaIndex) ? w.__vParaIndex : null;
+  if (!scriptWords.length) {
+    return null;
+  }
+  if (!paraIndex.length && !(Array.isArray(vParaIndex) && vParaIndex.length)) {
+    return null;
+  }
+  const currentIdxRaw =
+    w.currentIndex ??
+    speechStoreState?.currentIdx ??
+    speechStoreState?.currentIndex ??
+    0;
+  const currentIdx = Number.isFinite(Number(currentIdxRaw)) ? Math.max(0, Math.floor(Number(currentIdxRaw))) : 0;
+  const cfg: MatchConfig = {
+    MATCH_WINDOW_AHEAD: Number.isFinite(Number(w.MATCH_WINDOW_AHEAD)) ? Number(w.MATCH_WINDOW_AHEAD) : 240,
+    MATCH_WINDOW_BACK: Number.isFinite(Number(w.MATCH_WINDOW_BACK)) ? Number(w.MATCH_WINDOW_BACK) : 40,
+    SIM_THRESHOLD: Number.isFinite(Number(w.SIM_THRESHOLD)) ? Number(w.SIM_THRESHOLD) : 0.46,
+    MAX_JUMP_AHEAD_WORDS: Number.isFinite(Number(w.MAX_JUMP_AHEAD_WORDS)) ? Number(w.MAX_JUMP_AHEAD_WORDS) : 18,
+  };
+  try {
+    const raw = runMatcherBatch(
+      spokenTokens,
+      scriptWords,
+      paraIndex,
+      vParaIndex,
+      cfg,
+      currentIdx,
+      w.__viterbiIPred ?? undefined,
+    );
+    const normalized = normalizeMatcherResult(raw);
+    if (!normalized) return null;
+    if (normalized.currentIdx == null) {
+      normalized.currentIdx = currentIdx;
+    }
+    if (typeof normalized.reason !== 'string' || !normalized.reason) {
+      normalized.reason = 'direct_matcher';
+    }
+    return tagMatchResult(normalized, 'local_fallback');
+  } catch {
+    return null;
+  }
 }
 
 function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown> | null {
@@ -1337,28 +1735,54 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
   }
   const bestIdxRaw = raw?.bestIdx ?? raw?.line ?? raw?.idx;
   const bestSimRaw = raw?.bestSim ?? raw?.sim ?? raw?.score;
-  const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || raw?.noMatch === true;
+  const explicitNoMatch = raw?.noMatch === true;
+  const hasStructuredHint = Number.isFinite(Number(bestIdxRaw)) || explicitNoMatch;
   if (!hasStructuredHint) {
     const transcript = String(payload.text || '');
     const finalFlag = Boolean(payload.isFinal ?? payload.final);
+    const isMatcherUnavailable = (result: Record<string, unknown> | null) =>
+      !!result && result.noMatch === true && String(result.reason || '').toLowerCase() === 'matcher_unavailable';
+    let unavailableResult: Record<string, unknown> | null = null;
     try {
       const matchOne = speechNs?.matchOne;
       if (typeof matchOne === 'function') {
-        const result = normalizeMatcherResult(matchOne(transcript, finalFlag));
-        if (result) return result;
+        const result = tagMatchResult(normalizeMatcherResult(matchOne(transcript, finalFlag)), 'backend');
+        if (result) {
+          if (!isMatcherUnavailable(result)) return result;
+          unavailableResult = tagMatchResult(result, 'backend_stub');
+        }
       }
     } catch {}
     try {
-      const matchBatch = speechNs?.matchBatch;
-      if (typeof matchBatch === 'function') {
-        const result = normalizeMatcherResult(matchBatch(transcript, finalFlag));
-        if (result) return result;
+      const matchBatchFn = speechNs?.matchBatch;
+      if (typeof matchBatchFn === 'function') {
+        const result = tagMatchResult(normalizeMatcherResult(matchBatchFn(transcript, finalFlag)), 'backend');
+        if (result) {
+          if (!isMatcherUnavailable(result)) return result;
+          unavailableResult = tagMatchResult(result, 'backend_stub');
+        }
       }
     } catch {}
-    return null;
+    const directResult = deriveDirectMatcherResult(transcript, speechStoreState);
+    if (directResult) {
+      if (isDevMode() && shouldLogTag('ASR:matcher-fallback-direct', 2, 1500)) {
+        try {
+          console.info('[ASR] matcher fallback switched to direct matcher', {
+            reason: unavailableResult?.reason || null,
+            bestIdx: Number.isFinite(Number(directResult.bestIdx)) ? Number(directResult.bestIdx) : -1,
+            bestSim: Number.isFinite(Number(directResult.bestSim))
+              ? Number(Number(directResult.bestSim).toFixed(3))
+              : null,
+          });
+        } catch {}
+      }
+      return directResult;
+    }
+    return unavailableResult;
   }
   const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
-  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : 0;
+  const noMatch = explicitNoMatch || bestIdx < 0;
+  const bestSim = Number.isFinite(Number(bestSimRaw)) ? Number(bestSimRaw) : undefined;
   const topScores = Array.isArray(raw?.topScores)
     ? raw.topScores
     : (Array.isArray(raw?.candidates) ? raw.candidates : []);
@@ -1368,12 +1792,20 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
     (speechStoreState as any)?.currentIdx ??
     (speechStoreState as any)?.currentIndex;
   const currentIdx = Number.isFinite(Number(currentIdxRaw)) ? Math.floor(Number(currentIdxRaw)) : null;
-  return {
-    bestIdx,
-    bestSim,
+  const result: Record<string, unknown> = {
+    bestIdx: noMatch ? -1 : bestIdx,
     topScores,
     currentIdx,
+    noMatch,
   };
+  const reason = raw?.reason;
+  if (typeof reason === 'string' && reason) {
+    result.reason = reason;
+  }
+  if (!noMatch && Number.isFinite(bestSim)) {
+    result.bestSim = Number(bestSim);
+  }
+  return result;
 }
 
 function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPayload {
@@ -1388,11 +1820,16 @@ function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPa
   }
 
   const bestIdxRaw = (match as any)?.bestIdx;
-  const hasForwardMatch = Number.isFinite(Number(bestIdxRaw)) && Number(bestIdxRaw) >= 0;
-  if (next.noMatch == null) {
-    next.noMatch = !hasForwardMatch;
+  const matchNoMatch = (match as any)?.noMatch === true;
+  const hasForwardMatch = !matchNoMatch && Number.isFinite(Number(bestIdxRaw)) && Number(bestIdxRaw) >= 0;
+  if (matchNoMatch) {
+    next.noMatch = true;
+  } else if (next.noMatch == null) {
+    next.noMatch = matchNoMatch || !hasForwardMatch;
   }
-  if (next.matchId == null || next.matchId === '') {
+  if (next.noMatch === true) {
+    next.matchId = null;
+  } else if (next.matchId == null || next.matchId === '') {
     next.matchId = next.noMatch ? null : nextFallbackTranscriptMatchId();
   }
   if (next.currentIdx == null) {
@@ -1403,8 +1840,21 @@ function enrichTranscriptPayloadForAsr(payload: TranscriptPayload): TranscriptPa
     next.line = Math.floor(Number(bestIdxRaw));
   }
   const simRaw = (match as any)?.bestSim ?? (payload as any)?.bestSim;
-  if (next.sim == null && Number.isFinite(Number(simRaw))) {
+  if (next.noMatch !== true && next.sim == null && Number.isFinite(Number(simRaw))) {
     next.sim = Number(simRaw);
+  }
+  if (next.noMatch === true) {
+    if (next.sim != null) delete (next as any).sim;
+    if (next.match && typeof next.match === 'object') {
+      const normalizedMatch: Record<string, unknown> = {
+        ...(next.match as Record<string, unknown>),
+        noMatch: true,
+        bestIdx: -1,
+      };
+      delete normalizedMatch.bestSim;
+      delete normalizedMatch.sim;
+      next.match = normalizedMatch;
+    }
   }
   if (next.candidates == null && Array.isArray((match as any)?.topScores)) {
     next.candidates = (match as any).topScores;
@@ -1484,7 +1934,7 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
       try { (enriched as any).__tpDirectIngest = true; } catch {}
-      try { console.log('[speech-loader] emit tp:speech:transcript', enriched); } catch {}
+      logTranscriptEmitDebug(enriched);
       emitTranscriptEvent(enriched);
     }
   } catch {}
@@ -1525,7 +1975,7 @@ function setReadyUi(): void {
   } catch {}
 }
 
-function setUnsupportedUi(): void {
+function _setUnsupportedUi(): void {
   try {
     const btn = document.getElementById('recBtn') as HTMLButtonElement | null;
     const chip = document.getElementById('speechStatus') || document.getElementById('recChip');
@@ -1561,7 +2011,7 @@ function setListeningUi(listening: boolean): void {
 
 // … (keep your existing helper functions unchanged above installSpeech)
 
-function beginCountdownThen(sec: number, cb: () => Promise<void> | void, source = 'speech'): Promise<void> {
+function _beginCountdownThen(sec: number, cb: () => Promise<void> | void, source = 'speech'): Promise<void> {
   // Run a simple seconds countdown (emit optional HUD events) then call the callback.
   // Resolves even if the callback throws; non-blocking and tolerant to environment failures.
   // Overlay helpers (local so they don't leak globals if loader is re-imported)
@@ -2398,10 +2848,12 @@ function canAttachAsrBackend(): boolean {
   try {
     if (window.__tpSpeechOrchestrator?.start) return true;
   } catch {}
-  try {
-    const ns = getTpSpeechNamespace();
-    if (typeof ns?.startRecognizer === 'function') return true;
-  } catch {}
+  if (isLegacySpeechNamespaceAllowed()) {
+    try {
+      const ns = getTpSpeechNamespace();
+      if (typeof ns?.startRecognizer === 'function') return true;
+    } catch {}
+  }
   try {
     if (window.SpeechRecognition || window.webkitSpeechRecognition) return true;
   } catch {}
@@ -2728,6 +3180,7 @@ function pushAsrTranscript(text: string, isFinal: boolean, detail?: any): void {
   });
   try { asrScrollDriver?.ingest(t, !!isFinal, detail); } catch {}
   syncAsrDriverStats(asrScrollDriver);
+  maybeConfirmPendingAsrScriptEnd(t, !!isFinal, detail);
 }
 
 function attachAsrScrollDriver(opts?: { reason?: string; mode?: string; allowCreate?: boolean; runKey?: string }): void {
@@ -2808,6 +3261,7 @@ function ensureAsrDriverLifecycleHooks(): void {
       syncAsrDriverFromBlocks('scroll-mode', { mode, allowCreate: true });
       return;
     }
+    clearPendingAsrScriptEnd('scroll-mode-exit-asr');
     if (!running) {
       detachAsrScrollDriver();
     }
@@ -2816,6 +3270,8 @@ function ensureAsrDriverLifecycleHooks(): void {
   const onSessionStart = () => {
     const session = getSession();
     const mode = getScrollMode();
+    lastAsrScriptEndStopKey = '';
+    clearPendingAsrScriptEnd('session-start');
     asrSessionIntentActive = true;
     if (session.asrDesired || isAsrLikeMode(mode)) {
       attachAsrScrollDriver({ reason: 'session-start', mode, allowCreate: true });
@@ -2846,6 +3302,8 @@ function ensureAsrDriverLifecycleHooks(): void {
     }
   };
   const onSessionStop = () => {
+    lastAsrScriptEndStopKey = '';
+    clearPendingAsrScriptEnd('session-stop');
     asrSessionIntentActive = false;
     resetAsrInterimStabilizer();
     clearAsrRunKey('lifecycle-session-stop');
@@ -2854,11 +3312,56 @@ function ensureAsrDriverLifecycleHooks(): void {
   const onSessionPhase = (event: Event) => {
     const phase = String((event as CustomEvent)?.detail?.phase || '').toLowerCase();
     if (phase === 'idle' || phase === 'wrap') {
+      lastAsrScriptEndStopKey = '';
+      clearPendingAsrScriptEnd(`phase-${phase}`);
       asrSessionIntentActive = false;
       resetAsrInterimStabilizer();
       clearAsrRunKey(`phase-${phase}`);
     }
     emitHudSnapshot(`session-phase:${phase || 'unknown'}`);
+  };
+  const onAsrScriptEnd = (event: Event) => {
+    const detail = (event as CustomEvent)?.detail || {};
+    const mode = String(detail.mode || getScrollMode() || '').toLowerCase();
+    const session = getSession();
+    if (session.phase !== 'live' || !isAsrLikeMode(mode)) return;
+    const lineIndexRaw = Number(detail.lineIndex);
+    const lastSpeakableLineIndexRaw = Number(detail.lastSpeakableLineIndex);
+    const lineIndex = Number.isFinite(lineIndexRaw) ? Math.max(0, Math.floor(lineIndexRaw)) : null;
+    const lastSpeakableLineIndex = Number.isFinite(lastSpeakableLineIndexRaw)
+      ? Math.max(0, Math.floor(lastSpeakableLineIndexRaw))
+      : null;
+    const runKey = String(detail.runKey || activeAsrRunKey || 'no-run');
+    const dedupeKey = `${runKey}|${lineIndex ?? 'na'}|${lastSpeakableLineIndex ?? 'na'}`;
+    if (dedupeKey === lastAsrScriptEndStopKey) return;
+    const targetLine = lastSpeakableLineIndex ?? lineIndex;
+    const host = getScriptRoot() || getPrimaryScroller() || document;
+    const targetLineText =
+      targetLine != null
+        ? getLineTextAtIndex(targetLine, host)
+        : '';
+    pendingAsrScriptEndStop = {
+      dedupeKey,
+      runKey,
+      mode,
+      lineIndex,
+      lastSpeakableLineIndex,
+      armedAt: Date.now(),
+      targetLineTokens: normTokens(targetLineText),
+    };
+    emitHudSnapshot('script-end-pending', { force: true });
+    if (isDevMode() && shouldLogTag('ASR:script-end-pending', 2, 1000)) {
+      try {
+        console.info('[ASR] script end armed (awaiting final confirmation)', {
+          mode,
+          lineIndex,
+          lastSpeakableLineIndex,
+          runKey,
+          targetLine,
+          targetTokens: pendingAsrScriptEndStop.targetLineTokens.length,
+        });
+      } catch {}
+    }
   };
   const onSpeechHardReset = (event: Event) => {
     const detail = (event as CustomEvent)?.detail || {};
@@ -2871,22 +3374,16 @@ function ensureAsrDriverLifecycleHooks(): void {
     hardResetSpeechEngine(source);
   };
   window.addEventListener('tp:session:intent', onSessionIntent, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:session:intent', onSessionIntent as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:scroll:mode', onScrollMode, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:scroll:mode', onScrollMode as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:start', onSessionStart, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:stop', onSessionStop, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:session:phase', onSessionPhase, TRANSCRIPT_EVENT_OPTIONS);
+  window.addEventListener('tp:asr:script-end', onAsrScriptEnd, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:speech:hard-reset', onSpeechHardReset, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:speech:hard-reset', onSpeechHardReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:script:reset', onScriptReset, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:script:reset', onScriptReset as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:asr:blocks-ready', onBlocksReady, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:asr:blocks-ready', onBlocksReady as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:script-rendered', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:script-rendered', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   window.addEventListener('tp:render:done', onScriptRendered, TRANSCRIPT_EVENT_OPTIONS);
-  document.addEventListener('tp:render:done', onScriptRendered as EventListener, TRANSCRIPT_EVENT_OPTIONS);
   const initialMode = String(getScrollMode() || '').toLowerCase();
   const session = getSession();
   if (isAsrLikeMode(initialMode) || session.asrDesired) {
@@ -3024,8 +3521,31 @@ function attachWebSpeechLifecycle(sr: SpeechRecognition, opts: WebSpeechLifecycl
   };
 }
 
+function enforceRecognizerInterimCapture(mode: string, recognizer: unknown): void {
+  const normalizedMode = String(mode || '').toLowerCase();
+  if (normalizedMode !== 'asr' && normalizedMode !== 'hybrid') return;
+  if (!recognizer || (typeof recognizer !== 'object' && typeof recognizer !== 'function')) return;
+  const r = recognizer as any;
+  try { r.interimResults = true; } catch {}
+  try { r.interim = true; } catch {}
+  try { r.partialResults = true; } catch {}
+  try {
+    if (typeof r.setInterimResults === 'function') {
+      r.setInterimResults(true);
+    }
+  } catch {}
+  try {
+    if (typeof r.configure === 'function') {
+      r.configure({ interimResults: true, interim: true, partialResults: true });
+    } else if (typeof r.setConfig === 'function') {
+      r.setConfig({ interimResults: true, interim: true, partialResults: true });
+    }
+  } catch {}
+}
+
 async function startBackendForSession(mode: string, reason?: string): Promise<boolean> {
   const speechNs = getTpSpeechNamespace();
+  const allowLegacyNs = isLegacySpeechNamespaceAllowed();
   const speechStoreState = getTpSpeechStoreSnapshot();
   if (isSettingsHydrating()) {
     try { console.debug('[ASR] startBackend blocked during settings hydration', { mode, reason }); } catch {}
@@ -3038,7 +3558,8 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
         mode,
         reason,
         hasOrchestrator: !!w?.__tpSpeechOrchestrator?.start,
-        hasRecognizerStart: typeof speechNs?.startRecognizer === 'function',
+        allowLegacyNamespace: allowLegacyNs,
+        hasRecognizerStart: allowLegacyNs && typeof speechNs?.startRecognizer === 'function',
         hasWebSpeech: !!(w?.SpeechRecognition || w?.webkitSpeechRecognition),
         sessionPhase: (speechStoreState as any)?.sessionPhase,
         scrollMode: (speechStoreState as any)?.scrollMode,
@@ -3052,6 +3573,7 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     if (window.__tpSpeechOrchestrator?.start) {
       const started = await window.__tpSpeechOrchestrator.start();
       rec = (started || null) as RecognizerLike | null;
+      enforceRecognizerInterimCapture(mode, rec);
       if (rec && typeof rec.on === 'function') {
         try { rec.on('final', (t: any) => routeRecognizerTranscript(t, true)); } catch {}
         try { rec.on('partial', (t: any) => routeRecognizerTranscript(t, false)); } catch {}
@@ -3075,38 +3597,41 @@ async function startBackendForSession(mode: string, reason?: string): Promise<bo
     }
   } catch {}
 
-  try {
-    const startRecognizer = speechNs?.startRecognizer;
-    if (typeof startRecognizer === 'function') {
-      const startNamespaceRecognizer = () => {
-        startRecognizer(() => {}, { lang: 'en-US' });
-      };
-      startNamespaceRecognizer();
-      const namespaceRecognizer: RecognizerLike = {
-        start: () => { startNamespaceRecognizer(); },
-        stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
-        abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
-      };
-      rec = namespaceRecognizer;
-      setActiveRecognizer(namespaceRecognizer);
-      if (!activeRecognizer) {
-        emitAsrState('idle', 'recognizer-not-attached:namespace');
-        setSpeechRunningActual(false, 'namespace-no-attach');
-        maybeLogLiveArmedDetachedInvariant('namespace-no-attach');
-        emitHudSnapshot('recognizer-attach-failed:namespace', { force: true });
-        return false;
+  if (allowLegacyNs) {
+    try {
+      const startRecognizer = speechNs?.startRecognizer;
+      if (typeof startRecognizer === 'function') {
+        const startNamespaceRecognizer = () => {
+          startRecognizer(() => {}, { lang: 'en-US' });
+        };
+        startNamespaceRecognizer();
+        const namespaceRecognizer: RecognizerLike = {
+          start: () => { startNamespaceRecognizer(); },
+          stop: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
+          abort: () => { try { speechNs?.stopRecognizer?.(); } catch {} },
+        };
+        rec = namespaceRecognizer;
+        setActiveRecognizer(namespaceRecognizer);
+        if (!activeRecognizer) {
+          emitAsrState('idle', 'recognizer-not-attached:namespace');
+          setSpeechRunningActual(false, 'namespace-no-attach');
+          maybeLogLiveArmedDetachedInvariant('namespace-no-attach');
+          emitHudSnapshot('recognizer-attach-failed:namespace', { force: true });
+          return false;
+        }
+        setSpeechRunningActual(true, 'namespace-start');
+        emitAsrHeartbeat('recognizer-attached:namespace', { force: true });
+        return true;
       }
-      setSpeechRunningActual(true, 'namespace-start');
-      emitAsrHeartbeat('recognizer-attached:namespace', { force: true });
-      return true;
-    }
-  } catch {}
+    } catch {}
+  }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) throw new Error('NoSpeechBackend');
   const sr = new SR();
   sr.interimResults = true;
   sr.continuous = true;
+  enforceRecognizerInterimCapture(mode, sr);
   let _lastInterimAt = 0;
   attachWebSpeechLifecycle(sr, {
     onResult: (e: any) => {

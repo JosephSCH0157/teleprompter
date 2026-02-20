@@ -401,7 +401,6 @@ export function initScrollStripHud(opts: ScrollStripHudOptions) {
   }
 
   function triggerResync(source: string) {
-    try { (window as any).__tpAsrRequestRescue?.(); } catch {}
     try { window.dispatchEvent(new CustomEvent('tp:asr:rescue', { detail: { source } })); } catch {}
     clearStall();
   }

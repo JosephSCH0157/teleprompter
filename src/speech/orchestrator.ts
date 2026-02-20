@@ -44,6 +44,9 @@ function dispatchAsrSilence(silent: boolean, ts: number): void {
 function emitSpeechState(running: boolean): void {
   if (typeof window === 'undefined') return;
   try {
+    if ((window as any).__tpAllowLegacySpeechStateEvents !== true) return;
+  } catch {}
+  try {
     window.dispatchEvent(new CustomEvent('tp:speech-state', { detail: { running } }));
   } catch {
     // non-fatal in case window is weird
@@ -545,7 +548,6 @@ export function stopRecognizer() {
     // noop
   }
 })();
-
 
 
 
