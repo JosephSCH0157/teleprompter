@@ -1,5 +1,5 @@
 # Anvil Manifest (SSOT Map)
-Version: v1.8.9 (2026-02-19)
+Version: v1.8.5 (2026-02-20)
 
 This is the canonical manifest for Anvil's runtime architecture.
 Purpose: **one map, one truth** -- where state lives, who owns it, and which modules are allowed to publish globals.
