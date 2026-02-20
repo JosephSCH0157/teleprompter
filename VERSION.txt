@@ -1,4 +1,4 @@
-1.8.2
-ANVIL build: 2026-02-06 00:00
+1.8.5
+ANVIL build: 2026-02-20 00:00
 Baseline: v1.8.x
 Notes: Audio-only recording mode (Core Recorder), recording engine/mode UI, robots.txt crawler policy.
