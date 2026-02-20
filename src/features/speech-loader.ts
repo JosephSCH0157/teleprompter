@@ -21,7 +21,7 @@ import {
   resolveActiveScroller,
 } from '../scroll/scroller';
 import { ensureSpeechGlobals, isSpeechBackendAllowed } from '../speech/backend-guard';
-import { normTokens } from '../speech/matcher';
+import { matchBatch as runMatcherBatch, normTokens, type MatchConfig } from '../speech/matcher';
 import { stopAsrRuntime } from '../speech/runtime-control';
 import type { AppStore } from '../state/app-store';
 import { getSession, setSessionPhase } from '../state/session';
@@ -1144,6 +1144,66 @@ function emitTranscriptEvent(payload: TranscriptPayload): void {
   try { window.dispatchEvent(new CustomEvent('tp:speech:transcript', { detail: payload })); } catch {}
 }
 
+function logTranscriptEmitDebug(payload: TranscriptPayload): void {
+  try {
+    const textRaw = typeof payload.text === 'string' ? payload.text : '';
+    const textPreview = textRaw.replace(/\s+/g, ' ').trim().slice(0, 60);
+    const matchObj =
+      payload.match && typeof payload.match === 'object'
+        ? (payload.match as Record<string, unknown>)
+        : null;
+    const matchBestIdxRaw =
+      (matchObj?.bestIdx as unknown) ??
+      (matchObj?.line as unknown) ??
+      (matchObj?.lineIdx as unknown);
+    const matchBestSimRaw =
+      (matchObj?.bestSim as unknown) ??
+      (matchObj?.sim as unknown) ??
+      (matchObj?.score as unknown);
+    const topLevelBestIdxRaw = (payload as any)?.bestIdx ?? payload.line;
+    const topLevelBestSimRaw = (payload as any)?.bestSim ?? payload.sim;
+    const matchBestIdx = Number.isFinite(Number(matchBestIdxRaw))
+      ? Math.floor(Number(matchBestIdxRaw))
+      : null;
+    const matchBestSim = Number.isFinite(Number(matchBestSimRaw))
+      ? Number(Number(matchBestSimRaw).toFixed(4))
+      : null;
+    const topLevelBestIdx = Number.isFinite(Number(topLevelBestIdxRaw))
+      ? Math.floor(Number(topLevelBestIdxRaw))
+      : null;
+    const topLevelBestSim = Number.isFinite(Number(topLevelBestSimRaw))
+      ? Number(Number(topLevelBestSimRaw).toFixed(4))
+      : null;
+    const matchReason = typeof matchObj?.reason === 'string' ? matchObj.reason : null;
+    const blockSnapshot = getAsrBlockSnapshot();
+    const scriptHash = (() => {
+      try {
+        const raw = (window as any).__TP_LAST_APPLIED_HASH;
+        return typeof raw === 'string' && raw ? raw : null;
+      } catch {
+        return null;
+      }
+    })();
+    const summary = {
+      textLen: textRaw.length,
+      textPreview,
+      noMatch: payload.noMatch === true,
+      matchId: payload.matchId ?? null,
+      matchBestIdx,
+      matchBestSim,
+      matchReason,
+      topLevelBestIdx,
+      topLevelBestSim,
+      scriptHash,
+      scriptSig: blockSnapshot.scriptSig ?? null,
+      blockCount: blockSnapshot.count,
+      blockSource: blockSnapshot.source ?? null,
+      blockSchemaVersion: blockSnapshot.schemaVersion ?? null,
+    };
+    console.info('[speech-loader] tp:speech:transcript emit summary', JSON.stringify(summary));
+  } catch {}
+}
+
 function markResultTimestamp(): void {
   lastResultTs = Date.now();
 }
@@ -1591,6 +1651,56 @@ function normalizeMatcherResult(input: unknown): Record<string, unknown> | null 
   return normalized;
 }
 
+function deriveDirectMatcherResult(
+  transcript: string,
+  speechStoreState?: any,
+): Record<string, unknown> | null {
+  if (typeof window === 'undefined') return null;
+  const spokenTokens = normTokens(String(transcript || ''));
+  if (!spokenTokens.length) return null;
+  const w = window as any;
+  const scriptWords: string[] = Array.isArray(w.scriptWords) ? w.scriptWords : [];
+  const paraIndex: Array<any> = Array.isArray(w.paraIndex) ? w.paraIndex : [];
+  const vParaIndex: string[] | null = Array.isArray(w.__vParaIndex) ? w.__vParaIndex : null;
+  if (!paraIndex.length && !(Array.isArray(vParaIndex) && vParaIndex.length)) {
+    return null;
+  }
+  const currentIdxRaw =
+    w.currentIndex ??
+    speechStoreState?.currentIdx ??
+    speechStoreState?.currentIndex ??
+    0;
+  const currentIdx = Number.isFinite(Number(currentIdxRaw)) ? Math.max(0, Math.floor(Number(currentIdxRaw))) : 0;
+  const cfg: MatchConfig = {
+    MATCH_WINDOW_AHEAD: Number.isFinite(Number(w.MATCH_WINDOW_AHEAD)) ? Number(w.MATCH_WINDOW_AHEAD) : 240,
+    MATCH_WINDOW_BACK: Number.isFinite(Number(w.MATCH_WINDOW_BACK)) ? Number(w.MATCH_WINDOW_BACK) : 40,
+    SIM_THRESHOLD: Number.isFinite(Number(w.SIM_THRESHOLD)) ? Number(w.SIM_THRESHOLD) : 0.46,
+    MAX_JUMP_AHEAD_WORDS: Number.isFinite(Number(w.MAX_JUMP_AHEAD_WORDS)) ? Number(w.MAX_JUMP_AHEAD_WORDS) : 18,
+  };
+  try {
+    const raw = runMatcherBatch(
+      spokenTokens,
+      scriptWords,
+      paraIndex,
+      vParaIndex,
+      cfg,
+      currentIdx,
+      w.__viterbiIPred ?? undefined,
+    );
+    const normalized = normalizeMatcherResult(raw);
+    if (!normalized) return null;
+    if (normalized.currentIdx == null) {
+      normalized.currentIdx = currentIdx;
+    }
+    if (typeof normalized.reason !== 'string' || !normalized.reason) {
+      normalized.reason = 'direct_matcher';
+    }
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
 function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown> | null {
   const raw = payload as any;
   const speechNs = getTpSpeechNamespace();
@@ -1605,21 +1715,45 @@ function deriveFallbackMatch(payload: TranscriptPayload): Record<string, unknown
   if (!hasStructuredHint) {
     const transcript = String(payload.text || '');
     const finalFlag = Boolean(payload.isFinal ?? payload.final);
+    const isMatcherUnavailable = (result: Record<string, unknown> | null) =>
+      !!result && result.noMatch === true && String(result.reason || '').toLowerCase() === 'matcher_unavailable';
+    let unavailableResult: Record<string, unknown> | null = null;
     try {
       const matchOne = speechNs?.matchOne;
       if (typeof matchOne === 'function') {
         const result = normalizeMatcherResult(matchOne(transcript, finalFlag));
-        if (result) return result;
+        if (result) {
+          if (!isMatcherUnavailable(result)) return result;
+          unavailableResult = result;
+        }
       }
     } catch {}
     try {
-      const matchBatch = speechNs?.matchBatch;
-      if (typeof matchBatch === 'function') {
-        const result = normalizeMatcherResult(matchBatch(transcript, finalFlag));
-        if (result) return result;
+      const matchBatchFn = speechNs?.matchBatch;
+      if (typeof matchBatchFn === 'function') {
+        const result = normalizeMatcherResult(matchBatchFn(transcript, finalFlag));
+        if (result) {
+          if (!isMatcherUnavailable(result)) return result;
+          unavailableResult = result;
+        }
       }
     } catch {}
-    return null;
+    const directResult = deriveDirectMatcherResult(transcript, speechStoreState);
+    if (directResult) {
+      if (isDevMode() && shouldLogTag('ASR:matcher-fallback-direct', 2, 1500)) {
+        try {
+          console.info('[ASR] matcher fallback switched to direct matcher', {
+            reason: unavailableResult?.reason || null,
+            bestIdx: Number.isFinite(Number(directResult.bestIdx)) ? Number(directResult.bestIdx) : -1,
+            bestSim: Number.isFinite(Number(directResult.bestSim))
+              ? Number(Number(directResult.bestSim).toFixed(3))
+              : null,
+          });
+        } catch {}
+      }
+      return directResult;
+    }
+    return unavailableResult;
   }
   const bestIdx = Number.isFinite(Number(bestIdxRaw)) ? Math.floor(Number(bestIdxRaw)) : -1;
   const noMatch = explicitNoMatch || bestIdx < 0;
@@ -1775,7 +1909,7 @@ function routeTranscript(input: string | (Partial<TranscriptPayload> & { text?: 
     // Dispatch window event only when gated (ASR/Hybrid mode + mic active)
     if (shouldEmitTranscript()) {
       try { (enriched as any).__tpDirectIngest = true; } catch {}
-      try { console.log('[speech-loader] emit tp:speech:transcript', enriched); } catch {}
+      logTranscriptEmitDebug(enriched);
       emitTranscriptEvent(enriched);
     }
   } catch {}
