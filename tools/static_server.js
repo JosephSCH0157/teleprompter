@@ -53,6 +53,9 @@ function contentType(p) {
 }
 
 const BOT_PATH_ALIASES = new Map([
+  ['/robots', '/robots.txt'],
+  ['/sitemap', '/sitemap.xml'],
+  ['/sitemap/', '/sitemap.xml'],
   ['/favicon.ico', '/assets/anvil-favicon.png'],
   ['/apple-touch-icon.png', '/assets/anvil-favicon.png'],
   ['/apple-touch-icon-precomposed.png', '/assets/anvil-favicon.png'],
